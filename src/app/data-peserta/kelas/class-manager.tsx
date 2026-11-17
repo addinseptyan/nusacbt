@@ -58,7 +58,7 @@ function MajorEditor({ major, open, onOpenChange }: { major: SchoolMajor | null;
       <DialogContent className={dialogClass} showCloseButton={!pending} onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle className="text-lg font-bold">{major ? "Ubah jurusan" : "Tambah jurusan"}</DialogTitle>
-          <DialogDescription>{major ? "Perubahan nama jurusan juga mengubah tampilan nama kelas yang menggunakannya." : "Masukkan nama atau kode jurusan, misalnya AK, BD, atau TKR."}</DialogDescription>
+          <DialogDescription>{major ? "Perubahan nama jurusan juga mengubah tampilan nama kelas saat ini. Riwayat penempatan siswa tetap memakai nama kelas saat ditempatkan." : "Masukkan nama atau kode jurusan, misalnya AK, BD, atau TKR."}</DialogDescription>
         </DialogHeader>
         <form key={`${major?.id ?? "baru"}-${open}`} onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error && <Alert variant="destructive" role="alert"><Info className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
@@ -112,7 +112,7 @@ function ClassEditor({ schoolClass, majors, open, onOpenChange }: { schoolClass:
       <DialogContent className={dialogClass} showCloseButton={!pending} onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle className="text-lg font-bold">{schoolClass ? "Ubah kelas" : "Tambah kelas"}</DialogTitle>
-          <DialogDescription>Gabungkan tingkat dan jurusan. Contoh: tingkat X dan jurusan AK menjadi kelas X AK.</DialogDescription>
+          <DialogDescription>Gabungkan tingkat dan jurusan. Contoh: tingkat X dan jurusan AK menjadi kelas X AK. Nama kelas pada riwayat penempatan siswa tidak berubah jika kelas ini diubah.</DialogDescription>
         </DialogHeader>
         <form key={`${schoolClass?.id ?? "baru"}-${open}`} onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error && <Alert variant="destructive" role="alert"><Info className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
@@ -178,7 +178,7 @@ function DeleteDialog({ target, onClose }: { target: DeleteTarget | null; onClos
       <DialogContent className={dialogClass} showCloseButton={!pending} onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle className="text-lg font-bold">Hapus {title}?</DialogTitle>
-          <DialogDescription><strong className="text-foreground">{target?.name}</strong> akan dihapus permanen.{target?.type === "jurusan" && " Jurusan tidak dapat dihapus jika masih digunakan oleh kelas."} Tindakan ini tidak dapat dibatalkan.</DialogDescription>
+          <DialogDescription><strong className="text-foreground">{target?.name}</strong> akan dihapus permanen.{target?.type === "jurusan" ? " Jurusan tidak dapat dihapus jika masih digunakan oleh kelas." : " Kelas yang memiliki riwayat penempatan siswa tidak dapat dihapus."} Tindakan ini tidak dapat dibatalkan.</DialogDescription>
         </DialogHeader>
         {error && <Alert variant="destructive" role="alert"><Info className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
         <DialogFooter className="rounded-b-2xl">
@@ -212,7 +212,7 @@ export function ClassManager({ classes, majors }: { classes: SchoolClass[]; majo
       <Alert className="mb-6 max-w-4xl rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
         <Info className="size-4 text-[#727fc8] dark:text-indigo-300" />
         <AlertTitle className="text-[12px] font-bold">Daftar kelas bersama</AlertTitle>
-        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Buat jurusan terlebih dahulu, lalu gabungkan dengan tingkat. Daftar disiapkan untuk lintas periode; penempatan dan riwayat siswa belum aktif.</AlertDescription>
+        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Buat jurusan lalu gabungkan dengan tingkat. Daftar kelas digunakan lintas periode; nama kelas dalam riwayat penempatan siswa disimpan saat ditempatkan.</AlertDescription>
       </Alert>
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">

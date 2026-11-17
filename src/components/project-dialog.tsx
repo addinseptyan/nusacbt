@@ -27,7 +27,7 @@ export function ProjectDialog() {
           <DialogDescription>Pratinjau awal untuk meninjau struktur dan tampilan aplikasi.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-1 text-sm">
-          <div className="flex gap-2.5"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" /><span>Menu utama, mode terang/gelap, template, login admin, PostgreSQL, serta pengelolaan periode, kelas, dan jurusan tersedia.</span></div>
+          <div className="flex gap-2.5"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" /><span>Menu utama, mode terang/gelap, template, login admin, PostgreSQL, serta pengelolaan periode, kelas, jurusan, dan siswa manual tersedia.</span></div>
           <div className="flex gap-2.5"><CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground" /><span>Login peserta, impor, pengerjaan ujian, dan laporan belum aktif.</span></div>
         </div>
         <Alert className="rounded-xl bg-muted/50">
