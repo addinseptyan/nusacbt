@@ -112,7 +112,9 @@ test("admin mengelola jurusan dan kelas, mencegah duplikat serta penghapusan jur
     await confirmation.getByRole("button", { name: "Ya, hapus jurusan" }).click();
     await expect(confirmation.getByRole("alert")).toContainText("Jurusan masih digunakan oleh kelas");
     expect((await client.query("SELECT 1 FROM school_majors WHERE id = $1", [majorId])).rowCount).toBe(1);
+    expect((await client.query("SELECT 1 FROM school_classes WHERE major_id = $1", [majorId])).rowCount).toBe(2);
     await confirmation.getByRole("button", { name: "Batal" }).click();
+    await expect(classRow).toBeVisible();
 
     await majorRow.getByRole("button", { name: `Ubah jurusan ${major}` }).click();
     majorEditor = page.getByRole("dialog", { name: "Ubah jurusan" });
@@ -145,6 +147,54 @@ test("admin mengelola jurusan dan kelas, mencegah duplikat serta penghapusan jur
   } finally {
     await cleanMajors(client, [major, renamed]);
     await client.end();
+  }
+});
+
+test("kelas yang masih direferensikan tidak dapat dihapus", async ({ page }) => {
+  const suffix = randomBytes(5).toString("hex");
+  const major = `Referensi${suffix}`;
+  // Nama tabel dibuat dari karakter hex acak dan hanya ada dalam database tes.
+  const referenceTable = `e2e_class_reference_${suffix}`;
+  const client = testDatabase();
+  await client.connect();
+  let referenceTableCreated = false;
+  try {
+    const insertedMajor = await client.query("INSERT INTO school_majors (name) VALUES ($1) RETURNING id", [major]);
+    const insertedClass = await client.query("INSERT INTO school_classes (level, major_id) VALUES ('X', $1) RETURNING id", [insertedMajor.rows[0].id]);
+    const classId = insertedClass.rows[0].id;
+    await client.query(`CREATE TABLE "${referenceTable}" (class_id bigint NOT NULL REFERENCES school_classes(id) ON DELETE RESTRICT)`);
+    referenceTableCreated = true;
+    await client.query(`INSERT INTO "${referenceTable}" (class_id) VALUES ($1)`, [classId]);
+    await expect(client.query("DELETE FROM school_classes WHERE id = $1", [classId])).rejects.toMatchObject({
+      code: expect.stringMatching(/^(23503|23001)$/),
+      constraint: `${referenceTable}_class_id_fkey`,
+    });
+
+    await loginAsAdmin(page);
+    await page.goto("/data-peserta/kelas");
+    const classRow = page.getByRole("list", { name: "Daftar kelas" }).getByRole("listitem").filter({ hasText: `X ${major}` });
+    await classRow.getByRole("button", { name: `Hapus kelas X ${major}` }).click();
+    let confirmation = page.getByRole("dialog", { name: "Hapus kelas?" });
+    await confirmation.getByRole("button", { name: "Ya, hapus kelas" }).click();
+    await expect(confirmation.getByRole("alert")).toContainText("Kelas masih digunakan oleh data lain");
+    expect((await client.query("SELECT 1 FROM school_classes WHERE id = $1", [classId])).rowCount).toBe(1);
+    expect((await client.query(`SELECT 1 FROM "${referenceTable}" WHERE class_id = $1`, [classId])).rowCount).toBe(1);
+    await confirmation.getByRole("button", { name: "Batal" }).click();
+    await expect(classRow).toBeVisible();
+
+    await client.query(`DELETE FROM "${referenceTable}" WHERE class_id = $1`, [classId]);
+    await classRow.getByRole("button", { name: `Hapus kelas X ${major}` }).click();
+    confirmation = page.getByRole("dialog", { name: "Hapus kelas?" });
+    await confirmation.getByRole("button", { name: "Ya, hapus kelas" }).click();
+    await expect(classRow).toHaveCount(0);
+    expect((await client.query("SELECT 1 FROM school_classes WHERE id = $1", [classId])).rowCount).toBe(0);
+  } finally {
+    try {
+      if (referenceTableCreated) await client.query(`DROP TABLE "${referenceTable}"`);
+      await cleanMajors(client, [major]);
+    } finally {
+      await client.end();
+    }
   }
 });
 
@@ -310,23 +360,30 @@ test("database menjaga keunikan jurusan, satu kelas per tingkat-jurusan, dan ref
     const inserted = await client.query("INSERT INTO school_majors (name) VALUES ($1) RETURNING id", [major]);
     const id = inserted.rows[0].id;
     await client.query("INSERT INTO school_classes (level, major_id) VALUES ('X', $1)", [id]);
-    const checks: Array<{ sql: string; values: unknown[]; code: string }> = [
+    const removedMajor = await client.query("INSERT INTO school_majors (name) VALUES ($1) RETURNING id", [`${major}Hilang`]);
+    await client.query("DELETE FROM school_majors WHERE id = $1", [removedMajor.rows[0].id]);
+    const checks: Array<{ sql: string; values: unknown[]; code: string | RegExp; constraint?: string }> = [
       { sql: "INSERT INTO school_majors (name) VALUES ($1)", values: [` ${major.toLowerCase()} `], code: "23505" },
       { sql: "INSERT INTO school_majors (name) VALUES ($1)", values: ["   "], code: "23514" },
       { sql: "INSERT INTO school_majors (name) VALUES ($1)", values: ["x".repeat(61)], code: "23514" },
       { sql: "INSERT INTO school_classes (level, major_id) VALUES ($1, $2)", values: ["xi", id], code: "23514" },
       { sql: "INSERT INTO school_classes (level, major_id) VALUES ($1, $2)", values: ["X AK", id], code: "23514" },
       { sql: "INSERT INTO school_classes (level, major_id) VALUES ($1, $2)", values: ["X", id], code: "23505" },
-      { sql: "DELETE FROM school_majors WHERE id = $1", values: [id], code: "23503" },
+      { sql: "INSERT INTO school_classes (level, major_id) VALUES ($1, $2)", values: ["XI", removedMajor.rows[0].id], code: "23503", constraint: "school_classes_major_id_fkey" },
+      // RESTRICT adalah 23503 di PostgreSQL 17 dan 23001 di PostgreSQL 18.
+      { sql: "DELETE FROM school_majors WHERE id = $1", values: [id], code: /^(23503|23001)$/, constraint: "school_classes_major_id_fkey" },
     ];
-    for (const { sql, values, code } of checks) {
+    for (const { sql, values, code, constraint } of checks) {
       await client.query("SAVEPOINT periksa_kelas");
       try {
-        await expect(client.query(sql, values)).rejects.toMatchObject({ code });
+        const expectedCode = code instanceof RegExp ? expect.stringMatching(code) : code;
+        await expect(client.query(sql, values)).rejects.toMatchObject({ code: expectedCode, ...(constraint ? { constraint } : {}) });
       } finally {
         await client.query("ROLLBACK TO SAVEPOINT periksa_kelas");
       }
     }
+    expect((await client.query("SELECT 1 FROM school_majors WHERE id = $1", [id])).rowCount).toBe(1);
+    expect((await client.query("SELECT 1 FROM school_classes WHERE major_id = $1 AND level = 'X'", [id])).rowCount).toBe(1);
   } finally {
     await client.query("ROLLBACK");
     await client.end();
