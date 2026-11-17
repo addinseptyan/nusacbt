@@ -31,7 +31,7 @@ Pengaturan aplikasi mencakup nama dan keterangan aplikasi, informasi untuk peser
 - Data peserta mencakup nama, NISN, rombel/kelas, nomor peserta, username, dan kata sandi. Sesuai pilihan pemilik proyek, **NISN wajib tepat 10 digit dan unik**, disimpan sebagai teks agar nol di depan tidak hilang.
 - Jurusan dikelola dalam daftar tersendiri, misalnya `AK`, `BD`, dan `TKR`. Kelas dibentuk dari tingkat dan jurusan, misalnya `X AK`, `XI BD`, atau `XII TKR`; pada kebutuhan saat ini tidak ada nomor kelas paralel. Satu kombinasi tingkat–jurusan hanya dapat dibuat sekali dan disiapkan untuk digunakan lintas periode. Nama jurusan yang sama tanpa membedakan huruf besar/kecil ditolak; jurusan yang masih digunakan kelas tidak dapat dihapus.
 - Data siswa manual dan penempatan kelas per siswa/periode tersedia. Satu siswa hanya memiliki satu penempatan aktif dalam satu periode; periode lain dapat mempunyai penempatannya sendiri. Mengganti atau mengakhiri penempatan menyimpan baris lama sebagai riwayat. Nama kelas disalin saat penempatan sehingga perubahan nama daftar tidak menulis ulang riwayat. Waktu yang dicatat adalah waktu operasi, bukan tanggal efektif perpindahan sekolah. Siswa, periode, atau kelas dengan riwayat penempatan tidak dapat dihapus pada tahap ini; penghapusan riwayat belum tersedia.
-- Data peserta dapat diimpor dari Excel dengan kolom nama, NISN, dan rombel/kelas. Impor harus memvalidasi data dan menunjukkan masalah sebelum disimpan. NISN diperlakukan sebagai teks agar angka nol di depan tidak hilang; angka nol yang sudah hilang dari sumber tidak dapat ditebak dengan aman.
+- Impor siswa Excel tersedia dengan kolom `Nomor`, `Nama`, `NISN`, `Kelas` dan satu periode yang dipilih admin. Nomor hanya urut. NISN pada sel Excel wajib berupa teks tepat 10 digit; nol yang telah hilang tidak ditebak. Pratinjau menunjukkan duplikasi, validasi, dan konflik sebelum menyimpan satu transaksi. Siswa lama dengan nama sesuai digunakan kembali tanpa menimpa; jika kelas aktif sama, tidak berubah; jika nama atau kelas aktif berbeda, perbaiki terlebih dahulu. Batasnya 512 KB dan 1.000 baris; kelas harus sudah tersedia. Nomor peserta dan akun login belum dibuat oleh impor ini.
 - Nomor peserta dan username dapat dibuat otomatis atau diisi secara manual, dapat sama atau berbeda, dan dibuat/ditetapkan per periode.
 - Pola otomatis awal: `{prefix}{YYYYMM}{3 angka acak}`; tahun-bulan mengacu pada tanggal mulai periode. Operator dapat mengubah pola otomatis serta mengisi atau mengubah nilai identitas secara manual.
 - Generator perlu memeriksa tabrakan dan mengulang pengambilan angka saat perlu. Tiga digit memberikan paling banyak 1.000 kombinasi untuk kombinasi prefix dan tahun-bulan yang sama; jika ruangnya habis, sistem harus memberi pesan, bukan diam-diam membuat nilai duplikat.
@@ -45,7 +45,7 @@ Pengaturan aplikasi mencakup nama dan keterangan aplikasi, informasi untuk peser
 - Tahap awal menggunakan soal pilihan ganda dan penilaian otomatis. Admin dapat membuat dan mengelola soal serta melakukan impor/ekspor Word.
 - Contoh soal yang diterima saat analisis masih berupa PDF: 50 soal dalam tabel dengan kolom `No`, `Jenis`, `Isi`, dan `Jawaban`. Baris `SOAL` diikuti baris `JAWABAN`; `1` menandakan jawaban benar dan `0` jawaban salah. Contoh memiliki lima pilihan per soal dan beberapa gambar.
 - Contoh peserta yang diterima juga berupa PDF, dengan kolom `Nomor`, `Nama`, `NISN`, dan `Kelas`.
-- Arena tidak menerima unggahan `.docx`/`.xlsx` dari pengguna dalam sesi ini. Template Word dan Excel telah dibuat berdasarkan PDF dengan data fiktif; PDF merupakan referensi visual, bukan bukti struktur dokumen asli. Format template baru perlu ditinjau pengguna dan diuji saat fitur impor/ekspor dibuat.
+- Arena tidak menerima unggahan `.docx`/`.xlsx` dari pengguna dalam sesi ini. Template Word dan Excel dibuat berdasarkan PDF dengan data fiktif; PDF merupakan referensi visual, bukan bukti struktur dokumen asli. Pemilik memilih kolom Excel `Nomor`, `Nama`, `NISN`, `Kelas` untuk impor siswa. Template Word dan fitur impor/ekspor soal masih perlu ditinjau dan disepakati.
 - Contoh/data peserta asli tidak dimasukkan ke repository public. Gunakan contoh fiktif untuk pengujian yang dibagikan.
 
 ## 5. Tes, pengerjaan, dan token
@@ -96,7 +96,7 @@ Pengaturan aplikasi mencakup nama dan keterangan aplikasi, informasi untuk peser
 
 ## 10. Pertanyaan terbuka
 
-- Tinjau template `.docx` dan `.xlsx` yang dibuat berdasarkan PDF dan konfirmasi apakah sesuai.
+- Tinjau template soal `.docx` yang dibuat berdasarkan PDF dan konfirmasi apakah sesuai.
 - Bagaimana aturan token global dan token tes ketika keduanya aktif?
 - Bagaimana rumus nilai dasar serta satuan/besaran penalti opsional?
 - Bagaimana kelanjutan sesi setelah koneksi pulih, pembulatan rata-rata, serta perlakuan pengerjaan yang belum selesai atau dibatalkan?

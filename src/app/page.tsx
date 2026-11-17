@@ -33,7 +33,7 @@ const summary = [
 
 const steps = [
   { number: "01", title: "Tinjau template impor", detail: "Contoh Word dan Excel sudah tersedia untuk diperiksa.", status: "Tersedia", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300" },
-  { number: "02", title: "Siapkan data sekolah", detail: "Periode, jurusan, kelas, dan data siswa manual tersedia; impor menyusul.", status: "Sebagian tersedia", icon: CircleDashed, color: "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300" },
+  { number: "02", title: "Siapkan data sekolah", detail: "Periode, kelas, siswa manual, dan impor Excel dengan pratinjau tersedia.", status: "Sebagian tersedia", icon: CircleDashed, color: "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300" },
   { number: "03", title: "Susun bank soal", detail: "Kelompokkan topik, soal, pilihan, dan kunci jawaban.", status: "Direncanakan", icon: CircleDashed, color: "bg-violet-50 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300" },
   { number: "04", title: "Atur dan jalankan tes", detail: "Siapkan jadwal, token, durasi, serta monitoring.", status: "Direncanakan", icon: CircleDashed, color: "bg-orange-50 text-orange-600 dark:bg-orange-950/50 dark:text-orange-300" },
 ];
@@ -56,7 +56,7 @@ export default async function DashboardPage() {
       <Alert className="mb-7 rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
         <Info className="size-4 text-[#727fc8] dark:text-indigo-300" />
         <AlertTitle className="text-[12px] font-bold">Anda sedang melihat pratinjau awal</AlertTitle>
-        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Login admin serta pengelolaan periode, jurusan, kelas, dan siswa manual tersedia. Impor, login peserta, ujian, dan statistik masih belum aktif.</AlertDescription>
+        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Login admin, pengelolaan periode, kelas, siswa, dan impor peserta Excel tersedia. Login peserta, impor soal, ujian, dan statistik masih belum aktif.</AlertDescription>
       </Alert>
 
       <div className="mb-3.5 flex items-center justify-between">
@@ -109,7 +109,7 @@ export default async function DashboardPage() {
               <div><p className="text-[10px] font-bold tracking-[0.12em] text-primary uppercase">Berkas contoh</p><h2 className="mt-2 text-[17px] leading-6 font-bold tracking-[-0.035em]">Template siap ditinjau</h2></div>
               <span className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300"><FileText className="size-5" /></span>
             </div>
-            <p className="mt-2 text-[12px] leading-5 text-muted-foreground">Dibuat dari referensi PDF dengan data fiktif. Fitur impor akan dibuat pada tahap berikutnya.</p>
+            <p className="mt-2 text-[12px] leading-5 text-muted-foreground">Dibuat dari referensi PDF dengan data fiktif. Impor peserta tersedia; impor soal menyusul.</p>
             <div className="mt-4 space-y-2">
               <a href="/templates/template-soal-nusacbt.docx" download className="flex items-center gap-3 rounded-xl border border-border p-3 transition-colors hover:bg-muted/60">
                 <span className="flex size-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300"><FileText className="size-4" /></span>
