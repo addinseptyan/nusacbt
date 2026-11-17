@@ -2,7 +2,7 @@
 
 NusaCBT adalah proyek aplikasi ujian berbasis web untuk sekolah, dirancang berjalan pada server lokal dan diakses melalui jaringan sekolah tanpa koneksi internet saat ujian.
 
-> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Navigasi panel admin, light/dark mode, template contoh, koneksi PostgreSQL, login/logout admin, pengelolaan periode, jurusan, kelas, siswa manual, dan penempatan kelas per periode tersedia. Identitas/login peserta, impor, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
+> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Login admin, pengelolaan periode, jurusan, kelas, siswa manual, penempatan kelas, dan impor siswa Excel dengan pratinjau tersedia. Identitas/login peserta, impor soal, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
 
 ## Cakupan proyek
 
@@ -34,7 +34,18 @@ Pada **Data Peserta → Kelas / Jurusan**, admin mengelola daftar jurusan terpis
 
 Pada **Data Peserta → Data Siswa**, admin dapat menambah, mencari, dan mengubah siswa secara manual. Nama dan NISN wajib diisi; NISN harus unik dan tepat 10 digit, disimpan sebagai teks. Identitas siswa berlaku lintas periode, sehingga perubahan nama/NISN terlihat di semua periode. Setelah periode dan kelas tersedia, pilih **Penempatan** pada siswa untuk mengatur satu kelas aktif dalam setiap periode. Siswa yang sama dapat memiliki penempatan pada beberapa periode.
 
-Mengganti kelas atau mengakhiri penempatan menyimpan catatan lama sebagai riwayat. Nama kelas dicatat ketika penempatan dibuat; perubahan nama jurusan atau kelas tidak menulis ulang nama pada riwayat tersebut. Waktu riwayat menunjukkan kapan perubahan dicatat, dalam UTC, bukan tanggal efektif perpindahan sekolah. Siswa, kelas, dan periode yang memiliki riwayat penempatan tidak dapat dihapus, termasuk jika penempatannya sudah berakhir; penghapusan permanen riwayat belum tersedia. Identitas akun peserta dan fitur impor belum dibuat.
+Mengganti kelas atau mengakhiri penempatan menyimpan catatan lama sebagai riwayat. Nama kelas dicatat ketika penempatan dibuat; perubahan nama jurusan atau kelas tidak menulis ulang nama pada riwayat tersebut. Waktu riwayat menunjukkan kapan perubahan dicatat, dalam UTC, bukan tanggal efektif perpindahan sekolah. Siswa, kelas, dan periode yang memiliki riwayat penempatan tidak dapat dihapus, termasuk jika penempatannya sudah berakhir; penghapusan permanen riwayat belum tersedia. Identitas akun peserta belum dibuat.
+
+### Impor siswa dari Excel
+
+1. Siapkan periode serta kelas/jurusan di aplikasi. Buka **Data Peserta → Import Data Peserta** dan unduh template fiktif. Hapus baris contoh sebelum digunakan.
+2. Pada sheet `Peserta`, gunakan urutan kolom `Nomor`, `Nama`, `NISN`, `Kelas`. Nomor hanya nomor urut. Isi nama, NISN, dan kelas yang sudah ada; cocokkan nama kelas dengan daftar kelas. Pilih satu periode untuk seluruh file.
+3. **Sel NISN harus berupa teks** berisi tepat 10 digit. Jangan mengandalkan format angka dengan nol tampilan: nol yang sudah hilang tidak dapat dipulihkan dengan aman. Kolom NISN pada template disiapkan sebagai teks untuk baris 2–1001; saat menempel data, pastikan format teks tetap terjaga.
+4. Pilih file `.xlsx` maksimal 512 KB dan 1.000 baris data. Rumus pada nama/NISN/kelas, sel gabungan, baris data tersembunyi, serta data pada kolom tambahan tidak didukung. Baris yang tidak memiliki isi pada kolom selain Nomor diabaikan.
+5. Klik **Periksa pratinjau**. Duplikat NISN dalam file, data tidak valid, kelas yang tidak ditemukan/ambigu, serta konflik dengan siswa lama harus diperbaiki seluruhnya sebelum penyimpanan. Nama yang sudah ada harus sama setelah spasi tepi dibuang dan normalisasi Unicode; kelas dicocokkan tanpa membedakan huruf besar/kecil dan kelebihan spasi.
+6. Jika nama siswa lama sesuai dan belum ada kelas aktif pada periode tersebut, penempatan baru ditambahkan. Jika kelas aktif sudah sama, baris tidak mengubah apa pun. Nama atau kelas aktif yang berbeda **tidak ditimpa**; perbaiki file atau kelola data secara manual. Setelah konfirmasi, semua perubahan disimpan dalam satu transaksi. Bila data berubah sejak pratinjau, periksa ulang file.
+
+Aplikasi tidak menyimpan berkas impor ke repository. Fitur ini belum membuat nomor peserta, username, kata sandi, atau kartu. Gunakan data fiktif sampai pengujian keamanan dan operasional selesai.
 
 ## Verifikasi
 

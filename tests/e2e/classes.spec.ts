@@ -135,15 +135,50 @@ test("admin mengelola jurusan dan kelas, mencegah duplikat serta penghapusan jur
     await classRow.getByRole("button", { name: `Hapus kelas X ${renamed}` }).click();
     confirmation = page.getByRole("dialog", { name: "Hapus kelas?" });
     await confirmation.getByRole("button", { name: "Ya, hapus kelas" }).click();
+    // Selagi dialog modal terbuka, daftar tersembunyi dari getByRole. Tunggu hasil aksi dahulu.
+    await expect(confirmation).toBeHidden();
     await expect(classRow).toHaveCount(0);
+    expect((await client.query("SELECT level FROM school_classes WHERE major_id = $1", [majorId])).rows).toEqual([{ level: "XII" }]);
     const second = page.getByRole("list", { name: "Daftar kelas" }).getByRole("listitem").filter({ hasText: `XII ${renamed}` });
     await second.getByRole("button", { name: `Hapus kelas XII ${renamed}` }).click();
-    await page.getByRole("dialog", { name: "Hapus kelas?" }).getByRole("button", { name: "Ya, hapus kelas" }).click();
+    confirmation = page.getByRole("dialog", { name: "Hapus kelas?" });
+    await confirmation.getByRole("button", { name: "Ya, hapus kelas" }).click();
+    await expect(confirmation).toBeHidden();
     await expect(second).toHaveCount(0);
+    expect((await client.query("SELECT 1 FROM school_classes WHERE major_id = $1", [majorId])).rowCount).toBe(0);
     await majorRow.getByRole("button", { name: `Hapus jurusan ${renamed}` }).click();
-    await page.getByRole("dialog", { name: "Hapus jurusan?" }).getByRole("button", { name: "Ya, hapus jurusan" }).click();
+    confirmation = page.getByRole("dialog", { name: "Hapus jurusan?" });
+
+    // Tahan POST secara deterministik: daftar di DOM dan database harus tetap ada
+    // sampai server menerima permintaan. Ini mencegah tes lulus hanya karena aria-hidden.
+    let allowRequest = () => {};
+    let markRequestStarted = () => {};
+    const gate = new Promise<void>((resolve) => { allowRequest = resolve; });
+    const started = new Promise<void>((resolve) => { markRequestStarted = resolve; });
+    await page.route("**/data-peserta/kelas", async (route) => {
+      if (route.request().method() === "POST") {
+        markRequestStarted();
+        await gate;
+      }
+      await route.continue();
+    });
+    const response = page.waitForResponse((item) => item.request().method() === "POST" && new URL(item.url()).pathname === "/data-peserta/kelas", { timeout: 10_000 });
+    try {
+      await confirmation.getByRole("button", { name: "Ya, hapus jurusan" }).click();
+      await started;
+      await expect(confirmation).toBeVisible();
+      await expect(confirmation.getByRole("button", { name: "Menghapus..." })).toBeDisabled();
+      await expect(page.locator('ul[aria-label="Daftar jurusan"] > li').filter({ hasText: renamed })).toHaveCount(1);
+      expect((await client.query("SELECT 1 FROM school_majors WHERE id = $1", [majorId])).rowCount).toBe(1);
+    } finally {
+      allowRequest();
+      await response.catch(() => {});
+    }
+    expect((await response).ok()).toBe(true);
+    await expect(confirmation).toBeHidden();
     await expect(majorRow).toHaveCount(0);
     expect((await client.query("SELECT 1 FROM school_majors WHERE id = $1", [majorId])).rowCount).toBe(0);
+    await page.unroute("**/data-peserta/kelas");
   } finally {
     await cleanMajors(client, [major, renamed]);
     await client.end();
@@ -186,6 +221,7 @@ test("kelas yang masih direferensikan tidak dapat dihapus", async ({ page }) => 
     await classRow.getByRole("button", { name: `Hapus kelas X ${major}` }).click();
     confirmation = page.getByRole("dialog", { name: "Hapus kelas?" });
     await confirmation.getByRole("button", { name: "Ya, hapus kelas" }).click();
+    await expect(confirmation).toBeHidden();
     await expect(classRow).toHaveCount(0);
     expect((await client.query("SELECT 1 FROM school_classes WHERE id = $1", [classId])).rowCount).toBe(0);
   } finally {
