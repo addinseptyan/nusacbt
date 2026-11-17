@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
 
+import { loginAsAdmin } from "./helpers";
+
+test.beforeEach(async ({ page }) => {
+  await loginAsAdmin(page);
+});
+
 test("dashboard menampilkan tujuh menu dan modul dapat dibuka", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Selamat datang di NusaCBT/ })).toBeVisible();

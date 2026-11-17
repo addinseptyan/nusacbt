@@ -1,10 +1,12 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { logoutAction } from "@/app/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { findNavigationPage } from "@/lib/navigation";
@@ -35,6 +37,11 @@ export function AppHeader() {
           <span className="flex size-9 items-center justify-center rounded-xl bg-[#e9eefb] text-xs font-bold text-[#6677bd] dark:bg-indigo-950 dark:text-indigo-300">A</span>
           <span className="flex flex-col gap-0.5 leading-none"><span className="text-[12px] font-semibold text-foreground">Admin</span><span className="text-[10px] text-muted-foreground">Panel sekolah</span></span>
         </div>
+        <form action={logoutAction}>
+          <Button type="submit" variant="ghost" size="sm" aria-label="Keluar" className="rounded-lg px-2 text-muted-foreground">
+            <LogOut className="size-4" /><span className="hidden sm:inline">Keluar</span>
+          </Button>
+        </form>
       </div>
     </header>
   );

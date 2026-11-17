@@ -22,6 +22,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { requireAdmin } from "@/lib/admin-auth";
 
 const summary = [
   { title: "Peserta terdaftar", icon: UsersRound, color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300" },
@@ -39,7 +40,8 @@ const steps = [
 
 const cardClass = "rounded-[18px] bg-card ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  await requireAdmin();
   return (
     <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -54,7 +56,7 @@ export default function DashboardPage() {
       <Alert className="mb-7 rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
         <Info className="size-4 text-[#727fc8] dark:text-indigo-300" />
         <AlertTitle className="text-[12px] font-bold">Anda sedang melihat pratinjau awal</AlertTitle>
-        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Login, database, impor, dan ujian belum aktif. Data statistik belum terhubung.</AlertDescription>
+        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Login admin dan database tersedia. Impor, login peserta, ujian, dan statistik masih belum aktif.</AlertDescription>
       </Alert>
 
       <div className="mb-3.5 flex items-center justify-between">
