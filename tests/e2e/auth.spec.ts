@@ -16,7 +16,7 @@ function digest(token: string) {
 }
 
 test("halaman admin mengalihkan pengunjung yang belum login", async ({ page }) => {
-  for (const path of ["/", "/data-peserta/siswa", "/data-tes/daftar"]) {
+  for (const path of ["/", "/data-peserta/periode", "/data-peserta/siswa", "/data-tes/daftar"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole("heading", { name: "Selamat datang kembali" })).toBeVisible();
