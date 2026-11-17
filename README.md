@@ -2,7 +2,7 @@
 
 NusaCBT adalah proyek aplikasi ujian berbasis web untuk sekolah, dirancang berjalan pada server lokal dan diakses melalui jaringan sekolah tanpa koneksi internet saat ujian.
 
-> **Status: dalam pengembangan, belum untuk ujian sungguhan.** Navigasi panel admin, light/dark mode, template contoh, koneksi PostgreSQL, login/logout admin, pengelolaan periode ujian, kelas, dan jurusan tersedia. Data siswa, login peserta, impor, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
+> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Navigasi panel admin, light/dark mode, template contoh, koneksi PostgreSQL, login/logout admin, pengelolaan periode, jurusan, kelas, siswa manual, dan penempatan kelas per periode tersedia. Identitas/login peserta, impor, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
 
 ## Cakupan proyek
 
@@ -30,7 +30,11 @@ Buka `http://localhost:3000` di komputer yang menjalankan aplikasi. Kata sandi a
 
 Jika database dan admin sudah disiapkan pada versi sebelumnya, pertahankan `.env.local` dan akun admin yang ada, lalu jalankan `npm run db:migrate` untuk migrasi baru. Tidak perlu membuat ulang admin. Setelah masuk, buka **Data Peserta → Periode Ujian**: admin dapat menambah, mengubah, dan menghapus periode dengan konfirmasi. Nama dan tanggal mulai wajib diisi; tanggal akhir opsional dan tidak boleh lebih awal dari tanggal mulai.
 
-Pada **Data Peserta → Kelas / Jurusan**, admin mengelola daftar jurusan terpisah, lalu membuat kelas dari tingkat dan jurusan, misalnya `X AK`. Nama jurusan tidak boleh sama tanpa membedakan huruf besar/kecil, dan satu kombinasi tingkat–jurusan hanya dapat dibuat sekali. Jurusan yang masih digunakan oleh kelas tidak dapat dihapus. Daftar disiapkan untuk lintas periode; data siswa, penempatan dan riwayat kelas per periode, serta pembuatan identitas peserta belum terhubung.
+Pada **Data Peserta → Kelas / Jurusan**, admin mengelola daftar jurusan terpisah, lalu membuat kelas dari tingkat dan jurusan, misalnya `X AK`. Nama jurusan tidak boleh sama tanpa membedakan huruf besar/kecil, dan satu kombinasi tingkat–jurusan hanya dapat dibuat sekali. Jurusan yang masih digunakan oleh kelas tidak dapat dihapus.
+
+Pada **Data Peserta → Data Siswa**, admin dapat menambah, mencari, dan mengubah siswa secara manual. Nama dan NISN wajib diisi; NISN harus unik dan tepat 10 digit, disimpan sebagai teks. Identitas siswa berlaku lintas periode, sehingga perubahan nama/NISN terlihat di semua periode. Setelah periode dan kelas tersedia, pilih **Penempatan** pada siswa untuk mengatur satu kelas aktif dalam setiap periode. Siswa yang sama dapat memiliki penempatan pada beberapa periode.
+
+Mengganti kelas atau mengakhiri penempatan menyimpan catatan lama sebagai riwayat. Nama kelas dicatat ketika penempatan dibuat; perubahan nama jurusan atau kelas tidak menulis ulang nama pada riwayat tersebut. Waktu riwayat menunjukkan kapan perubahan dicatat, dalam UTC, bukan tanggal efektif perpindahan sekolah. Siswa, kelas, dan periode yang memiliki riwayat penempatan tidak dapat dihapus, termasuk jika penempatannya sudah berakhir; penghapusan permanen riwayat belum tersedia. Identitas akun peserta dan fitur impor belum dibuat.
 
 ## Verifikasi
 

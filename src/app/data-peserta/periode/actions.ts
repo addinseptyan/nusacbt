@@ -50,7 +50,8 @@ export async function deletePeriod(formData: FormData): Promise<ActionResult> {
     const result = await getPostgresPool().query("DELETE FROM exam_periods WHERE id = $1::bigint RETURNING id", [id]);
     if (!result.rowCount) return { ok: false, error: "Periode tidak ditemukan atau sudah dihapus." };
   } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "23503") {
+    // RESTRICT memakai 23503 di PostgreSQL 17 dan 23001 mulai PostgreSQL 18.
+    if (typeof error === "object" && error !== null && "code" in error && (error.code === "23503" || error.code === "23001")) {
       return { ok: false, error: "Periode masih digunakan oleh data lain dan tidak dapat dihapus." };
     }
     return { ok: false, error: "Hasil penghapusan belum dapat dipastikan. Periksa koneksi, lalu muat ulang daftar sebelum mencoba lagi." };
