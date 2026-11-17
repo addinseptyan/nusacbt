@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { requireAdmin } from "@/lib/admin-auth";
 import { findNavigationPage } from "@/lib/navigation";
 
 type PageProps = { params: Promise<{ slug: string[] }> };
@@ -18,6 +19,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function ModulePage({ params }: PageProps) {
+  await requireAdmin();
   const { slug } = await params;
   const page = findNavigationPage(`/${slug.join("/")}`);
   if (!page) notFound();

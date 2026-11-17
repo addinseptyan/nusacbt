@@ -2,10 +2,8 @@ import type { Metadata } from "next";
 import "@fontsource-variable/inter";
 import "./globals.css";
 
-import { AppHeader } from "@/components/app-header";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppShell } from "@/components/app-shell";
 import { ThemeProvider } from "@/components/theme-provider";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -20,13 +18,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <TooltipProvider>
-            <SidebarProvider>
-              <AppSidebar />
-              <SidebarInset>
-                <AppHeader />
-                {children}
-              </SidebarInset>
-            </SidebarProvider>
+            <AppShell>{children}</AppShell>
             <Toaster richColors position="bottom-right" />
           </TooltipProvider>
         </ThemeProvider>

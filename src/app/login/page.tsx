@@ -1,0 +1,35 @@
+import { GraduationCap, LockKeyhole, ShieldCheck } from "lucide-react";
+
+import { LoginForm } from "@/app/login/login-form";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
+
+export const metadata = { title: "Masuk Admin — NusaCBT" };
+
+type LoginPageProps = { searchParams: Promise<{ error?: string }> };
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  return (
+    <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background px-4 py-12">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-linear-to-b from-emerald-50/80 to-transparent dark:from-emerald-950/30" />
+      <div className="absolute right-4 top-4 sm:right-8 sm:top-8"><ThemeToggle /></div>
+      <div className="relative w-full max-w-[440px]">
+        <div className="mb-8 flex items-center justify-center gap-3">
+          <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm"><GraduationCap className="size-6" /></span>
+          <div><div className="text-xl font-bold tracking-tight">NusaCBT</div><div className="text-xs text-muted-foreground">Panel ujian sekolah</div></div>
+        </div>
+        <Card className="gap-0 rounded-3xl border border-border bg-card p-6 shadow-[0_12px_50px_rgba(15,45,30,0.07)] sm:p-8">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><LockKeyhole className="size-5" /></div>
+          <h1 className="mt-5 text-[25px] font-bold tracking-tight">Selamat datang kembali</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Masuk dengan akun admin yang dibuat saat penyiapan NusaCBT.</p>
+          {params.error === "database" && <Alert variant="destructive" className="mt-5" role="alert"><AlertDescription>Database tidak dapat dihubungi. Periksa koneksi dan pengaturan server.</AlertDescription></Alert>}
+          <LoginForm />
+        </Card>
+        <div className="mt-6 flex items-start justify-center gap-2 text-center text-xs leading-5 text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0" /><span>Gunakan HTTPS tepercaya untuk menjaga kredensial di jaringan sekolah.</span></div>
+        <p className="mt-3 text-center text-xs text-muted-foreground">Login peserta dan ujian masih dalam pengembangan.</p>
+      </div>
+    </main>
+  );
+}
