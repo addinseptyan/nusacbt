@@ -45,7 +45,7 @@ npm run dev
 
 Anda boleh mengganti `adminsekolah` dengan username pilihan: 3–64 karakter huruf/angka, titik, garis bawah, atau tanda hubung. Username disimpan dalam huruf kecil. Saat diminta, ketik kata sandi **admin aplikasi** dan konfirmasinya; input disamarkan. Panjang 12–128 karakter. Jangan tulis kata sandi sebagai argumen perintah atau kirim ke chat.
 
-Migrasi aman dijalankan lagi: migrasi yang sudah diterapkan dan tidak berubah akan dilewati. Untuk memperbarui instalasi yang sudah memiliki database dan admin, pertahankan `.env.local`, jalankan `npm run db:migrate`, lalu gunakan akun admin yang sama; **jangan membuat ulang database atau admin**. Migrasi periode menambahkan tabel baru tanpa menghapus akun admin. Pembuatan admin ini hanya untuk akun pertama dan tidak akan menimpa akun yang sudah ada. Pengaturan user dan reset password admin belum tersedia pada tahap ini.
+Migrasi aman dijalankan lagi: migrasi yang sudah diterapkan dan tidak berubah akan dilewati. Untuk memperbarui instalasi yang sudah memiliki database dan admin, pertahankan `.env.local`, jalankan `npm run db:migrate`, lalu gunakan akun admin yang sama; **jangan membuat ulang database atau admin**. Migrasi periode, jurusan, dan kelas menambahkan tabel baru tanpa menghapus akun admin atau data periode. Pembuatan admin ini hanya untuk akun pertama dan tidak akan menimpa akun yang sudah ada. Pengaturan user dan reset password admin belum tersedia pada tahap ini.
 
 Buka `http://localhost:3000` pada komputer tersebut dan masuk sebagai admin. Jika PostgreSQL tidak dapat diakses, periksa layanan, port, user, kata sandi, dan nama database secara lokal. Jangan menyalin kredensial ke laporan error.
 
@@ -59,6 +59,6 @@ Buka `http://localhost:3000` pada komputer tersebut dan masuk sebagai admin. Jik
 
 ## Pengujian browser
 
-Tes browser mengubah sesi serta membuat/menghapus akun dan periode **fiktif**, sehingga wajib memakai database terpisah bernama `nusacbt_test`, bukan database sekolah. Siapkan user/database uji, atur `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, dan `PGDATABASE=nusacbt_test` pada lingkungan pengujian, lalu jalankan migrasi. Buat akun fiktif pertama dengan `npm run admin:create -- admin_tes`.
+Tes browser mengubah sesi serta membuat/menghapus akun, periode, jurusan, dan kelas **fiktif**, sehingga wajib memakai database terpisah bernama `nusacbt_test`, bukan database sekolah. Siapkan user/database uji, atur `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, dan `PGDATABASE=nusacbt_test` pada lingkungan pengujian, lalu jalankan migrasi. Buat akun fiktif pertama dengan `npm run admin:create -- admin_tes`.
 
 Di PowerShell yang sama, tetapkan `TEST_ADMIN_USERNAME=admin_tes`, `TEST_ADMIN_PASSWORD` dengan kata sandi **fiktif** akun tes, dan `NUSACBT_COOKIE_SECURE=false`. Instal browser sekali dengan `npx playwright install chromium`, jalankan `npm run build`, lalu `npm run test:e2e -- --workers=1`. Tes memulai server production pada port 3100. Jangan menyimpan kata sandi asli di variabel test atau membagikan output yang mengandung rahasia. CI menyediakan database dan akun fiktifnya sendiri.
