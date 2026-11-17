@@ -2,7 +2,7 @@
 
 NusaCBT adalah proyek aplikasi ujian berbasis web untuk sekolah, dirancang berjalan pada server lokal dan diakses melalui jaringan sekolah tanpa koneksi internet saat ujian.
 
-> **Status: dalam pengembangan, belum untuk ujian sungguhan.** Navigasi panel admin, light/dark mode, template contoh, koneksi PostgreSQL, dan login/logout admin tersedia. Login peserta, pengelolaan data, impor, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
+> **Status: dalam pengembangan, belum untuk ujian sungguhan.** Navigasi panel admin, light/dark mode, template contoh, koneksi PostgreSQL, login/logout admin, dan pengelolaan periode ujian tersedia. Kelas, data siswa, login peserta, impor, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
 
 ## Cakupan proyek
 
@@ -27,6 +27,8 @@ npm run dev
 ```
 
 Buka `http://localhost:3000` di komputer yang menjalankan aplikasi. Kata sandi admin dimasukkan secara tersembunyi di terminal, tidak di argumen perintah. Tidak ada akun atau kata sandi bawaan. Akun pertama saja dapat dibuat dengan perintah ini; pengaturan pengguna dan reset admin belum tersedia.
+
+Jika database dan admin sudah disiapkan pada versi sebelumnya, pertahankan `.env.local` dan akun admin yang ada, lalu jalankan `npm run db:migrate` untuk migrasi baru. Tidak perlu membuat ulang admin. Setelah masuk, buka **Data Peserta → Periode Ujian**: admin dapat menambah, mengubah, dan menghapus periode dengan konfirmasi. Nama dan tanggal mulai wajib diisi; tanggal akhir opsional dan tidak boleh lebih awal dari tanggal mulai. Data kelas, siswa, dan pembuatan identitas peserta belum terhubung.
 
 ## Verifikasi
 
