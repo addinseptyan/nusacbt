@@ -160,6 +160,8 @@ test("admin dapat menambah, mencari, mengubah, dan menghapus siswa yang belum di
     await studentRow(page, newNumber).getByRole("button", { name: "Hapus siswa" }).click();
     confirmation = page.getByRole("dialog", { name: "Hapus siswa?" });
     await confirmation.getByRole("button", { name: "Ya, hapus siswa" }).click();
+    // Daftar tersembunyi dari getByRole saat dialog terbuka; tunggu aksi selesai.
+    await expect(confirmation).toBeHidden();
     await expect(studentRow(page, newNumber)).toHaveCount(0);
     expect((await client.query("SELECT 1 FROM school_students WHERE nisn = $1", [newNumber])).rowCount).toBe(0);
   } finally {
