@@ -18,7 +18,7 @@ Ada tujuh menu utama. Submenu berada di dalam menu utama yang dapat dibuka atau 
 
 1. **Dashboard**.
 2. **Data Modul:** Topik/Mata Pelajaran, Manajemen Soal, Import Soal Word, Export Soal Word.
-3. **Data Peserta:** Periode Ujian, Kelas/Jurusan, Data Siswa, Identitas Peserta, Import Data Peserta, Cetak Kartu Peserta.
+3. **Data Peserta:** Periode Ujian, Kelas/Jurusan, Data Siswa, Identitas Peserta, Sandi Peserta, Import Data Peserta, Cetak Kartu Peserta.
 4. **Data Tes:** Daftar Tes, Hasil/Monitoring Tes, Token.
 5. **Laporan:** Rekap Hasil Tes dengan filter rombel/kelas, siswa, tes, dan rentang tanggal-waktu.
 6. **Tool:** Backup Database dan Upload/Pemulihan Database.
@@ -42,8 +42,9 @@ Pengaturan aplikasi mencakup nama dan keterangan aplikasi, informasi untuk peser
 
 ## 4. Bank soal dan contoh berkas
 
-- Bank soal dikelompokkan berdasarkan topik/mata pelajaran.
-- Tahap awal menggunakan soal pilihan ganda dan penilaian otomatis. Admin dapat membuat dan mengelola soal serta melakukan impor/ekspor Word.
+- Daftar **Topik/Mata Pelajaran** tersedia sebagai satu daftar kategori setara yang digunakan lintas periode. Mata pelajaran (`Matematika`) dan topik (`Aljabar`) dapat dicatat berdampingan; tidak ada hierarki atau subtopik pada tahap ini. Admin dapat menambah, mencari, mengubah, dan menghapus kategori dengan konfirmasi. Nama wajib 1–100 karakter, spasi tepi dibersihkan, dan nama unik tanpa membedakan kapitalisasi sesuai aturan `lower`/kolasi database.
+- Formulir usang tidak menimpa perubahan admin lain. Jika ada data yang mereferensikan kategori dengan foreign key pembatas, penghapusan ditolak. Bank soal belum tersedia; modul soal mendatang harus mereferensikan ID kategori dengan `ON DELETE RESTRICT`, bukan menyalin nama atau menghapus soal secara berantai.
+- Bank soal nantinya dikelompokkan berdasarkan topik/mata pelajaran. Tahap awal direncanakan menggunakan soal pilihan ganda dan penilaian otomatis; manajemen soal serta impor/ekspor Word belum diimplementasikan.
 - Contoh soal yang diterima saat analisis masih berupa PDF: 50 soal dalam tabel dengan kolom `No`, `Jenis`, `Isi`, dan `Jawaban`. Baris `SOAL` diikuti baris `JAWABAN`; `1` menandakan jawaban benar dan `0` jawaban salah. Contoh memiliki lima pilihan per soal dan beberapa gambar.
 - Contoh peserta yang diterima juga berupa PDF, dengan kolom `Nomor`, `Nama`, `NISN`, dan `Kelas`.
 - Arena tidak menerima unggahan `.docx`/`.xlsx` dari pengguna dalam sesi ini. Template Word dan Excel dibuat berdasarkan PDF dengan data fiktif; PDF merupakan referensi visual, bukan bukti struktur dokumen asli. Pemilik memilih kolom Excel `Nomor`, `Nama`, `NISN`, `Kelas` untuk impor siswa. Template Word dan fitur impor/ekspor soal masih perlu ditinjau dan disepakati.

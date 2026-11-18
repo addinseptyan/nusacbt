@@ -2,7 +2,7 @@
 
 NusaCBT adalah proyek aplikasi ujian berbasis web untuk sekolah, dirancang berjalan pada server lokal dan diakses melalui jaringan sekolah tanpa koneksi internet saat ujian.
 
-> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Login admin, pengelolaan periode, jurusan, kelas, siswa, impor Excel dengan pratinjau, identitas peserta, dan pengelolaan sandi peserta per periode tersedia. Login peserta, impor soal, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
+> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Login admin, daftar topik/mata pelajaran, pengelolaan periode, jurusan, kelas, siswa, impor Excel dengan pratinjau, identitas peserta, dan pengelolaan sandi peserta per periode tersedia. Manajemen soal, login peserta, impor soal, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
 
 ## Cakupan proyek
 
@@ -29,6 +29,14 @@ npm run dev
 Buka `http://localhost:3000` di komputer yang menjalankan aplikasi. Kata sandi admin dimasukkan secara tersembunyi di terminal, tidak di argumen perintah. Tidak ada akun atau kata sandi bawaan. Akun pertama saja dapat dibuat dengan perintah ini; pengaturan pengguna dan reset admin belum tersedia.
 
 Jika database dan admin sudah disiapkan pada versi sebelumnya, pertahankan `.env.local` dan akun admin yang ada, lalu jalankan `npm run db:migrate` untuk migrasi baru. Tidak perlu membuat ulang admin. Setelah masuk, buka **Data Peserta → Periode Ujian**: admin dapat menambah, mengubah, dan menghapus periode dengan konfirmasi. Nama dan tanggal mulai wajib diisi; tanggal akhir opsional dan tidak boleh lebih awal dari tanggal mulai.
+
+### Topik dan mata pelajaran
+
+Buka **Data Modul → Topik / Mata Pelajaran**. Admin dapat menambah, mencari, mengubah, dan menghapus kategori dengan konfirmasi. Ini **satu daftar fleksibel lintas periode**, bukan hierarki: `Matematika` dan `Aljabar` dapat menjadi kategori yang setara. Nama wajib 1–100 karakter Unicode tanpa karakter kontrol; spasi di awal dan akhir dibersihkan, sementara spasi di tengah dipertahankan. Nama yang hanya berbeda kapitalisasi ditolak berdasarkan `lower` dan kolasi PostgreSQL; perbedaan spasi di tengah atau bentuk normalisasi Unicode tidak disatukan secara otomatis.
+
+Jika data berubah ketika formulir terbuka, simpan atau hapus ditolak agar tidak menimpa perubahan lain; gunakan **Muat ulang daftar** lalu periksa kembali. Jika data lain sudah mereferensikan kategori melalui foreign key pembatas, penghapusannya juga ditolak. **Manajemen soal belum tersedia**: ketika dikembangkan, modul soal harus mereferensikan ID kategori dengan `ON DELETE RESTRICT`; aturan ini belum berarti soal sudah dapat dibuat atau diimpor. Template soal Word masih perlu disepakati.
+
+### Data peserta
 
 Pada **Data Peserta → Kelas / Jurusan**, admin mengelola daftar jurusan terpisah, lalu membuat kelas dari tingkat dan jurusan, misalnya `X AK`. Nama jurusan tidak boleh sama tanpa membedakan huruf besar/kecil, dan satu kombinasi tingkat–jurusan hanya dapat dibuat sekali. Jurusan yang masih digunakan oleh kelas tidak dapat dihapus.
 
