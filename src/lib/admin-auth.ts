@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { PoolClient } from "pg";
 
 import { normalizeAdminUsername } from "@/lib/admin-username.mjs";
 import { verifyPassword } from "@/lib/password.mjs";
@@ -101,6 +102,21 @@ export async function getAdminSession() {
     `SELECT a.id, a.username FROM admin_sessions s
      JOIN admin_users a ON a.id = s.admin_id
      WHERE s.token_hash = $1 AND s.expires_at > now()`,
+    [digestToken(token)],
+  );
+  return result.rows[0] ?? null;
+}
+
+// Untuk tindakan sensitif: periksa sesi di dalam transaksi dan tahan penghapusan
+// sesi/admin hingga commit. Panggil lagi sebelum commit untuk memeriksa expiry.
+export async function lockActiveAdminSession(client: PoolClient) {
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!token || !TOKEN_FORMAT.test(token)) return null;
+  const result = await client.query<{ id: string; username: string }>(
+    `SELECT a.id::text AS id, a.username FROM admin_sessions s
+     JOIN admin_users a ON a.id = s.admin_id
+     WHERE s.token_hash = $1 AND s.expires_at > clock_timestamp()
+     FOR SHARE OF s, a`,
     [digestToken(token)],
   );
   return result.rows[0] ?? null;

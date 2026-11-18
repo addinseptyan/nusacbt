@@ -1,4 +1,5 @@
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { validateParticipantPassword } from "./participant-password-crypto.mjs";
 
 const N = 32768;
 const R = 8;
@@ -24,13 +25,29 @@ function derive(password, salt) {
 }
 
 /** @param {string} password @returns {Promise<string>} */
+async function encodePassword(password) {
+  const salt = randomBytes(SALT_BYTES);
+  const key = await derive(password, salt);
+  try {
+    return `scrypt$${N}$${R}$${P}$${salt.toString("base64url")}$${key.toString("base64url")}`;
+  } finally {
+    key.fill(0);
+  }
+}
+
+/** @param {string} password @returns {Promise<string>} */
 export async function hashPassword(password) {
   if (!validNewAdminPassword(password)) {
     throw new Error("Kata sandi admin harus 12–128 karakter dan maksimal 512 byte.");
   }
-  const salt = randomBytes(SALT_BYTES);
-  const key = await derive(password, salt);
-  return `scrypt$${N}$${R}$${P}$${salt.toString("base64url")}$${key.toString("base64url")}`;
+  return encodePassword(password);
+}
+
+/** @param {string} password @returns {Promise<string>} */
+export async function hashParticipantPassword(password) {
+  const checked = validateParticipantPassword(password);
+  if (!checked.ok) throw new Error(checked.error);
+  return encodePassword(password);
 }
 
 /** @param {string} password @param {string} encoded @returns {Promise<boolean>} */
@@ -43,5 +60,6 @@ export async function verifyPassword(password, encoded) {
   const expected = Buffer.from(parts[5], "base64url");
   if (salt.length !== SALT_BYTES || expected.length !== KEY_BYTES) return false;
   const actual = await derive(password, salt);
-  return timingSafeEqual(actual, expected);
+  try { return timingSafeEqual(actual, expected); }
+  finally { actual.fill(0); expected.fill(0); }
 }

@@ -42,6 +42,10 @@ jobs:
           node-version: "26"
           cache: npm
       - run: npm ci
+      # File uji dibuat acak di luar checkout dan tidak pernah diunggah sebagai artefak.
+      - run: |
+          echo "NUSACBT_PARTICIPANT_KEY_FILE=${RUNNER_TEMP}/nusacbt-participant-test.key" >> "$GITHUB_ENV"
+          npm run participant:key:create -- "${RUNNER_TEMP}/nusacbt-participant-test.key"
       - run: npm run db:migrate && npm run db:migrate
       - run: printf '%s' "$TEST_ADMIN_PASSWORD" | npm run admin:create -- "$TEST_ADMIN_USERNAME" --stdin
       - run: npm run lint

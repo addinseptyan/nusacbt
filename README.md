@@ -2,7 +2,7 @@
 
 NusaCBT adalah proyek aplikasi ujian berbasis web untuk sekolah, dirancang berjalan pada server lokal dan diakses melalui jaringan sekolah tanpa koneksi internet saat ujian.
 
-> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Login admin, pengelolaan periode, jurusan, kelas, siswa, impor Excel dengan pratinjau, serta nomor peserta dan username per periode tersedia. Kata sandi dan login peserta, impor soal, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
+> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Login admin, pengelolaan periode, jurusan, kelas, siswa, impor Excel dengan pratinjau, identitas peserta, dan pengelolaan sandi peserta per periode tersedia. Login peserta, impor soal, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
 
 ## Cakupan proyek
 
@@ -54,7 +54,34 @@ Aplikasi tidak menyimpan berkas impor ke repository. Impor **tidak** membuat ata
 3. Nomor peserta harus unik dalam periode dan username juga harus unik dalam periode, **tanpa membedakan huruf besar/kecil**. Nilai yang sama boleh digunakan lagi pada periode lain. Nomor dan username masing-masing mempunyai aturan unik tersendiri; satu nilai boleh menjadi nomor seorang siswa dan username siswa lain.
 4. **Buat otomatis** menawarkan konfirmasi untuk siswa dengan kelas aktif yang **belum memiliki pasangan identitas**. Tombol ini tidak dipengaruhi pencarian dan tidak pernah mengubah identitas yang sudah ada. Maksimal 1.000 siswa diproses dalam sekali batch, menurut urutan nama; bila masih ada, ulangi setelah daftar diperbarui. Untuk menggabungkan nilai otomatis dan nilai manual, buat pasangan otomatis lalu ubah salah satunya secara sengaja.
 5. Pola awal untuk keduanya adalah `{prefix}{YYYYMM}{acak3}`. `{YYYYMM}` berasal dari tanggal mulai periode dan `{acak3}` adalah angka acak `000`–`999`. Prefix opsional; pola nomor dan username dapat diubah terpisah. Setiap pola wajib berisi `{acak3}` tepat sekali; `{prefix}` dan `{YYYYMM}` boleh digunakan masing-masing sekali. Pola yang sama menghasilkan nomor dan username yang sama; pola berbeda menghasilkan nilai secara terpisah. Maksimal 1.000 kombinasi untuk satu pola yang sudah diisi prefix dan bulan; nilai yang sudah dipakai mengurangi kapasitas. Jika tidak cukup atau data berubah saat penyimpanan, seluruh batch dibatalkan.
-6. Saat penempatan diakhiri, identitas tetap tersimpan dan nilainya tetap digunakan di periode tersebut; kembalikan penempatan kelas untuk mengubahnya. Siswa dan periode yang memiliki identitas juga tidak dapat dihapus. Identitas ini belum merupakan akun login: kata sandi, login peserta, dan kartu belum dibuat.
+6. Saat penempatan diakhiri, identitas tetap tersimpan dan nilainya tetap digunakan di periode tersebut; kembalikan penempatan kelas untuk mengubahnya. Siswa dan periode yang memiliki identitas juga tidak dapat dihapus. Identitas dan sandi ini belum merupakan akun login aktif: login peserta dan kartu belum dibuat.
+
+### Kunci dan sandi peserta
+
+**Siapkan kunci sebelum membuat sandi.** Kunci adalah file acak 32 byte yang disimpan **di luar direktori proyek, repository, database, dan backup database**. Buat folder yang hanya dapat diakses akun layanan aplikasi dan pengelola server. Contoh Windows PowerShell (sesuaikan lokasi; pastikan folder bukan bagian checkout):
+
+```powershell
+New-Item -ItemType Directory -Force -Path 'C:\ProgramData\NusaCBT\keys'
+npm run participant:key:create -- 'C:\ProgramData\NusaCBT\keys\participant.key'
+```
+
+Perintah tidak mencetak kunci dan **menolak menimpa file yang sudah ada**. Pemeriksaan juga menolak path di dalam direktori aplikasi atau direktori dengan penanda repository `.git`; tetap pastikan lokasi dan cadangannya benar-benar di luar repository dan database. Di sistem Unix file baru dibuat dengan mode `0600`; di Windows atur ACL NTFS folder dan file agar hanya akun layanan dan pengelola berwenang yang dapat membacanya. Periksa izin backup, direktori induk, dan akun layanan secara lokal. Jangan unggah file kunci atau isi file ke Git, chat, log, atau perangkat bersama.
+
+Tambahkan **path**, bukan isi kunci, ke `.env.local`, lalu restart aplikasi. Pada Windows contoh berikut memakai garis miring agar aman untuk file env; sesuaikan dengan lokasi sebenarnya:
+
+```dotenv
+NUSACBT_PARTICIPANT_KEY_FILE=C:/ProgramData/NusaCBT/keys/participant.key
+```
+
+Cadangkan file kunci secara aman dan **terpisah** dari database, dan uji pemulihannya di lingkungan terisolasi. Gunakan kunci yang sama untuk seluruh proses aplikasi yang memakai database yang sama. Database mengikat kunci pertama saat sandi pertama dibuat; kunci yang berbeda ditolak dan tidak boleh dipakai untuk reset maupun membuat sandi baru. Jika kunci hilang, salinan sandi lama tidak dapat dibuka; pulihkan file kunci yang benar. **Rotasi kunci dan prosedur reset seluruh sandi setelah kehilangan permanen belum tersedia**: jangan menghapus pengikat, mengganti file, atau mengubah tabel secara sembarangan. Simpan backup database dan kunci yang cocok, dengan kontrol akses terpisah.
+
+1. Setelah migrasi `006_participant_passwords.sql`, buat penempatan dan identitas siswa. Buka **Data Peserta → Sandi Peserta**, lalu pilih periode. Semua admin yang sudah login berwenang dalam tahap ini; peran operator/hak khusus belum ada.
+2. **Buat sandi** untuk satu siswa secara otomatis atau manual. Manual membutuhkan 12–128 karakter Unicode, maksimal 512 byte, tanpa karakter kontrol; spasi dipertahankan dan sandi harus dikonfirmasi. Generator memakai 16 karakter acak yang sukar ditebak. Hindari sandi manual yang mudah ditebak.
+3. **Buat otomatis** memproses maksimal 25 identitas berkelas aktif yang belum memiliki sandi, menurut urutan nama, terlepas dari pencarian. Ulangi bila ada sisanya. Hashing sengaja mahal sehingga batch memerlukan waktu. Jika data berubah, seluruh batch dibatalkan; sandi yang ada tidak pernah ditimpa.
+4. Daftar menyamarkan sandi secara default. Pilih **Lihat sandi → Tampilkan sandi** hanya bila diperlukan. Penampilan berhasil dicatat dengan admin, peserta, dan waktu, tanpa nilai sandi. Tampilan ditutup otomatis setelah 60 detik atau saat halaman tidak aktif. Audit juga mencatat pembuatan dan reset; 20 peristiwa terbaru per periode ditampilkan. Upaya yang gagal tidak dicatat, dan tabel audit ini belum kebal perubahan oleh pengelola database.
+5. **Reset sandi** mengganti hash dan salinan terenkripsi untuk satu peserta setelah konfirmasi; sandi lama tidak lagi cocok. Bila kelas tidak aktif, sandi tetap tersimpan tetapi tindakan dinonaktifkan sampai siswa ditempatkan kembali. Database tidak otomatis menghapus riwayat audit atau sandi saat kelas berakhir.
+
+Hash scrypt dipersiapkan untuk verifikasi login di masa depan; salinan terpisah dienkripsi AES-256-GCM dengan kunci tersebut. Sandi tidak dikirim ke halaman daftar awal, URL, atau catatan audit. Sandi manual dikirim ke server saat disimpan dan sandi yang dibuka dikirim ke browser; gunakan HTTPS tepercaya, perangkat admin yang aman, dan konfigurasi proxy yang tidak mencatat isi permintaan/respons. Jangan gunakan data asli sampai keamanan dan operasional diuji. Sesi admin saat ini cukup untuk melihat sandi; belum ada autentikasi ulang khusus untuk setiap penampilan.
 
 ## Verifikasi
 
@@ -72,7 +99,7 @@ Tes browser membutuhkan **database pengujian terpisah** bernama `nusacbt_test` d
 - Hash kata sandi admin menggunakan scrypt (N=2^15, r=8, p=3), salah satu konfigurasi [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#scrypt); sesi memakai token acak, dengan hash token disimpan di PostgreSQL. Setelah lima kegagalan, akun dikunci selama 15 menit. Ini belum menggantikan pengujian keamanan menyeluruh atau pembatasan trafik berbasis IP.
 - Cookie sesi `HttpOnly` dan `SameSite=Strict`; pada production cookie `Secure` aktif secara default dan memerlukan HTTPS yang tepercaya. HTTP hanya untuk uji lokal terisolasi tanpa data asli. Perlindungan HTTPS/proxy untuk LAN sekolah masih harus disiapkan dan diuji.
 - Template pada `public/templates` berisi data fiktif dan tetap dapat diunduh tanpa login. Data asli, soal rahasia, password, `.env.local`, kunci, dan backup tidak boleh dimasukkan ke repository publik.
-- Hak akses operator terpisah, login siswa, dan kebutuhan menampilkan kembali password siswa belum diimplementasikan. Rancangannya berbeda dari password admin dan dicatat di spesifikasi.
+- Login siswa dan hak akses operator terpisah belum diimplementasikan. Semua admin yang memiliki sesi sah dapat mengelola dan melihat sandi peserta; akses sensitif dicatat di database, tetapi log tersebut belum kebal-ubah. File kunci dan cadangannya harus dikelola terpisah sesuai petunjuk di atas.
 
 ## Alur kontribusi
 
