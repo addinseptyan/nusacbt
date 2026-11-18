@@ -42,6 +42,7 @@ export const navigation: NavigationSection[] = [
       { title: "Periode Ujian", href: "/data-peserta/periode", description: "Atur periode sebagai dasar pengelolaan peserta dan ujian." },
       { title: "Kelas / Jurusan", href: "/data-peserta/kelas", description: "Kelola kelas, rombongan belajar, dan jurusan." },
       { title: "Data Siswa", href: "/data-peserta/siswa", description: "Kelola data siswa dan penempatan kelas per periode." },
+      { title: "Identitas Peserta", href: "/data-peserta/identitas", description: "Atur nomor peserta dan username unik untuk setiap periode." },
       { title: "Import Data Peserta", href: "/data-peserta/import", description: "Impor siswa dan penempatan per periode dari Excel dengan pratinjau.", template: { href: "/templates/template-peserta-nusacbt.xlsx", label: "Unduh template Excel", detail: "Berisi contoh kolom nomor, nama, NISN sebagai teks, dan kelas." } },
       { title: "Cetak Kartu Peserta", href: "/data-peserta/kartu", description: "Siapkan kartu login berdasarkan siswa, rombel, atau kategori ujian." },
     ],
