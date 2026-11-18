@@ -1,0 +1,48 @@
+-- Soal pilihan ganda manual: satu kategori, lima pilihan tetap, tepat satu kunci.
+-- Gambar yang divalidasi aplikasi disimpan di database agar transaksi dan backup mencakup isinya.
+-- Modul tes mendatang harus membuat snapshot soal/opsi dan melindungi referensi dengan ON DELETE RESTRICT.
+CREATE TABLE question_bank (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  topic_id bigint NOT NULL REFERENCES question_topics(id) ON DELETE RESTRICT,
+  prompt_text text NOT NULL DEFAULT '',
+  prompt_image bytea,
+  prompt_image_mime text,
+  option_a_text text NOT NULL DEFAULT '',
+  option_a_image bytea,
+  option_a_image_mime text,
+  option_b_text text NOT NULL DEFAULT '',
+  option_b_image bytea,
+  option_b_image_mime text,
+  option_c_text text NOT NULL DEFAULT '',
+  option_c_image bytea,
+  option_c_image_mime text,
+  option_d_text text NOT NULL DEFAULT '',
+  option_d_image bytea,
+  option_d_image_mime text,
+  option_e_text text NOT NULL DEFAULT '',
+  option_e_image bytea,
+  option_e_image_mime text,
+  correct_option text NOT NULL CHECK (correct_option IN ('A', 'B', 'C', 'D', 'E')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT question_bank_prompt_text_check CHECK (char_length(prompt_text) <= 5000 AND translate(prompt_text, E'\t\n\r', '') !~ '[[:cntrl:]]'),
+  CONSTRAINT question_bank_prompt_required_check CHECK (char_length(btrim(prompt_text, E' \t\n\r')) > 0 OR prompt_image IS NOT NULL),
+  CONSTRAINT question_bank_prompt_image_check CHECK ((prompt_image IS NULL AND prompt_image_mime IS NULL) OR (prompt_image IS NOT NULL AND prompt_image_mime IS NOT NULL AND prompt_image_mime IN ('image/jpeg', 'image/png') AND octet_length(prompt_image) BETWEEN 1 AND 1048576)),
+  CONSTRAINT question_bank_option_a_text_check CHECK (char_length(option_a_text) <= 2000 AND translate(option_a_text, E'\t\n\r', '') !~ '[[:cntrl:]]'),
+  CONSTRAINT question_bank_option_a_required_check CHECK (char_length(btrim(option_a_text, E' \t\n\r')) > 0 OR option_a_image IS NOT NULL),
+  CONSTRAINT question_bank_option_a_image_check CHECK ((option_a_image IS NULL AND option_a_image_mime IS NULL) OR (option_a_image IS NOT NULL AND option_a_image_mime IS NOT NULL AND option_a_image_mime IN ('image/jpeg', 'image/png') AND octet_length(option_a_image) BETWEEN 1 AND 1048576)),
+  CONSTRAINT question_bank_option_b_text_check CHECK (char_length(option_b_text) <= 2000 AND translate(option_b_text, E'\t\n\r', '') !~ '[[:cntrl:]]'),
+  CONSTRAINT question_bank_option_b_required_check CHECK (char_length(btrim(option_b_text, E' \t\n\r')) > 0 OR option_b_image IS NOT NULL),
+  CONSTRAINT question_bank_option_b_image_check CHECK ((option_b_image IS NULL AND option_b_image_mime IS NULL) OR (option_b_image IS NOT NULL AND option_b_image_mime IS NOT NULL AND option_b_image_mime IN ('image/jpeg', 'image/png') AND octet_length(option_b_image) BETWEEN 1 AND 1048576)),
+  CONSTRAINT question_bank_option_c_text_check CHECK (char_length(option_c_text) <= 2000 AND translate(option_c_text, E'\t\n\r', '') !~ '[[:cntrl:]]'),
+  CONSTRAINT question_bank_option_c_required_check CHECK (char_length(btrim(option_c_text, E' \t\n\r')) > 0 OR option_c_image IS NOT NULL),
+  CONSTRAINT question_bank_option_c_image_check CHECK ((option_c_image IS NULL AND option_c_image_mime IS NULL) OR (option_c_image IS NOT NULL AND option_c_image_mime IS NOT NULL AND option_c_image_mime IN ('image/jpeg', 'image/png') AND octet_length(option_c_image) BETWEEN 1 AND 1048576)),
+  CONSTRAINT question_bank_option_d_text_check CHECK (char_length(option_d_text) <= 2000 AND translate(option_d_text, E'\t\n\r', '') !~ '[[:cntrl:]]'),
+  CONSTRAINT question_bank_option_d_required_check CHECK (char_length(btrim(option_d_text, E' \t\n\r')) > 0 OR option_d_image IS NOT NULL),
+  CONSTRAINT question_bank_option_d_image_check CHECK ((option_d_image IS NULL AND option_d_image_mime IS NULL) OR (option_d_image IS NOT NULL AND option_d_image_mime IS NOT NULL AND option_d_image_mime IN ('image/jpeg', 'image/png') AND octet_length(option_d_image) BETWEEN 1 AND 1048576)),
+  CONSTRAINT question_bank_option_e_text_check CHECK (char_length(option_e_text) <= 2000 AND translate(option_e_text, E'\t\n\r', '') !~ '[[:cntrl:]]'),
+  CONSTRAINT question_bank_option_e_required_check CHECK (char_length(btrim(option_e_text, E' \t\n\r')) > 0 OR option_e_image IS NOT NULL),
+  CONSTRAINT question_bank_option_e_image_check CHECK ((option_e_image IS NULL AND option_e_image_mime IS NULL) OR (option_e_image IS NOT NULL AND option_e_image_mime IS NOT NULL AND option_e_image_mime IN ('image/jpeg', 'image/png') AND octet_length(option_e_image) BETWEEN 1 AND 1048576))
+);
+
+CREATE INDEX question_bank_topic_id_idx ON question_bank (topic_id);

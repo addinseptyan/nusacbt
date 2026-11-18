@@ -11,16 +11,20 @@ process.env.NUSACBT_INTERNAL_PROJECT_ROOT = typeof __dirname === "string"
 const nextConfig: NextConfig = {
   // The local preview proxy and loopback browser tests need access to dev assets.
   allowedDevOrigins: ["127.0.0.1", "localhost", "*.e2b.app"],
+  // Maksimum enam gambar masing-masing 1 MiB plus teks dan overhead multipart.
+  experimental: { serverActions: { bodySizeLimit: "8mb" } },
   devIndicators: false,
   async headers() {
-    return [{
-      source: "/data-peserta/sandi",
-      headers: [
-        { key: "Cache-Control", value: "private, no-store, max-age=0" },
-        { key: "Referrer-Policy", value: "no-referrer" },
-        { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
-      ],
-    }];
+    // Halaman sandi dan bank soal admin dapat berisi data sensitif.
+    const privateHeaders = [
+      { key: "Cache-Control", value: "private, no-store, max-age=0" },
+      { key: "Referrer-Policy", value: "no-referrer" },
+      { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+    ];
+    return [
+      { source: "/data-peserta/sandi", headers: privateHeaders },
+      { source: "/data-modul/soal", headers: privateHeaders },
+    ];
   },
 };
 
