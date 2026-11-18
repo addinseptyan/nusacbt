@@ -2,7 +2,7 @@
 
 NusaCBT adalah proyek aplikasi ujian berbasis web untuk sekolah, dirancang berjalan pada server lokal dan diakses melalui jaringan sekolah tanpa koneksi internet saat ujian.
 
-> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Login admin, pengelolaan periode, jurusan, kelas, siswa manual, penempatan kelas, dan impor siswa Excel dengan pratinjau tersedia. Identitas/login peserta, impor soal, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
+> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Login admin, pengelolaan periode, jurusan, kelas, siswa, impor Excel dengan pratinjau, serta nomor peserta dan username per periode tersedia. Kata sandi dan login peserta, impor soal, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
 
 ## Cakupan proyek
 
@@ -34,7 +34,7 @@ Pada **Data Peserta → Kelas / Jurusan**, admin mengelola daftar jurusan terpis
 
 Pada **Data Peserta → Data Siswa**, admin dapat menambah, mencari, dan mengubah siswa secara manual. Nama dan NISN wajib diisi; NISN harus unik dan tepat 10 digit, disimpan sebagai teks. Identitas siswa berlaku lintas periode, sehingga perubahan nama/NISN terlihat di semua periode. Setelah periode dan kelas tersedia, pilih **Penempatan** pada siswa untuk mengatur satu kelas aktif dalam setiap periode. Siswa yang sama dapat memiliki penempatan pada beberapa periode.
 
-Mengganti kelas atau mengakhiri penempatan menyimpan catatan lama sebagai riwayat. Nama kelas dicatat ketika penempatan dibuat; perubahan nama jurusan atau kelas tidak menulis ulang nama pada riwayat tersebut. Waktu riwayat menunjukkan kapan perubahan dicatat, dalam UTC, bukan tanggal efektif perpindahan sekolah. Siswa, kelas, dan periode yang memiliki riwayat penempatan tidak dapat dihapus, termasuk jika penempatannya sudah berakhir; penghapusan permanen riwayat belum tersedia. Identitas akun peserta belum dibuat.
+Mengganti kelas atau mengakhiri penempatan menyimpan catatan lama sebagai riwayat. Nama kelas dicatat ketika penempatan dibuat; perubahan nama jurusan atau kelas tidak menulis ulang nama pada riwayat tersebut. Waktu riwayat menunjukkan kapan perubahan dicatat, dalam UTC, bukan tanggal efektif perpindahan sekolah. Siswa, kelas, dan periode yang memiliki riwayat penempatan tidak dapat dihapus, termasuk jika penempatannya sudah berakhir; penghapusan permanen riwayat belum tersedia.
 
 ### Impor siswa dari Excel
 
@@ -45,7 +45,16 @@ Mengganti kelas atau mengakhiri penempatan menyimpan catatan lama sebagai riwaya
 5. Klik **Periksa pratinjau**. Duplikat NISN dalam file, data tidak valid, kelas yang tidak ditemukan/ambigu, serta konflik dengan siswa lama harus diperbaiki seluruhnya sebelum penyimpanan. Nama yang sudah ada harus sama setelah spasi tepi dibuang dan normalisasi Unicode; kelas dicocokkan tanpa membedakan huruf besar/kecil dan kelebihan spasi.
 6. Jika nama siswa lama sesuai dan belum ada kelas aktif pada periode tersebut, penempatan baru ditambahkan. Jika kelas aktif sudah sama, baris tidak mengubah apa pun. Nama atau kelas aktif yang berbeda **tidak ditimpa**; perbaiki file atau kelola data secara manual. Setelah konfirmasi, semua perubahan disimpan dalam satu transaksi. Bila data berubah sejak pratinjau, periksa ulang file.
 
-Aplikasi tidak menyimpan berkas impor ke repository. Fitur ini belum membuat nomor peserta, username, kata sandi, atau kartu. Gunakan data fiktif sampai pengujian keamanan dan operasional selesai.
+Aplikasi tidak menyimpan berkas impor ke repository. Impor **tidak** membuat atau mengubah nomor peserta, username, kata sandi, atau kartu. Atur identitas secara terpisah setelah impor. Gunakan data fiktif sampai pengujian keamanan dan operasional selesai.
+
+### Nomor peserta dan username
+
+1. Buka **Data Peserta → Identitas Peserta**, lalu pilih satu periode. Daftar menampilkan siswa yang memiliki kelas aktif pada periode tersebut, serta identitas yang tersimpan meskipun kelasnya tidak lagi aktif.
+2. Pilih **Atur identitas** untuk mengisi nomor dan username sekaligus, atau **Ubah identitas** untuk mengubahnya secara sengaja. Keduanya berupa teks dan boleh sama atau berbeda. Nomor 1–64 karakter; username 3–64 karakter. Karakter awal harus huruf atau angka ASCII; setelahnya boleh juga titik, garis bawah, atau tanda hubung. Nol di depan dipertahankan.
+3. Nomor peserta harus unik dalam periode dan username juga harus unik dalam periode, **tanpa membedakan huruf besar/kecil**. Nilai yang sama boleh digunakan lagi pada periode lain. Nomor dan username masing-masing mempunyai aturan unik tersendiri; satu nilai boleh menjadi nomor seorang siswa dan username siswa lain.
+4. **Buat otomatis** menawarkan konfirmasi untuk siswa dengan kelas aktif yang **belum memiliki pasangan identitas**. Tombol ini tidak dipengaruhi pencarian dan tidak pernah mengubah identitas yang sudah ada. Maksimal 1.000 siswa diproses dalam sekali batch, menurut urutan nama; bila masih ada, ulangi setelah daftar diperbarui. Untuk menggabungkan nilai otomatis dan nilai manual, buat pasangan otomatis lalu ubah salah satunya secara sengaja.
+5. Pola awal untuk keduanya adalah `{prefix}{YYYYMM}{acak3}`. `{YYYYMM}` berasal dari tanggal mulai periode dan `{acak3}` adalah angka acak `000`–`999`. Prefix opsional; pola nomor dan username dapat diubah terpisah. Setiap pola wajib berisi `{acak3}` tepat sekali; `{prefix}` dan `{YYYYMM}` boleh digunakan masing-masing sekali. Pola yang sama menghasilkan nomor dan username yang sama; pola berbeda menghasilkan nilai secara terpisah. Maksimal 1.000 kombinasi untuk satu pola yang sudah diisi prefix dan bulan; nilai yang sudah dipakai mengurangi kapasitas. Jika tidak cukup atau data berubah saat penyimpanan, seluruh batch dibatalkan.
+6. Saat penempatan diakhiri, identitas tetap tersimpan dan nilainya tetap digunakan di periode tersebut; kembalikan penempatan kelas untuk mengubahnya. Siswa dan periode yang memiliki identitas juga tidak dapat dihapus. Identitas ini belum merupakan akun login: kata sandi, login peserta, dan kartu belum dibuat.
 
 ## Verifikasi
 
