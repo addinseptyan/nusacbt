@@ -165,7 +165,7 @@ export function TopicManager({ topics }: { topics: QuestionTopic[] }) {
       <Alert className="mb-6 max-w-4xl rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
         <Info className="size-4 text-[#727fc8] dark:text-indigo-300" />
         <AlertTitle className="text-[12px] font-bold">Satu daftar fleksibel</AlertTitle>
-        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Mata pelajaran dan topik berada dalam daftar yang sama, tanpa subtopik, dan digunakan lintas periode. Soal serta impor Word belum tersedia pada tahap ini.</AlertDescription>
+        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Mata pelajaran dan topik berada dalam daftar yang sama, tanpa subtopik, dan digunakan lintas periode. Kategori yang digunakan soal tidak dapat dihapus. Impor/ekspor Word belum tersedia.</AlertDescription>
       </Alert>
 
       <Card className="max-w-5xl gap-0 overflow-hidden rounded-[18px] bg-card py-0 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]">

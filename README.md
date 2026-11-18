@@ -2,7 +2,7 @@
 
 NusaCBT adalah proyek aplikasi ujian berbasis web untuk sekolah, dirancang berjalan pada server lokal dan diakses melalui jaringan sekolah tanpa koneksi internet saat ujian.
 
-> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data siswa asli.** Login admin, daftar topik/mata pelajaran, pengelolaan periode, jurusan, kelas, siswa, impor Excel dengan pratinjau, identitas peserta, dan pengelolaan sandi peserta per periode tersedia. Manajemen soal, login peserta, impor soal, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
+> **Status: dalam pengembangan, belum untuk ujian sungguhan atau data asli.** Login admin, daftar topik/mata pelajaran, manajemen soal pilihan ganda manual, pengelolaan periode, jurusan, kelas, siswa, impor Excel dengan pratinjau, identitas peserta, dan pengelolaan sandi peserta per periode tersedia. Login peserta, impor/ekspor soal, kartu, ujian, penilaian, backup, dan laporan **belum diimplementasikan**.
 
 ## Cakupan proyek
 
@@ -34,7 +34,18 @@ Jika database dan admin sudah disiapkan pada versi sebelumnya, pertahankan `.env
 
 Buka **Data Modul → Topik / Mata Pelajaran**. Admin dapat menambah, mencari, mengubah, dan menghapus kategori dengan konfirmasi. Ini **satu daftar fleksibel lintas periode**, bukan hierarki: `Matematika` dan `Aljabar` dapat menjadi kategori yang setara. Nama wajib 1–100 karakter Unicode tanpa karakter kontrol; spasi di awal dan akhir dibersihkan, sementara spasi di tengah dipertahankan. Nama yang hanya berbeda kapitalisasi ditolak berdasarkan `lower` dan kolasi PostgreSQL; perbedaan spasi di tengah atau bentuk normalisasi Unicode tidak disatukan secara otomatis.
 
-Jika data berubah ketika formulir terbuka, simpan atau hapus ditolak agar tidak menimpa perubahan lain; gunakan **Muat ulang daftar** lalu periksa kembali. Jika data lain sudah mereferensikan kategori melalui foreign key pembatas, penghapusannya juga ditolak. **Manajemen soal belum tersedia**: ketika dikembangkan, modul soal harus mereferensikan ID kategori dengan `ON DELETE RESTRICT`; aturan ini belum berarti soal sudah dapat dibuat atau diimpor. Template soal Word masih perlu disepakati.
+Jika data berubah ketika formulir terbuka, simpan atau hapus ditolak agar tidak menimpa perubahan lain; gunakan **Muat ulang daftar** lalu periksa kembali. Kategori yang masih digunakan soal tidak dapat dihapus. Soal merujuk ID kategori dengan `ON DELETE RESTRICT`; mengganti nama kategori tidak mengubah ID-nya.
+
+### Manajemen soal manual
+
+1. Setelah `npm ci` dan migrasi `008_question_bank.sql`, buat setidaknya satu kategori di **Data Modul → Topik / Mata Pelajaran**. Buka **Manajemen Soal → Tambah soal**, pilih satu kategori, isi soal dan pilihan **A–E**, lalu tandai tepat satu jawaban benar.
+2. Isi soal dan setiap pilihan wajib mengandung teks, gambar, atau keduanya. Teks disimpan sebagai teks biasa, bukan HTML: maksimal 5.000 karakter Unicode untuk soal dan 2.000 per pilihan. Setiap bagian dapat memiliki maksimal **satu gambar**: satu untuk soal dan satu untuk masing-masing pilihan; format **PNG/JPEG statis**, maksimal **1 MiB per gambar sebelum dan sesudah diproses**, maksimal 4.000 piksel tiap sisi dan 8 megapiksel. SVG, WebP, gambar rusak, atau gambar yang terlalu besar ditolak. Jika hasil pemrosesan melebihi 1 MiB, perkecil/kompres gambar dan pilih ulang.
+3. Klik **Simpan soal** dan tunggu pesan berhasil. File baru terlihat setelah penyimpanan; perubahan yang hanya ada di formulir belum tersimpan. Daftar dapat dicari berdasarkan teks atau difilter berdasarkan kategori; tombol **Lihat** menampilkan pilihan dan kunci untuk admin. **Ubah** mempertahankan gambar lama kecuali dipilih pengganti atau dicentang untuk dihapus. Pilih salah satu, bukan penggantian dan penghapusan sekaligus. Hapus soal memerlukan konfirmasi dan menghapus gambar yang melekat.
+4. Saat ada perubahan atau penghapusan oleh sesi lain, operasi pada formulir usang ditolak. Gunakan **Muat ulang daftar**, periksa kembali, dan isi ulang perubahan yang diperlukan. Jika hasil belum dapat dipastikan karena gangguan koneksi, periksa daftar sebelum mencoba lagi agar tidak membuat duplikat.
+
+Gambar didekode dan dienkode ulang untuk membuang metadata, lalu disimpan di PostgreSQL bersama soal dalam satu transaksi; file aslinya tidak disimpan dan isi soal/gambar tidak dienkripsi oleh aplikasi. Jika ada proxy, pastikan batas body-nya mengizinkan permintaan hingga 8 MB untuk enam gambar. Pencarian dan paginasi pada tahap ini dilakukan di browser setelah semua teks soal dimuat; kinerja bank soal besar belum diuji. Semua admin yang login dapat melihat kunci dan gambar. Halaman dan gambar tidak dimaksudkan untuk akses publik; gunakan HTTPS tepercaya dan perangkat admin yang aman, serta batasi akses server/database. Log database dapat memuat isi soal saat terjadi kesalahan: batasi akses dan masa simpan log, serta hindari merekam body permintaan/respons di proxy. Backup database harus mencakup gambar ini, disimpan aman dan diuji pemulihannya. Fitur backup aplikasi belum tersedia.
+
+**Impor/ekspor Word belum diimplementasikan**; template soal Word masih perlu ditinjau dan disepakati. Soal manual belum dapat dipakai untuk tes atau login peserta.
 
 ### Data peserta
 
