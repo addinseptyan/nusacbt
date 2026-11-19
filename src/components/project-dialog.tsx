@@ -27,8 +27,8 @@ export function ProjectDialog() {
           <DialogDescription>Pratinjau awal untuk meninjau struktur dan tampilan aplikasi.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-1 text-sm">
-          <div className="flex gap-2.5"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" /><span>Login admin, topik/mata pelajaran, soal manual, impor Word terbatas, periode, kelas, siswa, impor Excel, identitas, dan sandi peserta per periode tersedia.</span></div>
-          <div className="flex gap-2.5"><CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground" /><span>Login peserta, ekspor soal, pengerjaan ujian, dan laporan belum aktif.</span></div>
+          <div className="flex gap-2.5"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" /><span>Login admin dan peserta, soal manual, impor Word terbatas, periode, kelas, siswa, identitas, dan sandi peserta tersedia untuk pratinjau.</span></div>
+          <div className="flex gap-2.5"><CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground" /><span>Peserta baru dapat melihat identitas dan jadwal. Pemeriksaan token, pengerjaan ujian, ekspor soal, dan laporan belum aktif.</span></div>
         </div>
         <Alert className="rounded-xl bg-muted/50">
           <Info className="size-4" />

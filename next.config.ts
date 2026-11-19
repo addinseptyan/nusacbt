@@ -22,6 +22,8 @@ const nextConfig: NextConfig = {
       { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
     ];
     return [
+      { source: "/peserta", headers: privateHeaders },
+      { source: "/peserta/:path*", headers: privateHeaders },
       { source: "/data-peserta/sandi", headers: privateHeaders },
       { source: "/data-modul/soal", headers: privateHeaders },
       { source: "/data-modul/import-soal", headers: privateHeaders },

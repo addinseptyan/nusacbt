@@ -13,7 +13,7 @@
     "admin:create": "node scripts/create-admin.mjs",
     "participant:key:create": "node scripts/create-participant-key.mjs",
     "token:key:create": "node scripts/create-exam-token-key.mjs",
-    "test:unit": "node --test tests/unit/password.test.mjs tests/unit/period-validation.test.mjs tests/unit/class-validation.test.mjs tests/unit/student-validation.test.mjs tests/unit/student-import.test.mjs tests/unit/participant-identity.test.mjs tests/unit/participant-password.test.mjs tests/unit/topic-validation.test.mjs tests/unit/question-validation.test.mjs tests/unit/question-image.test.mjs tests/unit/question-rich.test.mjs tests/unit/question-math.test.mjs tests/unit/question-docx.test.mjs tests/unit/exam-test-validation.test.mjs tests/unit/exam-token.test.mjs tests/unit/exam-token-crypto.test.mjs tests/unit/exam-token-date.test.mjs"
+    "test:unit": "node --test tests/unit/password.test.mjs tests/unit/period-validation.test.mjs tests/unit/class-validation.test.mjs tests/unit/student-validation.test.mjs tests/unit/student-import.test.mjs tests/unit/participant-identity.test.mjs tests/unit/participant-password.test.mjs tests/unit/topic-validation.test.mjs tests/unit/question-validation.test.mjs tests/unit/question-image.test.mjs tests/unit/question-rich.test.mjs tests/unit/question-math.test.mjs tests/unit/question-docx.test.mjs tests/unit/exam-test-validation.test.mjs tests/unit/exam-token.test.mjs tests/unit/exam-token-crypto.test.mjs tests/unit/exam-token-date.test.mjs tests/unit/participant-login.test.mjs tests/unit/migration-encoding.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

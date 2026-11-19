@@ -143,7 +143,7 @@ function QuestionDetail({ question, onClose }: { question: Question | null; onCl
   return (
     <Dialog open={question !== null} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className={dialogClass}>
-        <DialogHeader><DialogTitle className="text-lg font-bold">Detail soal</DialogTitle><DialogDescription>Kunci jawaban hanya untuk admin. Soal dapat dipilih pada rancangan tes; pengerjaan dan login peserta belum tersedia.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle className="text-lg font-bold">Detail soal</DialogTitle><DialogDescription>Kunci jawaban hanya untuk admin. Soal dapat dipilih pada rancangan tes; pengerjaan peserta belum tersedia.</DialogDescription></DialogHeader>
         {question && <div className="space-y-5 py-1">
           <Badge variant="secondary" className="max-w-full break-words">{question.topicName}</Badge>
           <div><h3 className="text-sm font-bold">Isi soal</h3><div className="mt-2 text-sm"><QuestionRichDisplay document={question.promptRich} fallback={question.prompt} /></div>{question.hasPromptImage && <QuestionImage question={question} slot="prompt" alt="Gambar soal" />}</div>

@@ -5,6 +5,7 @@ import nextEnv from "@next/env";
 import pg from "pg";
 
 import { postgresConfig } from "../src/lib/postgres-config.mjs";
+import { requireUtf8Database } from "./migration-encoding.mjs";
 
 nextEnv.loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
 const migrationsDir = fileURLToPath(new URL("../migrations/", import.meta.url));
@@ -15,6 +16,8 @@ let locked = false;
 try {
   client = new pg.Client(postgresConfig());
   await client.connect();
+  // Pastikan encoding sebelum membuat tabel riwayat atau menjalankan migrasi.
+  await requireUtf8Database(client);
   await client.query("SELECT pg_advisory_lock($1)", [migrationLock]);
   locked = true;
   await client.query(`CREATE TABLE IF NOT EXISTS nusacbt_schema_migrations (

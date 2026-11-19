@@ -1,4 +1,5 @@
 import { GraduationCap, LockKeyhole, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 
 import { LoginForm } from "@/app/login/login-form";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -28,7 +29,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <LoginForm />
         </Card>
         <div className="mt-6 flex items-start justify-center gap-2 text-center text-xs leading-5 text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0" /><span>Gunakan HTTPS tepercaya untuk menjaga kredensial di jaringan sekolah.</span></div>
-        <p className="mt-3 text-center text-xs text-muted-foreground">Login peserta dan ujian masih dalam pengembangan.</p>
+        <p className="mt-4 text-center text-xs text-muted-foreground">Peserta ujian? <Link href="/peserta/login" className="font-semibold text-primary underline underline-offset-4">Masuk sebagai peserta</Link></p>
       </div>
     </main>
   );
