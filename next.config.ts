@@ -27,6 +27,7 @@ const nextConfig: NextConfig = {
       { source: "/data-modul/import-soal", headers: privateHeaders },
       { source: "/data-tes/daftar", headers: privateHeaders },
       { source: "/data-tes/token", headers: privateHeaders },
+      { source: "/data-tes/token/riwayat", headers: privateHeaders },
     ];
   },
 };

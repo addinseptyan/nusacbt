@@ -5,7 +5,7 @@ import { digestSixDigitToken } from "../../src/lib/exam-token-crypto.mjs";
 import { digestExamToken } from "../../src/lib/exam-token.mjs";
 import { loginAsAdmin } from "./helpers";
 import { sessionDigest, suffix, testDatabase } from "./question-helpers";
-import { cleanupTokens, confirmIssue, fixtureTokenKey, globalPanel, issueForm, makeTest, tokenBaseline, visibleCode } from "./token-helpers";
+import { cleanupTokens, confirmIssue, fixtureTokenKey, globalPanel, issueForm, makeTest, openTokenHistory, tokenBaseline, tokenRow, visibleCode } from "./token-helpers";
 
 const BOUNDARY = "nusacbt-token-test-boundary";
 function multipart(entries: Array<[string, string]>) { return Buffer.from(entries.map(([key, value]) => `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`).join("") + `--${BOUNDARY}--\r\n`); }
@@ -94,6 +94,9 @@ test("ciphertext atau hash yang diubah tidak ditampilkan sebagai kode valid", as
     const id = (await client.query<{ id: string }>("SELECT id::text AS id FROM exam_access_tokens WHERE scope='global' AND revoked_at IS NULL")).rows[0].id;
     await client.query("UPDATE exam_access_tokens SET code_tag=set_byte(code_tag,0,get_byte(code_tag,0) # 1) WHERE id=$1", [id]);
     await page.reload(); await expect(globalPanel(page)).toContainText("Data token tidak dapat dibuka"); await expect(globalPanel(page)).not.toContainText(code);
+    await openTokenHistory(page); await expect(tokenRow(page, id)).toContainText("Data token tidak dapat dibuka"); await expect(tokenRow(page, id)).not.toContainText(code);
+    await expect(tokenRow(page, id).getByRole("button", { name: `Salin kode riwayat token ${id}` })).toHaveCount(0);
+    await page.getByRole("link", { name: "Kembali ke Token" }).click(); await expect(globalPanel(page)).toBeVisible();
     await client.query("UPDATE exam_access_tokens SET code_tag=set_byte(code_tag,0,get_byte(code_tag,0) # 1),token_hash=set_byte(token_hash,0,get_byte(token_hash,0) # 1) WHERE id=$1", [id]);
     await page.reload(); await expect(globalPanel(page)).toContainText("Data token tidak dapat dibuka"); await expect(globalPanel(page)).not.toContainText(code);
   } finally { await cleanupTokens(client, before, []); await client.end(); }
@@ -108,6 +111,9 @@ test("kunci salah atau binding hilang tidak membuka kode dan tidak dapat membuat
     await client.query("UPDATE exam_token_key_binding SET verifier=decode(repeat('00',32),'hex') WHERE id=1"); await page.reload();
     await expect(page.getByRole("alert").filter({ hasText: "Kunci token perlu diperiksa" })).toContainText("tidak cocok"); await expect(globalPanel(page)).not.toContainText(code);
     await expect(page.getByRole("button", { name: "Ganti token global" })).toBeDisabled();
+    await openTokenHistory(page); await expect(page.getByRole("alert").filter({ hasText: "Kunci token perlu diperiksa" })).toContainText("tidak cocok");
+    await expect(tokenRow(page, id)).not.toContainText(code); await expect(tokenRow(page, id)).toContainText("Kunci tidak tersedia");
+    await page.getByRole("link", { name: "Kembali ke Token" }).click(); await expect(globalPanel(page)).toBeVisible();
     await client.query("DELETE FROM exam_token_key_binding WHERE id=1"); await page.reload(); await expect(page.getByRole("alert").filter({ hasText: "Kunci token perlu diperiksa" })).toContainText("Pengikat kunci token database hilang");
     await globalPanel(page).getByRole("button", { name: `Cabut token ${id}` }).click(); await page.getByRole("dialog", { name: "Cabut token?" }).getByRole("button", { name: "Ya, cabut token" }).click();
     await expect(globalPanel(page)).toContainText("Dicabut"); expect((await client.query("SELECT revoked_reason FROM exam_access_tokens WHERE id=$1", [id])).rows[0].revoked_reason).toBe("manual");
@@ -115,4 +121,20 @@ test("kunci salah atau binding hilang tidak membuka kode dan tidak dapat membuat
     if (verifier) await client.query("INSERT INTO exam_token_key_binding(id,verifier) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET verifier=EXCLUDED.verifier", [verifier]);
     await cleanupTokens(client, before, []); await client.end();
   }
+});
+
+test("riwayat hanya diberikan kepada sesi admin yang masih berlaku", async ({ page, browser }) => {
+  const client = testDatabase(); await client.connect(); const before = await tokenBaseline(client);
+  try {
+    await loginAsAdmin(page); await page.goto("/data-tes/token"); await confirmIssue(await issueForm(page)); const code = await visibleCode(page);
+    const anonymous = await browser.newContext();
+    try {
+      const response = await anonymous.request.get("/data-tes/token/riwayat?halaman=2", { maxRedirects: 0 });
+      expect(response.status()).toBeGreaterThanOrEqual(300); expect(response.status()).toBeLessThan(400);
+      expect(response.headers()["location"]).toContain("/login"); expect(await response.text()).not.toContain(code);
+    } finally { await anonymous.close(); }
+    const digest = await sessionDigest(page); await client.query("DELETE FROM admin_sessions WHERE token_hash=$1", [digest]);
+    const response = await page.goto("/data-tes/token/riwayat"); await expect(page).toHaveURL(/\/login$/);
+    expect(await response!.text()).not.toContain(code); await expect(page.getByRole("list", { name: "Riwayat token" })).toHaveCount(0);
+  } finally { await cleanupTokens(client, before, []); await client.end(); }
 });

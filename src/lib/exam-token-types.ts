@@ -3,7 +3,7 @@ export type TokenKeyStatus = "ready" | "missing" | "invalid" | "same" | "mismatc
 export type AccessTokenTestOption = { id: string; revision: string; name: string; periodName: string; startsAt: string; endsAt: string; timeZone: string };
 export type AccessTokenRecord = {
   id: string; revision: string; scope: AccessTokenScope; testId: string | null;
-  testNameSnapshot: string | null; currentTestName: string | null; periodName: string | null;
+  testNameSnapshot: string | null; currentTestName: string | null; periodName: string | null; testEndsAt: string | null;
   durationMinutes: number; issuedAt: string; expiresAt: string;
   revokedAt: string | null; revokedReason: "manual" | "replaced" | null;
   createdBy: string | null; revokedBy: string | null;

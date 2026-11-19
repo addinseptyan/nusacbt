@@ -23,6 +23,14 @@ export async function makeTest(client: pg.Client, tag: string, schedule: "future
   const test = (await client.query<{ id: string; revision: string }>("INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes) VALUES($1,$2,clock_timestamp()+$3::interval,'WIB',90) RETURNING id::text AS id,xmin::text AS revision", [periodId, `Tes Token ${tag}`, interval])).rows[0];
   return { periodId, testId: test.id, revision: test.revision };
 }
+export async function showAllTokenDates(page: Page) {
+  await page.getByRole("link", { name: "Semua tanggal", exact: true }).click();
+  await expect(page).toHaveURL(/tanggal=all/);
+}
+export async function openTokenHistory(page: Page) {
+  await page.getByRole("link", { name: "Lihat riwayat" }).click();
+  await expect(page).toHaveURL(/\/data-tes\/token\/riwayat/);
+}
 export function globalPanel(page: Page) { return page.getByRole("region", { name: "Token global" }); }
 export function testPanel(page: Page, id: string) { return page.getByRole("listitem", { name: `Tes ${id}` }); }
 export function tokenRow(page: Page, id: string) {

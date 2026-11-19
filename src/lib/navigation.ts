@@ -84,6 +84,8 @@ export const navigation: NavigationSection[] = [
 ];
 
 export function findNavigationPage(href: string) {
+  // Riwayat dapat dibuka dari Token, tanpa menambah item menu terpisah.
+  if (href === "/data-tes/token/riwayat") return { title: "Riwayat token", href, description: "Catatan penerbitan dan status token.", section: "Data Tes" };
   for (const section of navigation) {
     const page = section.pages?.find((item) => item.href === href);
     if (page) return { ...page, section: section.title };

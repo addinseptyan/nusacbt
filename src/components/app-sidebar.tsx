@@ -28,6 +28,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const containsPage = (href: string) => pathname === href || (href === "/data-tes/token" && pathname === "/data-tes/token/riwayat");
 
   function closeMobile() {
     if (isMobile) setOpenMobile(false);
@@ -54,7 +55,7 @@ export function AppSidebar() {
             <SidebarMenu className="gap-1">
               {navigation.map((section) => {
                 const Icon = section.icon;
-                const active = section.href === pathname || Boolean(section.pages?.some((page) => page.href === pathname));
+                const active = section.href === pathname || Boolean(section.pages?.some((page) => containsPage(page.href)));
                 const buttonClass = "h-11 gap-3 rounded-xl px-3 text-[13px] font-medium text-sidebar-foreground transition-colors data-active:bg-sidebar-accent data-active:font-semibold data-active:text-sidebar-accent-foreground";
 
                 if (!section.pages) {
@@ -90,8 +91,8 @@ export function AppSidebar() {
                         <SidebarMenuSub className="my-1 gap-0.5 border-sidebar-border py-0.5">
                           {section.pages.map((page) => (
                             <SidebarMenuSubItem key={page.href}>
-                              <SidebarMenuSubButton asChild isActive={pathname === page.href} className="h-9 rounded-lg text-[12px]">
-                                <Link href={page.href} onClick={closeMobile} aria-current={pathname === page.href ? "page" : undefined}>
+                              <SidebarMenuSubButton asChild isActive={containsPage(page.href)} className="h-9 rounded-lg text-[12px]">
+                                <Link href={page.href} onClick={closeMobile} aria-current={pathname === page.href ? "page" : containsPage(page.href) ? "location" : undefined}>
                                   <span>{page.title}</span>
                                 </Link>
                               </SidebarMenuSubButton>
