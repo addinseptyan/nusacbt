@@ -8,6 +8,8 @@ import { BookOpenCheck, ChevronLeft, ChevronRight, Eye, ImageIcon, Info, Pencil,
 import { toast } from "sonner";
 
 import { deleteQuestion, saveQuestion } from "@/app/data-modul/soal/actions";
+import { QuestionRichDisplay } from "@/components/question-rich-display";
+import { QuestionRichEditor } from "@/components/question-rich-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +22,6 @@ const PAGE_SIZE = 10;
 // Pemeriksaan awal untuk pengalaman pengguna; server tetap memverifikasi ulang.
 const IMAGE_MAX_BYTES = 1024 * 1024;
 const dialogClass = "max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-3xl";
-const textClass = "min-h-24 w-full rounded-xl border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50";
 const selectClass = "h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50";
 type QuestionError = { message: string; reload?: boolean } | null;
 
@@ -98,6 +99,7 @@ function QuestionEditor({ question, topics, open, onOpenChange }: { question: Qu
           <DialogDescription>Pilih satu kategori, isi soal dan lima pilihan, lalu tandai tepat satu jawaban benar. Setiap bagian boleh berupa teks, satu gambar, atau keduanya. Perubahan baru tersimpan setelah tombol Simpan soal berhasil.</DialogDescription>
         </DialogHeader>
         <form key={`${question?.id ?? "baru"}-${open}`} onSubmit={submit} className="space-y-5 pt-1">
+          <p className="text-[11px] leading-5 text-muted-foreground">Untuk rumus Word, aktifkan “Copy MathML to the clipboard as plain text”, lalu salin satu Equation dan tempel pada posisi kursor. Salin teks/tabel terpisah dari rumus. Word 2013 belum diuji langsung.</p>
           <div className="space-y-2">
             <label htmlFor="question-topic" className="text-sm font-semibold">Topik / mata pelajaran <span className="text-destructive">*</span></label>
             <select id="question-topic" name="topicId" required disabled={pending} defaultValue={question?.topicId ?? ""} className={selectClass}>
@@ -107,8 +109,8 @@ function QuestionEditor({ question, topics, open, onOpenChange }: { question: Qu
           </div>
           <div className="space-y-2">
             <label htmlFor="question-prompt" className="text-sm font-semibold">Isi soal</label>
-            <textarea id="question-prompt" name="prompt" maxLength={10000} defaultValue={question?.prompt ?? ""} disabled={pending} className={textClass} placeholder="Tulis pertanyaan di sini" />
-            <p className="text-[11px] text-muted-foreground">Maksimal 5.000 karakter. Isi soal harus memiliki teks atau gambar.</p>
+            <QuestionRichEditor id="question-prompt" field="prompt" label="Isi soal" initialText={question?.prompt ?? ""} initialDocument={question?.promptRich ?? null} disabled={pending} />
+            <p className="text-[11px] text-muted-foreground">Maksimal 5.000 karakter. Gunakan RTL untuk paragraf Arab. Periksa format dan rumus yang ditempel sebelum menyimpan.</p>
             <ImageField question={question} slot="prompt" hasImage={Boolean(question?.hasPromptImage)} disabled={pending} />
           </div>
           <fieldset className="space-y-3" disabled={pending}>
@@ -119,13 +121,13 @@ function QuestionEditor({ question, topics, open, onOpenChange }: { question: Qu
               return (
                 <div key={letter} className="space-y-3 rounded-2xl border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2"><label htmlFor={`option-${letter}`} className="text-sm font-bold">Pilihan {letter}</label><label className="flex items-center gap-2 text-[12px] font-semibold"><input type="radio" name="correctOption" value={letter} defaultChecked={question?.correctOption === letter} required className="accent-primary" /> Jawaban {letter} benar</label></div>
-                  <textarea id={`option-${letter}`} name={`option_${letter}`} maxLength={4000} defaultValue={option?.text ?? ""} className={`${textClass} min-h-16`} placeholder={`Isi pilihan ${letter}`} />
+                  <QuestionRichEditor id={`option-${letter}`} field={`option_${letter}`} label={`Pilihan ${letter}`} initialText={option?.text ?? ""} initialDocument={option?.rich ?? null} disabled={pending} />
                   <ImageField question={question} slot={letter} hasImage={Boolean(option?.hasImage)} disabled={pending} />
                 </div>
               );
             })}
           </fieldset>
-          <p className="text-[11px] leading-5 text-muted-foreground">Teks pilihan maksimal 2.000 karakter. Gambar maksimal 4000 piksel per sisi dan 8 megapiksel; file diproses ulang sebelum disimpan.</p>
+          <p className="text-[11px] leading-5 text-muted-foreground">Teks pilihan maksimal 2.000 karakter. Periksa setiap rumus yang ditempel; bentuk yang tidak didukung ditolak. Gambar tetap diunggah lewat file.</p>
           {error && <ErrorNotice error={error} onReload={reload} />}
           <DialogFooter className="mt-5 -mx-4 -mb-4 rounded-b-2xl">
             <Button type="button" variant="outline" disabled={pending} onClick={() => changeOpen(false)}>Batal</Button>
@@ -144,8 +146,8 @@ function QuestionDetail({ question, onClose }: { question: Question | null; onCl
         <DialogHeader><DialogTitle className="text-lg font-bold">Detail soal</DialogTitle><DialogDescription>Kunci jawaban hanya untuk admin. Soal belum terhubung ke tes atau login peserta.</DialogDescription></DialogHeader>
         {question && <div className="space-y-5 py-1">
           <Badge variant="secondary" className="max-w-full break-words">{question.topicName}</Badge>
-          <div><h3 className="text-sm font-bold">Isi soal</h3>{question.prompt && <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{question.prompt}</p>}{question.hasPromptImage && <QuestionImage question={question} slot="prompt" alt="Gambar soal" />}</div>
-          <div className="space-y-2"><h3 className="text-sm font-bold">Pilihan jawaban</h3>{question.options.map((option) => <div key={option.letter} className="rounded-xl border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-bold">{option.letter}.</span>{option.letter === question.correctOption && <Badge className="rounded-full">Jawaban benar</Badge>}</div>{option.text && <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6">{option.text}</p>}{option.hasImage && <QuestionImage question={question} slot={option.letter} alt={`Gambar pilihan ${option.letter}`} />}</div>)}</div>
+          <div><h3 className="text-sm font-bold">Isi soal</h3><div className="mt-2 text-sm"><QuestionRichDisplay document={question.promptRich} fallback={question.prompt} /></div>{question.hasPromptImage && <QuestionImage question={question} slot="prompt" alt="Gambar soal" />}</div>
+          <div className="space-y-2"><h3 className="text-sm font-bold">Pilihan jawaban</h3>{question.options.map((option) => <div key={option.letter} className="rounded-xl border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-bold">{option.letter}.</span>{option.letter === question.correctOption && <Badge className="rounded-full">Jawaban benar</Badge>}</div><div className="mt-1 text-sm"><QuestionRichDisplay document={option.rich} fallback={option.text} /></div>{option.hasImage && <QuestionImage question={question} slot={option.letter} alt={`Gambar pilihan ${option.letter}`} />}</div>)}</div>
         </div>}
         <DialogFooter className="rounded-b-2xl"><Button type="button" variant="outline" onClick={onClose}>Tutup</Button></DialogFooter>
       </DialogContent>
@@ -200,7 +202,7 @@ export function QuestionManager({ topics, questions }: { topics: QuestionTopicOp
   return (
     <>
       <Alert className="mb-6 max-w-4xl rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
-        <Info className="size-4 text-[#727fc8] dark:text-indigo-300" /><AlertTitle className="text-[12px] font-bold">Bank soal manual</AlertTitle><AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Satu kategori, lima pilihan A–E, dan satu jawaban benar. Gambar disimpan dalam database. Impor/ekspor Word dan pengerjaan tes belum tersedia.</AlertDescription>
+        <Info className="size-4 text-[#727fc8] dark:text-indigo-300" /><AlertTitle className="text-[12px] font-bold">Bank soal</AlertTitle><AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Satu kategori, lima pilihan A–E, dan satu jawaban benar. <Link href="/data-modul/import-soal" className="font-semibold underline">Impor Word</Link> tersedia untuk format yang didukung; ekspor Word dan pengerjaan tes belum tersedia.</AlertDescription>
       </Alert>
       {topics.length === 0 && <Alert className="mb-6 max-w-4xl rounded-2xl"><Info className="size-4" /><AlertTitle>Siapkan kategori terlebih dahulu</AlertTitle><AlertDescription>Buka <Link href="/data-modul/topik">Topik / Mata Pelajaran</Link> untuk menambah kategori sebelum membuat soal.</AlertDescription></Alert>}
       <Card className="max-w-5xl gap-0 overflow-hidden rounded-[18px] bg-card py-0 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]">

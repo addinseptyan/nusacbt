@@ -35,14 +35,14 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
     await page.getByRole("link", { name: "Manajemen Soal", exact: true }).click();
     await expect(page).toHaveURL(/\/data-modul\/soal$/);
     await expect(page.getByRole("heading", { name: "Manajemen Soal", exact: true })).toBeVisible();
-    await expect(page.getByText(/Impor\/ekspor Word dan pengerjaan tes belum tersedia/)).toBeVisible();
+    await expect(page.getByText(/ekspor Word dan pengerjaan tes belum tersedia/)).toBeVisible();
 
     let form = await editor(page);
     await fillDraft(form, firstTopic, "", ["1", "2", "3", "4", "5"]);
     await form.getByRole("button", { name: "Simpan soal" }).click();
     await expect(form.getByRole("alert")).toContainText("Isi soal harus berisi teks atau gambar");
     expect((await client.query("SELECT id FROM question_bank WHERE topic_id=$1", [topics[0]])).rowCount).toBe(0);
-    await form.getByLabel("Isi soal").fill(`  ${prompt}  `);
+    await form.getByRole("textbox", { name: "Isi soal", exact: true }).fill(`  ${prompt}  `);
     await form.getByLabel("Pilihan B", { exact: true }).fill("  ");
     await form.getByRole("button", { name: "Simpan soal" }).click();
     await expect(form.getByRole("alert")).toContainText("Pilihan B harus berisi teks atau gambar");
@@ -77,7 +77,7 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
 
     form = await editor(page, id);
     await form.getByLabel("Topik / mata pelajaran").selectOption({ label: secondTopic });
-    await form.getByLabel("Isi soal").fill(changed);
+    await form.getByRole("textbox", { name: "Isi soal", exact: true }).fill(changed);
     await form.getByLabel("Jawaban B benar").check();
     await form.getByRole("button", { name: "Simpan soal" }).click();
     await expect(form).toBeHidden();
@@ -199,7 +199,7 @@ test("enam gambar disimpan atomik, hanya admin dapat mengakses, dan perubahan ti
     expect(again.revision).toBe(revision);
     for (const key of ["prompt_hash", "a_hash", "b_hash", "c_hash", "d_hash", "e_hash"]) expect(again[key]).toBe(stored[key]);
     // Penggantian sekaligus penghapusan pada slot sama ditolak tanpa perubahan.
-    await edit.getByLabel("Isi soal").fill(`Teks pengganti ${tag}`);
+    await edit.getByRole("textbox", { name: "Isi soal", exact: true }).fill(`Teks pengganti ${tag}`);
     await edit.locator('input[name="remove_A"]').check();
     await edit.getByLabel("Gambar pilihan A", { exact: true }).setInputFiles({ name: "baru.jpg", mimeType: "image/jpeg", buffer: jpeg });
     await edit.getByRole("button", { name: "Simpan soal" }).click();

@@ -24,6 +24,7 @@ const nextConfig: NextConfig = {
     return [
       { source: "/data-peserta/sandi", headers: privateHeaders },
       { source: "/data-modul/soal", headers: privateHeaders },
+      { source: "/data-modul/import-soal", headers: privateHeaders },
     ];
   },
 };

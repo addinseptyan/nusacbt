@@ -1,6 +1,17 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource/noto-naskh-arabic/arabic-400.css";
+@import "@fontsource/noto-naskh-arabic/arabic-700.css";
+
+/* STIX Two Math is bundled locally; avoid the package's restrictive Latin unicode-range. */
+@font-face {
+  font-family: "Nusa Math";
+  src: url("@fontsource/stix-two-math/files/stix-two-math-latin-400-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -128,3 +139,24 @@
     font-feature-settings: "cv11", "ss01";
   }
 }
+
+/* Editor dan pembaca memakai aturan yang sama; tabel tetap dapat digeser pada layar kecil. */
+.question-rich-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: "Inter Variable", "Noto Naskh Arabic", sans-serif;
+  line-height: 1.75;
+}
+.question-rich-content p { min-height: 1.2em; white-space: pre-wrap; }
+.question-rich-content ul { list-style: disc; padding-inline-start: 1.5rem; }
+.question-rich-content ol { list-style: decimal; padding-inline-start: 1.5rem; }
+.question-rich-content .tableWrapper { max-width: 100%; overflow-x: auto; margin: 0.65rem 0; }
+.question-rich-content table { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 15rem; }
+.question-rich-content th, .question-rich-content td { border: 1px solid currentColor; min-width: 3rem; padding: 0.35rem 0.5rem; text-align: start; vertical-align: top; }
+.question-rich-content th { font-weight: 700; background: color-mix(in oklab, var(--muted), transparent 30%); }
+.question-rich-content .selectedCell { background: color-mix(in oklab, var(--primary), transparent 88%); }
+.question-editor-area { min-height: 5rem; padding: 0.65rem 0.75rem; outline: none; }
+.question-editor-area[contenteditable="false"] { opacity: .65; }
+.question-formula { display: inline-block; vertical-align: middle; padding-inline: .1em; }
+/* Keep fraction numerators readable, closer to Word's full-size Equation layout. */
+.question-formula math { font-family: "Cambria Math", "Nusa Math", "Noto Naskh Arabic", serif; font-size: 1.1em; math-style: normal; }

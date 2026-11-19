@@ -126,10 +126,10 @@ test("formulir usang tidak menimpa, menghapus, atau membuat kembali soal yang be
     await page.getByLabel("Cari soal").fill(tag);
     second = await page.context().newPage(); await second.goto("/data-modul/soal"); await second.getByLabel("Cari soal").fill(tag);
     const firstForm = await editor(page, row.id); const staleForm = await editor(second, row.id);
-    await firstForm.getByLabel("Isi soal").fill(`Pemenang ${tag}`);
+    await firstForm.getByRole("textbox", { name: "Isi soal", exact: true }).fill(`Pemenang ${tag}`);
     await firstForm.getByRole("button", { name: "Simpan soal" }).click();
     await expect(firstForm).toBeHidden();
-    await staleForm.getByLabel("Isi soal").fill(`Jangan menimpa ${tag}`);
+    await staleForm.getByRole("textbox", { name: "Isi soal", exact: true }).fill(`Jangan menimpa ${tag}`);
     await staleForm.getByRole("button", { name: "Simpan soal" }).click();
     await expect(staleForm.getByRole("alert")).toContainText("Soal sudah berubah atau dihapus");
     expect((await client.query("SELECT prompt_text FROM question_bank WHERE id=$1", [row.id])).rows).toEqual([{ prompt_text: `Pemenang ${tag}` }]);
@@ -158,7 +158,7 @@ test("pengubahan usang yang menunggu row lock tidak menimpa transaksi pemenang",
   try {
     topics.push(await createTopic(client, topic)); const question = await createQuestion(client, topics[0], `Awal ${tag}`);
     await loginAsAdmin(page); await page.goto("/data-modul/soal"); await page.getByLabel("Cari soal").fill(tag);
-    const form = await editor(page, question.id); await form.getByLabel("Isi soal").fill(`Usang ${tag}`);
+    const form = await editor(page, question.id); await form.getByRole("textbox", { name: "Isi soal", exact: true }).fill(`Usang ${tag}`);
     await blocker.query("BEGIN"); await blocker.query("UPDATE question_bank SET prompt_text=$1 WHERE id=$2", [`Pemenang ${tag}`, question.id]);
     await form.getByRole("button", { name: "Simpan soal" }).click();
     await expect.poll(async () => (await client.query<{ waiting: boolean }>(
@@ -244,7 +244,7 @@ test("sesi yang kedaluwarsa saat mutasi menunggu kunci menyebabkan rollback", as
   try {
     topics.push(await createTopic(client, topic)); const question = await createQuestion(client, topics[0], `Asli ${tag}`);
     await loginAsAdmin(page); await page.goto("/data-modul/soal"); await page.getByLabel("Cari soal").fill(tag);
-    const form = await editor(page, question.id); await form.getByLabel("Isi soal").fill(`Tidak tersimpan ${tag}`);
+    const form = await editor(page, question.id); await form.getByRole("textbox", { name: "Isi soal", exact: true }).fill(`Tidak tersimpan ${tag}`);
     const digest = await sessionDigest(page);
     await client.query("UPDATE admin_sessions SET expires_at=clock_timestamp() + interval '8 seconds' WHERE token_hash=$1", [digest]);
     await blocker.query("BEGIN"); await blocker.query("SELECT id FROM question_bank WHERE id=$1 FOR UPDATE", [question.id]);
