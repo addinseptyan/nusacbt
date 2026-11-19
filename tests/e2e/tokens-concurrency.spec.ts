@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { digestExamToken } from "../../src/lib/exam-token.mjs";
 import { loginAsAdmin } from "./helpers";
 import { sessionDigest, suffix, testDatabase } from "./question-helpers";
-import { cleanupTokens, confirmIssue, globalPanel, issueForm, makeTest, tokenBaseline } from "./token-helpers";
+import { cleanupTokens, confirmIssue, globalPanel, issueForm, makeTest, showAllTokenDates, tokenBaseline } from "./token-helpers";
 
 test("dua admin tidak diam-diam menimpa token baru atau mencabut versi yang usang", async ({ page }) => {
   test.setTimeout(90_000); const client = testDatabase(); await client.connect(); const before = await tokenBaseline(client); let second: Page | undefined;
@@ -26,7 +26,7 @@ test("dua admin tidak diam-diam menimpa token baru atau mencabut versi yang usan
 test("tes yang berubah saat formulir token terbuka menolak penerbitan", async ({ page }) => {
   const client = testDatabase(); await client.connect(); const before = await tokenBaseline(client); const periods: string[] = []; const tag = suffix();
   try {
-    const data = await makeTest(client, tag); periods.push(data.periodId); await loginAsAdmin(page); await page.goto("/data-tes/token");
+    const data = await makeTest(client, tag); periods.push(data.periodId); await loginAsAdmin(page); await page.goto("/data-tes/token"); await showAllTokenDates(page);
     const form = await issueForm(page, `tes ${data.testId}`); await client.query("UPDATE exam_tests SET name=$1 WHERE id=$2", [`Sudah berubah ${tag}`, data.testId]);
     await form.getByRole("button", { name: "Ya, aktifkan token" }).click(); await expect(form.getByRole("alert")).toContainText("Tes sudah berubah atau dihapus");
     expect((await client.query("SELECT id FROM exam_access_tokens WHERE exam_test_id=$1", [data.testId])).rowCount).toBe(0);
