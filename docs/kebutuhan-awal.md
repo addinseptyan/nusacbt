@@ -55,13 +55,13 @@ Pengaturan aplikasi mencakup nama dan keterangan aplikasi, informasi untuk peser
 ## 5. Tes, pengerjaan, dan token
 
 - Admin dapat membuat, melihat, memperbarui, dan menghapus **rancangan** tes dengan satu periode, nama, waktu mulai, zona WIB/WITA/WIT, durasi 1–10.080 menit, maksimal 1.000 soal dan dua pengaturan acak. Akhir terjadwal adalah mulai + durasi. Jadwal di luar rentang tanggal periode tidak diblokir pada tahap ini. Soal kosong boleh disimpan sebagai rancangan yang belum lengkap. Pencarian/paginasi masih di browser.
-- Rancangan merujuk soal terkini di bank; perubahan isi/gambar/opsi/kunci di bank memengaruhi rancangan, dan penghapusan soal yang masih dipakai ditolak. Isi, gambar, opsi, kunci, serta urutan untuk tiap attempt nantinya harus disalin sebagai snapshot dan riwayatnya dilindungi; itu **belum tersedia**. Revisi tes dan soal diperiksa ketika rancangan disimpan. Login peserta, token, timer, pengerjaan, pengacakan aktual, monitoring dan penilaian juga belum dibuat.
+- Rancangan merujuk soal terkini di bank; perubahan isi/gambar/opsi/kunci di bank memengaruhi rancangan, dan penghapusan soal yang masih dipakai ditolak. Isi, gambar, opsi, kunci, serta urutan untuk tiap attempt nantinya harus disalin sebagai snapshot dan riwayatnya dilindungi; itu **belum tersedia**. Revisi tes dan soal diperiksa ketika rancangan disimpan. Login peserta, pemeriksaan token, timer, pengerjaan, pengacakan aktual, monitoring dan penilaian juga belum dibuat.
 - Admin nantinya memantau hasil/status pengerjaan.
 - Urutan soal dan urutan pilihan jawaban dapat diatur untuk diacak atau tidak. Pada pengerjaan yang sama, urutan yang sudah diberikan sebaiknya tetap konsisten ketika peserta memuat ulang halaman atau melanjutkan sesi.
 - Jawaban disimpan selama pengerjaan. Antarmuka harus membedakan jawaban yang sudah dikonfirmasi tersimpan di server dari perubahan yang belum tersimpan; perubahan yang belum berhasil dikirim tidak boleh dianggap aman.
 - Peserta dapat mengulang tes hanya di bawah kontrol operator. Setiap pengerjaan dan nilainya disimpan; pengulangan tidak menghapus riwayat nilai sebelumnya.
-- Token dapat berlaku untuk satu tes atau untuk seluruh tes, dengan masa aktif antara **5 menit dan 1 hari**.
-- Token harus valid ketika peserta memulai ujian. Aturan ketika token global dan token tes sama-sama aktif masih perlu dipastikan.
+- Pengelolaan token untuk admin tersedia: token global atau khusus satu tes, berlaku 5–1.440 menit menurut jam server. Satu token belum ditutup per cakupan; pembuatan baru mengganti yang lama, dan token aktif dapat dicabut. Kode acak 12 karakter ditampilkan sekali; hanya hash disimpan. Tes yang dihapus melepaskan token khusus tanpa mengubah scope menjadi global; metadata riwayat tetap ada. Pembuatan/pencabutan memeriksa sesi dan perubahan bersamaan dalam transaksi.
+- Aturan yang dipilih untuk tahap peserta: token harus valid ketika peserta memulai ujian. Jika token khusus tes aktif, token global tidak berlaku untuk tes itu. Bila token khusus berakhir atau dicabut, token global yang masih aktif dapat dipakai kembali. Masa token global dan khusus berjalan masing-masing. Token kedaluwarsa setelah mulai tidak otomatis memutus pengerjaan. **Pemeriksaan peserta belum diimplementasikan** dan harus atomik terhadap perubahan token serta pembuatan attempt, dengan pembatasan percobaan sebelum penggunaan sungguhan.
 - Timer mengikuti waktu server. Batas akhir mengikuti waktu mulai terjadwal ditambah durasi; peserta yang terlambat hanya memperoleh waktu yang masih tersisa. Pengulangan atas izin operator hanya dapat dimulai selama jadwal awal masih berlangsung dan tetap berakhir pada batas akhir yang sama; tidak dapat dimulai setelahnya.
 - Usulan yang belum dikonfirmasi: peserta dapat melanjutkan pengerjaan yang sama setelah koneksi pulih selama pengerjaan tersebut masih dapat dilanjutkan.
 
@@ -103,7 +103,6 @@ Pengaturan aplikasi mencakup nama dan keterangan aplikasi, informasi untuk peser
 ## 10. Pertanyaan terbuka
 
 - Tinjau template soal `.docx` yang dibuat berdasarkan PDF dan konfirmasi apakah sesuai.
-- Bagaimana aturan token global dan token tes ketika keduanya aktif?
 - Bagaimana rumus nilai dasar serta satuan/besaran penalti opsional?
 - Bagaimana kelanjutan sesi setelah koneksi pulih, pembulatan rata-rata, serta perlakuan pengerjaan yang belum selesai atau dibatalkan?
 - Apa yang ditampilkan kepada siswa jika nilai tes dibuka sebelum kesempatan mengulang ditutup?
