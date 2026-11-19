@@ -45,7 +45,9 @@ jobs:
       # File uji dibuat acak di luar checkout dan tidak pernah diunggah sebagai artefak.
       - run: |
           echo "NUSACBT_PARTICIPANT_KEY_FILE=${RUNNER_TEMP}/nusacbt-participant-test.key" >> "$GITHUB_ENV"
+          echo "NUSACBT_EXAM_TOKEN_KEY_FILE=${RUNNER_TEMP}/nusacbt-token-test.key" >> "$GITHUB_ENV"
           npm run participant:key:create -- "${RUNNER_TEMP}/nusacbt-participant-test.key"
+          npm run token:key:create -- "${RUNNER_TEMP}/nusacbt-token-test.key"
       - run: npm run db:migrate && npm run db:migrate
       - run: printf '%s' "$TEST_ADMIN_PASSWORD" | npm run admin:create -- "$TEST_ADMIN_USERNAME" --stdin
       - run: npm run lint

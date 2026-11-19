@@ -43,8 +43,8 @@ test("prioritas khusus ketika aktif; global digunakan hanya jika khusus tidak ak
 test("validasi cakupan, tes, versi, konfirmasi, dan masa aktif", () => {
   assert.deepEqual(validateExamTokenCreation(valid()).value, { operationId, scope: "global", testId: null, testRevision: null, durationMinutes: 15, expectedTokenId: null, replaceConfirmed: false });
   assert.deepEqual(validateExamTokenCreation(valid({ scope: "test", testId: "8", testRevision: "10", durationMinutes: "1440", expectedTokenId: "7", replaceConfirmed: "1" })).value, { operationId, scope: "test", testId: "8", testRevision: "10", durationMinutes: 1440, expectedTokenId: "7", replaceConfirmed: true });
-  assert.equal(validateExamTokenCreation(valid({ durationMinutes: "5" })).ok, true);
-  for (const durationMinutes of ["0", "4", "1441", "05", "5.0", "1e2", " 15 ", "", null, 15]) assert.equal(validateExamTokenCreation(valid({ durationMinutes })).ok, false, String(durationMinutes));
+  for (const durationMinutes of ["5", "15", "30", "60", "120", "360", "1440"]) assert.equal(validateExamTokenCreation(valid({ durationMinutes })).ok, true);
+  for (const durationMinutes of ["0", "4", "10", "16", "1441", "05", "5.0", "1e2", " 15 ", "", null, 15]) assert.equal(validateExamTokenCreation(valid({ durationMinutes })).ok, false, String(durationMinutes));
   for (const changes of [
     { scope: "all" }, { scope: "test" }, { scope: "test", testId: "0", testRevision: "1" },
     { scope: "test", testId: "1", testRevision: "0" }, { scope: "test", testId: "1", testRevision: "4294967296" },

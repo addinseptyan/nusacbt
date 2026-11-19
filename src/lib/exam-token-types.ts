@@ -1,11 +1,13 @@
 export type AccessTokenScope = "global" | "test";
-export type AccessTokenTestOption = { id: string; revision: string; name: string; periodName: string };
+export type TokenKeyStatus = "ready" | "missing" | "invalid" | "same" | "mismatch" | "inconsistent";
+export type AccessTokenTestOption = { id: string; revision: string; name: string; periodName: string; startsAt: string; endsAt: string; timeZone: string };
 export type AccessTokenRecord = {
   id: string; revision: string; scope: AccessTokenScope; testId: string | null;
   testNameSnapshot: string | null; currentTestName: string | null; periodName: string | null;
   durationMinutes: number; issuedAt: string; expiresAt: string;
   revokedAt: string | null; revokedReason: "manual" | "replaced" | null;
   createdBy: string | null; revokedBy: string | null;
+  code: string | null; codeStatus: "available" | "legacy" | "key-unavailable" | "corrupt";
 };
 export type TokenIssued = { code: string; issuedAt: string; expiresAt: string; scope: AccessTokenScope; testName: string | null };
 export type IssueTokenResult = ({ ok: true } & TokenIssued) | { ok: false; error: string; reload?: boolean; uncertain?: boolean };
