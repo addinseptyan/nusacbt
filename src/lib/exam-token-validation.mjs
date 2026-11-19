@@ -1,9 +1,8 @@
 import { validDataId } from "./class-validation.mjs";
 import { validTopicRevision } from "./topic-validation.mjs";
 
-export const EXAM_TOKEN_MIN_MINUTES = 5;
-export const EXAM_TOKEN_MAX_MINUTES = 1440;
-export const EXAM_TOKEN_FORM_VERSION = "access-token-v1";
+export const EXAM_TOKEN_DURATIONS = [5, 15, 30, 60, 120, 360, 1440];
+export const EXAM_TOKEN_FORM_VERSION = "access-token-v2";
 
 /** @param {unknown} value @returns {string | null} */
 export function validTokenOperationId(value) {
@@ -28,9 +27,9 @@ export function validateExamTokenCreation(input) {
   } else if ((input.testId !== null && input.testId !== "") || (input.testRevision !== null && input.testRevision !== "")) {
     return { ok: false, error: "Token global tidak boleh memuat identitas tes." };
   }
-  if (typeof input.durationMinutes !== "string" || !/^[1-9]\d{0,3}$/.test(input.durationMinutes)) return { ok: false, error: "Masa aktif harus berupa menit bulat antara 5 dan 1440." };
+  if (typeof input.durationMinutes !== "string" || !/^[1-9]\d{0,3}$/.test(input.durationMinutes)) return { ok: false, error: "Pilih masa aktif yang tersedia." };
   const durationMinutes = Number(input.durationMinutes);
-  if (durationMinutes < EXAM_TOKEN_MIN_MINUTES || durationMinutes > EXAM_TOKEN_MAX_MINUTES) return { ok: false, error: "Masa aktif harus berupa menit bulat antara 5 dan 1440." };
+  if (!EXAM_TOKEN_DURATIONS.includes(durationMinutes)) return { ok: false, error: "Pilih masa aktif yang tersedia." };
   let expectedTokenId = null;
   if (input.expectedTokenId !== "none") {
     expectedTokenId = validDataId(input.expectedTokenId);
