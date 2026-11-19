@@ -56,7 +56,7 @@ export default async function DashboardPage() {
       <Alert className="mb-7 rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
         <Info className="size-4 text-[#727fc8] dark:text-indigo-300" />
         <AlertTitle className="text-[12px] font-bold">Anda sedang melihat pratinjau awal</AlertTitle>
-        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Login admin, topik/mata pelajaran, soal manual, impor Word terbatas, pengelolaan siswa, impor Excel, serta identitas dan sandi peserta per periode tersedia. Login peserta, ujian, dan statistik masih belum aktif.</AlertDescription>
+        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Login admin dan peserta, pengelolaan siswa, soal, serta jadwal dan token admin tersedia untuk pratinjau. Peserta baru dapat melihat identitas dan jadwal; pengerjaan ujian dan statistik belum aktif.</AlertDescription>
       </Alert>
 
       <div className="mb-3.5 flex items-center justify-between">
