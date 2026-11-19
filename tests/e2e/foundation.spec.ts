@@ -19,7 +19,7 @@ test("dashboard menampilkan tujuh menu dan modul dapat dibuka", async ({ page })
   await page.getByRole("link", { name: "Import Soal Word" }).click();
   await expect(page).toHaveURL(/\/data-modul\/import-soal$/);
   await expect(page.getByRole("heading", { name: "Import Soal Word" })).toBeVisible();
-  await expect(page.getByText("Fitur ini belum aktif")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pilih file dan kategori" })).toBeVisible();
 });
 
 test("mode gelap tersimpan setelah halaman dimuat ulang", async ({ page }) => {

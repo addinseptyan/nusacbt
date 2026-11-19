@@ -28,6 +28,7 @@ export async function createQuestion(client: pg.Client, topicId: string, prompt:
 export async function cleanupTopics(client: pg.Client, topicIds: string[]) {
   if (!topicIds.length) return;
   await client.query("DELETE FROM question_bank WHERE topic_id=ANY($1::bigint[])", [topicIds]);
+  await client.query("DELETE FROM question_import_batches WHERE topic_id=ANY($1::bigint[])", [topicIds]);
   await client.query("DELETE FROM question_topics WHERE id=ANY($1::bigint[])", [topicIds]);
 }
 
@@ -52,7 +53,7 @@ export async function deletion(page: Page, id: string): Promise<Locator> {
 
 export async function fillDraft(dialog: Locator, topic: string, prompt: string, choices = ["Satu", "Dua", "Tiga", "Empat", "Lima"], correct = "D") {
   await dialog.getByLabel("Topik / mata pelajaran").selectOption({ label: topic });
-  await dialog.getByLabel("Isi soal").fill(prompt);
+  await dialog.getByRole("textbox", { name: "Isi soal", exact: true }).fill(prompt);
   for (const [index, letter] of LETTERS.entries()) await dialog.getByLabel(`Pilihan ${letter}`, { exact: true }).fill(choices[index]);
   await dialog.getByLabel(`Jawaban ${correct} benar`).check();
 }
