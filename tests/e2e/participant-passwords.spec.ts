@@ -138,8 +138,8 @@ test("manual, tampilan tercatat, dan reset berlaku per periode tanpa membocorkan
   try {
     const otherIdentity = await placeSecondPeriod(client, fixture, student);
     await loginAsAdmin(page);
-    await page.getByRole("button", { name: "Data Peserta", exact: true }).click();
-    await page.getByRole("link", { name: "Sandi Peserta", exact: true }).click();
+    // Tautan lama tetap kompatibel walaupun sidebar sekarang hanya menampilkan Akun Peserta.
+    await page.goto("/data-peserta/sandi");
     await page.getByRole("combobox", { name: "Periode" }).click();
     await page.getByRole("option", { name: fixture.periodA }).click();
     await expect(page).toHaveURL(new RegExp(`/data-peserta/sandi\\?periode=${fixture.periodAId}$`));

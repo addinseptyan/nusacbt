@@ -142,7 +142,7 @@ try {
     assert.equal(result.status, 0, `Migrasi uji gagal: ${result.stderr}`);
   }
   assert.deepEqual(await snapshot(tables, sequences), before);
-  assert.equal((await client.query("SELECT count(*)::int AS n FROM nusacbt_schema_migrations")).rows[0].n, 15);
+  assert.equal((await client.query("SELECT count(*)::int AS n FROM nusacbt_schema_migrations")).rows[0].n, files.length);
   assert.deepEqual((await client.query("SELECT id,period_id FROM participant_login_settings")).rows, [{ id: 1, period_id: null }]);
   assert.equal((await client.query("SELECT 1 FROM participant_sessions")).rowCount, 1); // Tidak dihapus selama migrasi.
   const old = (await client.query("SELECT password_hash AS hash,nonce,ciphertext,authentication_tag AS \"authenticationTag\" FROM participant_passwords WHERE participant_identity_id=42")).rows[0];
@@ -153,7 +153,7 @@ try {
   assert.equal(decryptSixDigitToken(token, tokenKey, token), "654321");
   assert.deepEqual(token.digest, digestSixDigitToken("654321", tokenKey));
   assert.equal((await client.query("SELECT prompt_text FROM question_bank")).rows[0].prompt_text, "ما قيمة √٤؟ 🧪");
-  console.log(`Migrasi 014 → 015 dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
+  console.log(`Migrasi 014 → terbaru (015–016) dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
 
   // Aplikasi baru menggunakan database upgrade dan file kunci fiktif terpisah.
   temp = await mkdtemp(join(tmpdir(), "nusacbt-upgrade-015-"));

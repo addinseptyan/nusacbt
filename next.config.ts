@@ -24,7 +24,9 @@ const nextConfig: NextConfig = {
     return [
       { source: "/peserta", headers: privateHeaders },
       { source: "/peserta/:path*", headers: privateHeaders },
+      { source: "/data-peserta/identitas", headers: privateHeaders },
       { source: "/data-peserta/sandi", headers: privateHeaders },
+      { source: "/data-peserta/akun", headers: privateHeaders },
       { source: "/data-modul/soal", headers: privateHeaders },
       { source: "/data-modul/import-soal", headers: privateHeaders },
       { source: "/data-tes/daftar", headers: privateHeaders },

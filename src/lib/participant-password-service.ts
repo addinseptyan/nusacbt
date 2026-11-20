@@ -73,54 +73,58 @@ async function pageKeyStatus(client: PoolClient): Promise<PasswordKeyStatus> {
   finally { key.fill(0); }
 }
 
+export async function loadPasswordPageWithClient(client: PoolClient, periodId: string | null): Promise<PasswordPageData> {
+  const periods = await client.query<IdentityPeriod>(
+    `SELECT id::text AS id, name, to_char(start_date, 'YYYY-MM-DD') AS "startDate",
+      to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
+     FROM exam_periods ORDER BY start_date DESC, id DESC`,
+  );
+  const keyStatus = await pageKeyStatus(client);
+  const selected = periods.rows.find((period) => period.id === periodId) ?? null;
+  if (!selected) {
+    return { periods: periods.rows, selected: null, rows: [], batch: null, audit: [], keyStatus, selectionMissing: periodId !== null };
+  }
+  // Hash, ciphertext, dan sandi tidak dimuat untuk daftar atau HTML awal.
+  // xmin mendeteksi update langsung yang tidak mengubah updated_at; tidak dikirim ke browser.
+  const result = await client.query<PasswordPageRow>(
+    `SELECT i.id::text AS "identityId", s.id::text AS "studentId", s.name AS "studentName", s.nisn,
+      to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "studentVersion",
+      p.id::text AS "placementId", p.class_id::text AS "classId",
+      CASE WHEN p.id IS NULL THEN NULL ELSE c.level || ' ' || m.name END AS "classLabel",
+      i.participant_number AS "participantNumber", i.username,
+      to_char(i.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "identityVersion",
+      to_char(pw.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "passwordVersion",
+      pw.xmin::text AS "passwordRevision"
+     FROM participant_identities i JOIN school_students s ON s.id = i.student_id
+     LEFT JOIN student_class_placements p ON p.student_id = s.id AND p.period_id = i.period_id AND p.ended_at IS NULL
+     LEFT JOIN school_classes c ON c.id = p.class_id LEFT JOIN school_majors m ON m.id = c.major_id
+     LEFT JOIN participant_passwords pw ON pw.participant_identity_id = i.id
+     WHERE i.period_id = $1::bigint ORDER BY lower(s.name), s.nisn, s.id`,
+    [selected.id],
+  );
+  const rows = result.rows.map((row) => makeDisplayRow(selected, row));
+  const missing = rows.filter((row) => row.placementId && !row.passwordVersion);
+  const batch = missing.length ? {
+    candidates: missing.slice(0, PARTICIPANT_PASSWORD_BATCH_SIZE).map((row) => row.candidate), totalMissing: missing.length,
+  } : null;
+  const audit = await client.query<PasswordAudit>(
+    `SELECT a.id::text AS id, s.name AS "studentName", s.nisn, u.username AS "adminUsername", a.event,
+      to_char(a.occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS "UTC"') AS "occurredAt"
+     FROM participant_password_audit a JOIN participant_identities i ON i.id = a.participant_identity_id
+     JOIN school_students s ON s.id = i.student_id JOIN admin_users u ON u.id = a.admin_id
+     WHERE i.period_id = $1::bigint ORDER BY a.id DESC LIMIT 20`,
+    [selected.id],
+  );
+  return { periods: periods.rows, selected, rows, batch, audit: audit.rows, keyStatus, selectionMissing: false };
+}
+
 export async function loadPasswordPage(periodId: string | null): Promise<PasswordPageData> {
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-    const periods = await client.query<IdentityPeriod>(
-      `SELECT id::text AS id, name, to_char(start_date, 'YYYY-MM-DD') AS "startDate",
-        to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
-       FROM exam_periods ORDER BY start_date DESC, id DESC`,
-    );
-    const keyStatus = await pageKeyStatus(client);
-    const selected = periods.rows.find((period) => period.id === periodId) ?? null;
-    if (!selected) {
-      await client.query("COMMIT");
-      return { periods: periods.rows, selected: null, rows: [], batch: null, audit: [], keyStatus, selectionMissing: periodId !== null };
-    }
-    // Hash, ciphertext, dan sandi tidak dimuat untuk daftar atau HTML awal.
-    // xmin mendeteksi update langsung yang tidak mengubah updated_at; tidak dikirim ke browser.
-    const result = await client.query<PasswordPageRow>(
-      `SELECT i.id::text AS "identityId", s.id::text AS "studentId", s.name AS "studentName", s.nisn,
-        to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "studentVersion",
-        p.id::text AS "placementId", p.class_id::text AS "classId",
-        CASE WHEN p.id IS NULL THEN NULL ELSE c.level || ' ' || m.name END AS "classLabel",
-        i.participant_number AS "participantNumber", i.username,
-        to_char(i.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "identityVersion",
-        to_char(pw.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "passwordVersion",
-        pw.xmin::text AS "passwordRevision"
-       FROM participant_identities i JOIN school_students s ON s.id = i.student_id
-       LEFT JOIN student_class_placements p ON p.student_id = s.id AND p.period_id = i.period_id AND p.ended_at IS NULL
-       LEFT JOIN school_classes c ON c.id = p.class_id LEFT JOIN school_majors m ON m.id = c.major_id
-       LEFT JOIN participant_passwords pw ON pw.participant_identity_id = i.id
-       WHERE i.period_id = $1::bigint ORDER BY lower(s.name), s.nisn, s.id`,
-      [selected.id],
-    );
-    const rows = result.rows.map((row) => makeDisplayRow(selected, row));
-    const missing = rows.filter((row) => row.placementId && !row.passwordVersion);
-    const batch = missing.length ? {
-      candidates: missing.slice(0, PARTICIPANT_PASSWORD_BATCH_SIZE).map((row) => row.candidate), totalMissing: missing.length,
-    } : null;
-    const audit = await client.query<PasswordAudit>(
-      `SELECT a.id::text AS id, s.name AS "studentName", s.nisn, u.username AS "adminUsername", a.event,
-        to_char(a.occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS "UTC"') AS "occurredAt"
-       FROM participant_password_audit a JOIN participant_identities i ON i.id = a.participant_identity_id
-       JOIN school_students s ON s.id = i.student_id JOIN admin_users u ON u.id = a.admin_id
-       WHERE i.period_id = $1::bigint ORDER BY a.id DESC LIMIT 20`,
-      [selected.id],
-    );
+    const data = await loadPasswordPageWithClient(client, periodId);
     await client.query("COMMIT");
-    return { periods: periods.rows, selected, rows, batch, audit: audit.rows, keyStatus, selectionMissing: false };
+    return data;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;

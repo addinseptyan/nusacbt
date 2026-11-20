@@ -42,8 +42,7 @@ export const navigation: NavigationSection[] = [
       { title: "Periode Ujian", href: "/data-peserta/periode", description: "Atur periode sebagai dasar pengelolaan peserta dan ujian." },
       { title: "Kelas / Jurusan", href: "/data-peserta/kelas", description: "Kelola kelas, rombongan belajar, dan jurusan." },
       { title: "Data Siswa", href: "/data-peserta/siswa", description: "Kelola data siswa dan penempatan kelas per periode." },
-      { title: "Identitas Peserta", href: "/data-peserta/identitas", description: "Atur nomor peserta dan username unik untuk setiap periode." },
-      { title: "Sandi Peserta", href: "/data-peserta/sandi", description: "Buat, lihat secara berwenang, dan reset sandi peserta per periode." },
+      { title: "Akun Peserta", href: "/data-peserta/akun", description: "Kelola identitas, sandi, dan penguncian login peserta per periode." },
       { title: "Import Data Peserta", href: "/data-peserta/import", description: "Impor siswa dan penempatan per periode dari Excel dengan pratinjau.", template: { href: "/templates/template-peserta-nusacbt.xlsx", label: "Unduh template Excel", detail: "Berisi contoh kolom nomor, nama, NISN sebagai teks, dan kelas." } },
       { title: "Cetak Kartu Peserta", href: "/data-peserta/kartu", description: "Siapkan kartu login berdasarkan siswa, rombel, atau kategori ujian." },
     ],
@@ -86,6 +85,8 @@ export const navigation: NavigationSection[] = [
 export function findNavigationPage(href: string) {
   // Riwayat dapat dibuka dari Token, tanpa menambah item menu terpisah.
   if (href === "/data-tes/token/riwayat") return { title: "Riwayat token", href, description: "Catatan penerbitan dan status token.", section: "Data Tes" };
+  // Tautan lama tetap dapat dibuka, tetapi hanya ada satu menu Akun Peserta.
+  if (href === "/data-peserta/identitas" || href === "/data-peserta/sandi") return { title: href.endsWith("identitas") ? "Identitas Peserta (tautan lama)" : "Sandi Peserta (tautan lama)", href, description: "Gunakan menu Akun Peserta untuk daftar gabungan.", section: "Data Peserta" };
   for (const section of navigation) {
     const page = section.pages?.find((item) => item.href === href);
     if (page) return { ...page, section: section.title };

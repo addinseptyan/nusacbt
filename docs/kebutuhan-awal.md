@@ -18,7 +18,7 @@ Ada tujuh menu utama. Submenu berada di dalam menu utama yang dapat dibuka atau 
 
 1. **Dashboard**.
 2. **Data Modul:** Topik/Mata Pelajaran, Manajemen Soal, Import Soal Word, Export Soal Word.
-3. **Data Peserta:** Periode Ujian, Kelas/Jurusan, Data Siswa, Identitas Peserta, Sandi Peserta, Import Data Peserta, Cetak Kartu Peserta.
+3. **Data Peserta:** Periode Ujian, Kelas/Jurusan, Data Siswa, Akun Peserta, Import Data Peserta, Cetak Kartu Peserta.
 4. **Data Tes:** Daftar Tes, Hasil/Monitoring Tes, Token.
 5. **Laporan:** Rekap Hasil Tes dengan filter rombel/kelas, siswa, tes, dan rentang tanggal-waktu.
 6. **Tool:** Backup Database dan Upload/Pemulihan Database.
@@ -38,7 +38,7 @@ Pengaturan aplikasi mencakup nama dan keterangan aplikasi, informasi untuk peser
 - Penempatan yang diakhiri tidak menghapus identitas; nilainya tetap dianggap telah digunakan dalam periode dan tidak dapat diubah tanpa kelas aktif. Siswa dan periode dengan identitas tidak dapat dihapus. Impor Excel tidak membuat atau mengubah identitas maupun sandi. Login peserta memakai periode, username, sandi, dan penempatan aktif; kartu belum tersedia.
 - Kata sandi siswa per periode dapat dibuat manual atau otomatis, dilihat kembali oleh admin, dan di-reset. Sandi baru atau reset harus tepat delapan huruf kapital A–Z tanpa angka; sandi lama tetap berlaku sampai di-reset. Daftar tersamarkan; penampilan berhasil, pembuatan, dan reset dicatat tanpa rahasia. Pembuatan otomatis maksimal 25 siswa per batch dan tidak menimpa sandi. Ketika kelas tidak aktif, sandi tetap tersimpan tetapi tidak dapat dikelola atau ditampilkan sampai siswa ditempatkan kembali. Rincian dan batasan keamanan ada di bagian 8 dan README.
 - Satu sesi peserta per identitas/periode: login baru mengganti sesi lama. Sesi maksimal 8 jam, dan reset sandi, perubahan identitas atau penempatan mengakhiri sesi pada permintaan berikutnya. Perubahan atau penonaktifan periode login mengakhiri semua sesi peserta; tanggal periode tidak otomatis mengubah pengaturan login. Setelah login, peserta melihat identitas dan seluruh jadwal di periode aktifnya, tanpa soal atau tombol mulai.
-- Pembatas login memakai lima kegagalan per periode/username selama 15 menit dan maksimum 180 permintaan berformat valid per menit secara global; ini belum merupakan pembatas per IP, audit menyeluruh, atau jaminan keamanan penggunaan nyata.
+- Pembatas login memakai lima kegagalan per periode/username selama 15 menit dan maksimum 180 permintaan berformat valid per menit secara global. Admin dapat membuka satu penguncian aktif di **Akun Peserta** dengan konfirmasi; hanya bucket periode/username yang dipilih direset, tanpa mengubah sandi, sesi, atau batas global, dan keberhasilan dicatat bersama admin dan waktu. Tautan halaman identitas/sandi lama tetap tersedia. Ini belum merupakan pembatas per IP, audit menyeluruh, atau jaminan keamanan penggunaan nyata.
 - **Rencana belum diimplementasikan:** satu rancangan tes memiliki pelaksanaan reguler, susulan, dan remidi yang dapat menargetkan peserta berbeda. Pemilihan dapat menggabungkan kelas dan individu serta mengecualikan individu dari kelas yang dipilih.
 - Kartu login dapat dicetak per siswa, per rombel, dan per kategori ujian.
 
@@ -88,7 +88,7 @@ Pengaturan aplikasi mencakup nama dan keterangan aplikasi, informasi untuk peser
 
 - Melihat kata sandi siswa kembali memiliki risiko lebih tinggi daripada penyimpanan hash saja. Implementasi menyimpan hash scrypt untuk verifikasi login peserta dan salinan AES-256-GCM terenkripsi untuk tampilan yang diizinkan.
 - File kunci acak berada di luar database dan repository dan harus dicadangkan secara terpisah. Database mengikat kunci pertama; kunci yang tidak cocok ditolak. Kehilangan kunci membuat salinan terenkripsi tidak dapat ditampilkan; rotasi dan pemulihan setelah kehilangan permanen belum tersedia.
-- Sandi peserta tersamarkan secara default; semua admin yang memiliki sesi sah dapat meminta tampilan, belum ada autentikasi ulang/otorisasi khusus per admin. Penampilan berhasil, pembuatan, dan reset dicatat tanpa nilai rahasia; percobaan gagal belum dicatat dan tabel audit belum kebal-ubah bagi pengelola database. Kata sandi admin tetap disimpan sebagai hash yang tidak dapat dipulihkan.
+- Sandi peserta tersamarkan secara default; semua admin yang memiliki sesi sah dapat meminta tampilan, belum ada autentikasi ulang/otorisasi khusus per admin. Penampilan berhasil, pembuatan, reset, dan buka kunci login dicatat tanpa nilai rahasia; perubahan identitas dan percobaan gagal belum dicatat, dan tabel audit belum kebal-ubah bagi pengelola database. Kata sandi admin tetap disimpan sebagai hash yang tidak dapat dipulihkan.
 - Penggunaan HTTPS dengan sertifikat yang dipercaya perangkat peserta disarankan untuk melindungi data login di jaringan lokal. Database sebaiknya tidak dibuka langsung ke perangkat peserta.
 - Data asli, kredensial, kunci, file `.env`, dan backup tidak boleh dipublikasikan di repository.
 

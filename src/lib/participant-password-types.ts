@@ -22,7 +22,7 @@ export type PasswordAudit = {
   studentName: string;
   nisn: string;
   adminUsername: string;
-  event: "create_manual" | "create_auto" | "reset_manual" | "reset_auto" | "reveal";
+  event: "create_manual" | "create_auto" | "reset_manual" | "reset_auto" | "reveal" | "unlock_login";
   occurredAt: string;
 };
 export type PasswordKeyStatus = "ready" | "missing" | "invalid" | "mismatch" | "inconsistent";

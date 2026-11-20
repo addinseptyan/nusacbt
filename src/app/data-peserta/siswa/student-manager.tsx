@@ -331,7 +331,7 @@ export function StudentManager({ students, periods, classes, placements }: { stu
       <Alert className="mb-6 max-w-4xl rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
         <Info className="size-4 text-[#727fc8] dark:text-indigo-300" />
         <AlertTitle className="text-[12px] font-bold">Data siswa dan riwayat kelas</AlertTitle>
-        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">NISN unik disimpan sebagai teks. Penempatan dikelola per periode dan nama kelas saat ditempatkan tetap tercatat. <Link href="/data-peserta/import" className="font-semibold underline">Impor Excel</Link> dan <Link href="/data-peserta/identitas" className="font-semibold underline">identitas peserta</Link> tersedia. Login peserta memakai periode yang diaktifkan admin; kartu belum tersedia.</AlertDescription>
+        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">NISN unik disimpan sebagai teks. Penempatan dikelola per periode dan nama kelas saat ditempatkan tetap tercatat. <Link href="/data-peserta/import" className="font-semibold underline">Impor Excel</Link> dan <Link href="/data-peserta/akun" className="font-semibold underline">akun peserta</Link> tersedia untuk identitas dan sandi. Login peserta memakai periode yang diaktifkan admin; kartu belum tersedia.</AlertDescription>
       </Alert>
       <Card className="gap-0 overflow-hidden rounded-[18px] bg-card py-0 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border p-5 sm:px-6">

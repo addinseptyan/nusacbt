@@ -184,3 +184,6 @@ export function IdentityManager({ data }: { data: IdentityPageData }) {
     </div>
   );
 }
+
+// Dialog dipakai juga oleh daftar akun gabungan; halaman lama tetap kompatibel.
+export { IdentityEditor, GenerateDialog as IdentityGenerateDialog };

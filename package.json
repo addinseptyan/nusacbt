@@ -10,6 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test:e2e": "playwright test",
     "test:upgrade": "node tests/integration/upgrade-015.mjs",
+    "test:upgrade-016": "node tests/integration/upgrade-016.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "admin:create": "node scripts/create-admin.mjs",
     "participant:key:create": "node scripts/create-participant-key.mjs",
