@@ -11,6 +11,7 @@ export async function saveIdentity(formData: FormData): Promise<IdentityActionRe
   try {
     const message = await saveParticipantIdentity(formData);
     revalidatePath("/data-peserta/identitas");
+    revalidatePath("/data-peserta/akun");
     return { ok: true, message };
   } catch (error) {
     return { ok: false, error: identityErrorMessage(error) };
@@ -22,6 +23,7 @@ export async function generateIdentities(formData: FormData): Promise<IdentityAc
   try {
     const message = await generateParticipantIdentities(formData);
     revalidatePath("/data-peserta/identitas");
+    revalidatePath("/data-peserta/akun");
     return { ok: true, message };
   } catch (error) {
     return { ok: false, error: identityErrorMessage(error) };

@@ -138,8 +138,8 @@ test("admin mengatur identitas manual yang unik per periode dan dapat sama atau 
     const placementsBefore = (await client.query("SELECT id::text,student_id::text,period_id::text,class_id::text,ended_at FROM student_class_placements WHERE period_id=ANY($1::bigint[]) ORDER BY id", [[fixture.periodAId, fixture.periodBId]])).rows;
 
     await loginAsAdmin(page);
-    await page.getByRole("button", { name: "Data Peserta", exact: true }).click();
-    await page.getByRole("link", { name: "Identitas Peserta", exact: true }).click();
+    // Tautan lama tetap kompatibel walaupun sidebar sekarang hanya menampilkan Akun Peserta.
+    await page.goto("/data-peserta/identitas");
     await page.getByRole("combobox", { name: "Periode" }).click();
     await page.getByRole("option", { name: fixture.periodA }).click();
     await expect(page).toHaveURL(new RegExp(`/data-peserta/identitas\\?periode=${fixture.periodAId}$`));

@@ -60,8 +60,16 @@ jobs:
       - name: Siapkan database upgrade fiktif
         run: |
           node --input-type=module -e "import pg from 'pg'; const c = new pg.Client(); await c.connect(); await c.query(\"CREATE DATABASE nusacbt_upgrade_015_test ENCODING 'UTF8'\"); await c.end();"
-      - name: Uji upgrade dari migrasi 014
+      - name: Uji upgrade dari migrasi 014 ke terbaru
         env:
           PGDATABASE: nusacbt_upgrade_015_test
           NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_upgrade_015_test
         run: npm run test:upgrade
+      - name: Siapkan database upgrade 016 fiktif
+        run: |
+          node --input-type=module -e "import pg from 'pg'; const c = new pg.Client(); await c.connect(); await c.query(\"CREATE DATABASE nusacbt_upgrade_016_test ENCODING 'UTF8'\"); await c.end();"
+      - name: Uji upgrade dari migrasi 015
+        env:
+          PGDATABASE: nusacbt_upgrade_016_test
+          NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_upgrade_016_test
+        run: npm run test:upgrade-016

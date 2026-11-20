@@ -202,7 +202,7 @@ const keyMessages: Record<Exclude<PasswordKeyStatus, "ready">, { title: string; 
   inconsistent: { title: "Pengikat kunci tidak tersedia", detail: "Pulihkan database dan kunci yang sesuai dari cadangan. Jangan menghapus atau mengganti data sandi sembarangan." },
 };
 const auditLabels: Record<PasswordAudit["event"], string> = {
-  create_manual: "Sandi dibuat manual", create_auto: "Sandi dibuat otomatis", reset_manual: "Sandi di-reset manual", reset_auto: "Sandi di-reset otomatis", reveal: "Sandi ditampilkan",
+  create_manual: "Sandi dibuat manual", create_auto: "Sandi dibuat otomatis", reset_manual: "Sandi di-reset manual", reset_auto: "Sandi di-reset otomatis", reveal: "Sandi ditampilkan", unlock_login: "Kunci login dibuka",
 };
 
 export function PasswordManager({ data }: { data: PasswordPageData }) {
@@ -247,3 +247,6 @@ export function PasswordManager({ data }: { data: PasswordPageData }) {
     {generateOpen && <GenerateDialog data={data} onClose={() => setGenerateOpen(false)} />}
   </div>;
 }
+
+// Dialog dan label dipakai juga oleh daftar akun gabungan.
+export { PasswordEditor, GenerateDialog as PasswordGenerateDialog, RevealDialog as PasswordRevealDialog, keyMessages, auditLabels };

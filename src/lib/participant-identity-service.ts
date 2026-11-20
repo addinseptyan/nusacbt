@@ -69,51 +69,53 @@ async function getPeriod(client: PoolClient, id: string, lock: boolean): Promise
   return result.rows[0];
 }
 
+export async function loadIdentityPageWithClient(client: PoolClient, periodId: string | null): Promise<IdentityPageData> {
+  const periods = await client.query<IdentityPeriod>(
+    `SELECT id::text AS id, name, to_char(start_date, 'YYYY-MM-DD') AS "startDate",
+      to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
+     FROM exam_periods ORDER BY start_date DESC, id DESC`,
+  );
+  const selected = periods.rows.find((period) => period.id === periodId) ?? null;
+  if (!selected) {
+    return { periods: periods.rows, selected: null, rows: [], batch: null, selectionMissing: periodId !== null };
+  }
+  const result = await client.query<ParticipantIdentityRow>(
+    `SELECT s.id::text AS "studentId", s.name AS "studentName", s.nisn,
+      to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "studentVersion",
+      p.id::text AS "placementId", p.class_id::text AS "classId",
+      CASE WHEN p.id IS NULL THEN NULL ELSE c.level || ' ' || m.name END AS "classLabel",
+      i.id::text AS "identityId", i.participant_number AS "participantNumber", i.username,
+      to_char(i.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "identityVersion"
+     FROM school_students s
+     LEFT JOIN student_class_placements p ON p.student_id = s.id AND p.period_id = $1::bigint AND p.ended_at IS NULL
+     LEFT JOIN school_classes c ON c.id = p.class_id
+     LEFT JOIN school_majors m ON m.id = c.major_id
+     LEFT JOIN participant_identities i ON i.student_id = s.id AND i.period_id = $1::bigint
+     WHERE p.id IS NOT NULL OR i.id IS NOT NULL
+     ORDER BY lower(s.name), s.nisn, s.id`,
+    [selected.id],
+  );
+  const missing = result.rows.filter((row) => row.placementId && !row.identityId);
+  const candidates = missing.slice(0, MAX_IDENTITY_BATCH).map(rowCandidate);
+  const batch = candidates.length ? {
+    studentIds: candidates.map((candidate) => candidate.studentId),
+    token: batchToken(selected, candidates),
+    totalMissing: missing.length,
+  } : null;
+  return { periods: periods.rows, selected, rows: result.rows, batch, selectionMissing: false };
+}
+
 export async function loadIdentityPage(periodId: string | null): Promise<IdentityPageData> {
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-    const periods = await client.query<IdentityPeriod>(
-      `SELECT id::text AS id, name, to_char(start_date, 'YYYY-MM-DD') AS "startDate",
-        to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
-       FROM exam_periods ORDER BY start_date DESC, id DESC`,
-    );
-    const selected = periods.rows.find((period) => period.id === periodId) ?? null;
-    if (!selected) {
-      await client.query("COMMIT");
-      return { periods: periods.rows, selected: null, rows: [], batch: null, selectionMissing: periodId !== null };
-    }
-    const result = await client.query<ParticipantIdentityRow>(
-      `SELECT s.id::text AS "studentId", s.name AS "studentName", s.nisn,
-        to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "studentVersion",
-        p.id::text AS "placementId", p.class_id::text AS "classId",
-        CASE WHEN p.id IS NULL THEN NULL ELSE c.level || ' ' || m.name END AS "classLabel",
-        i.id::text AS "identityId", i.participant_number AS "participantNumber", i.username,
-        to_char(i.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "identityVersion"
-       FROM school_students s
-       LEFT JOIN student_class_placements p ON p.student_id = s.id AND p.period_id = $1::bigint AND p.ended_at IS NULL
-       LEFT JOIN school_classes c ON c.id = p.class_id
-       LEFT JOIN school_majors m ON m.id = c.major_id
-       LEFT JOIN participant_identities i ON i.student_id = s.id AND i.period_id = $1::bigint
-       WHERE p.id IS NOT NULL OR i.id IS NOT NULL
-       ORDER BY lower(s.name), s.nisn, s.id`,
-      [selected.id],
-    );
-    const missing = result.rows.filter((row) => row.placementId && !row.identityId);
-    const candidates = missing.slice(0, MAX_IDENTITY_BATCH).map(rowCandidate);
-    const batch = candidates.length ? {
-      studentIds: candidates.map((candidate) => candidate.studentId),
-      token: batchToken(selected, candidates),
-      totalMissing: missing.length,
-    } : null;
+    const data = await loadIdentityPageWithClient(client, periodId);
     await client.query("COMMIT");
-    return { periods: periods.rows, selected, rows: result.rows, batch, selectionMissing: false };
+    return data;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;
-  } finally {
-    client.release();
-  }
+  } finally { client.release(); }
 }
 
 function databaseProblem(error: unknown, bulk: boolean): IdentityProblem | null {
