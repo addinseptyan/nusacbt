@@ -2,13 +2,13 @@ import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, ra
 import { lstat, open, readFile, realpath, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
-import { GENERATED_PARTICIPANT_PASSWORD_LENGTH } from "./participant-password-constants.mjs";
+import { GENERATED_PARTICIPANT_PASSWORD_LENGTH, isNewParticipantPassword, NEW_PARTICIPANT_PASSWORD_ERROR } from "./participant-password-constants.mjs";
 
 const KEY_BYTES = 32;
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 const MAX_KEY_FILE_BYTES = 128;
-const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const KDF_SALT = Buffer.from("NusaCBT participant password master key v1", "utf8");
 
 export class ParticipantKeyFileError extends Error {
@@ -22,12 +22,21 @@ export class ParticipantKeyFileError extends Error {
 
 /** @param {unknown} password @returns {{ok: true, value: string} | {ok: false, error: string}} */
 export function validateParticipantPassword(password) {
-  const invalid = { ok: false, error: "Sandi wajib 12–128 karakter, maksimal 512 byte, tanpa karakter kontrol." };
-  if (typeof password !== "string" || password.length > 256 || !password.isWellFormed() ||
-      Buffer.byteLength(password, "utf8") > 512 || /[\u0000-\u001f\u007f-\u009f]/.test(password)) return invalid;
-  const length = Array.from(password).length;
-  if (length < 12 || length > 128) return invalid;
+  if (!isNewParticipantPassword(password)) {
+    return { ok: false, error: NEW_PARTICIPANT_PASSWORD_ERROR };
+  }
   return { ok: true, value: password };
+}
+
+// Hanya untuk membuka data yang sudah tersimpan sebelum aturan baru. Tidak
+// dipakai untuk membuat/reset sandi: format lama harus tetap bisa ditampilkan.
+/** @param {string} password @returns {boolean} */
+function validStoredParticipantPassword(password) {
+  if (validateParticipantPassword(password).ok) return true;
+  if (typeof password !== "string" || password.length > 256 || !password.isWellFormed() ||
+      Buffer.byteLength(password, "utf8") > 512 || /[\u0000-\u001f\u007f-\u009f]/.test(password)) return false;
+  const length = Array.from(password).length;
+  return length >= 12 && length <= 128;
 }
 
 /** @returns {string} */
@@ -210,7 +219,7 @@ export function decryptParticipantPassword(encrypted, master, binding) {
   try {
     if (!Buffer.isBuffer(encrypted.nonce) || encrypted.nonce.length !== NONCE_BYTES ||
         !Buffer.isBuffer(encrypted.authenticationTag) || encrypted.authenticationTag.length !== TAG_BYTES ||
-        !Buffer.isBuffer(encrypted.ciphertext) || encrypted.ciphertext.length < 12 || encrypted.ciphertext.length > 512) {
+        !Buffer.isBuffer(encrypted.ciphertext) || encrypted.ciphertext.length < 8 || encrypted.ciphertext.length > 512) {
       throw new Error("Data sandi tidak valid.");
     }
     const decipher = createDecipheriv("aes-256-gcm", key, encrypted.nonce, { authTagLength: TAG_BYTES });
@@ -219,7 +228,7 @@ export function decryptParticipantPassword(encrypted, master, binding) {
     const plaintext = Buffer.concat([decipher.update(encrypted.ciphertext), decipher.final()]);
     try {
       const password = plaintext.toString("utf8");
-      if (!validateParticipantPassword(password).ok) throw new Error("Data sandi tidak valid.");
+      if (!validStoredParticipantPassword(password)) throw new Error("Data sandi tidak valid.");
       return password;
     } finally { plaintext.fill(0); }
   } finally { key.fill(0); }

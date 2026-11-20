@@ -16,13 +16,13 @@ const HASH_FORMAT = /^scrypt\$32768\$8\$3\$[A-Za-z0-9_-]{22}\$[A-Za-z0-9_-]{86}$
 // Dummy publik memastikan akun/identitas tanpa sandi juga melalui scrypt.
 const DUMMY_HASH = "scrypt$32768$8$3$bnVzYWNidC1kdW1teS12MQ$Raa-ekVKy8Za16jY9UvGVQe7QgcE8qumcVaR-QYwcSlPWOICqa72jz34cvRzGMbcqD08s2eMvJpOmu-lx5iNfA";
 
-type Credentials = { periodId: string; username: string; password: string };
+type Credentials = { username: string; password: string };
+type ScopedCredentials = Credentials & { periodId: string };
 type IdentityLookup = { id: string; studentId: string };
 type LockedIdentity = { id: string; username: string };
 type PasswordRow = { passwordHash: string };
 type AttemptRow = { failedAttempts: number; locked: boolean; lockExpired: boolean };
 
-export type ParticipantPeriod = { id: string; name: string; startDate: string; endDate: string | null };
 export type ParticipantSchedule = {
   id: string; name: string; startLocal: string; endLocal: string; zone: "WIB" | "WITA" | "WIT";
   durationMinutes: number; status: "Belum dimulai" | "Berlangsung" | "Berakhir";
@@ -76,7 +76,7 @@ async function pruneOldAuthRows() {
   );
 }
 
-async function lockIdentityRows(client: PoolClient, credentials: Credentials) {
+async function lockIdentityRows(client: PoolClient, credentials: ScopedCredentials) {
   // Urutannya sama dengan layanan identitas/sandi: siswa, periode,
   // penempatan, identitas, sandi. Lookup awal hanya untuk menemukan siswa;
   // identitas dan username diperiksa lagi setelah penguncian.
@@ -114,10 +114,19 @@ async function lockIdentityRows(client: PoolClient, credentials: Credentials) {
 export async function authenticateParticipant(credentials: Credentials): Promise<string | null> {
   if (!await globalAttemptSlot()) return null;
   if (randomInt(16) === 0) await pruneOldAuthRows().catch(() => {});
-  const bucket = participantAttemptBucket(credentials.periodId, credentials.username);
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN");
+    // Tahan pengaturan sampai sesi diterbitkan. Penggantian periode menunggu
+    // login yang sedang berjalan lalu menghapus semua sesi secara atomik.
+    const setting = await client.query<{ periodId: string | null }>(
+      'SELECT period_id::text AS "periodId" FROM participant_login_settings WHERE id = 1 FOR SHARE',
+    );
+    if (setting.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
+    const periodId = setting.rows[0].periodId;
+    if (!periodId) { await client.query("COMMIT"); return null; }
+    const scoped: ScopedCredentials = { ...credentials, periodId };
+    const bucket = participantAttemptBucket(periodId, credentials.username);
     await client.query("INSERT INTO participant_login_attempts(bucket_hash) VALUES($1) ON CONFLICT (bucket_hash) DO NOTHING", [bucket]);
     const attempt = await client.query<AttemptRow>(
       `SELECT failed_attempts AS "failedAttempts", COALESCE(locked_until > clock_timestamp(), false) AS locked,
@@ -132,7 +141,7 @@ export async function authenticateParticipant(credentials: Credentials): Promise
       return null;
     }
 
-    const records = await lockIdentityRows(client, credentials);
+    const records = await lockIdentityRows(client, scoped);
     const storedHash = records?.password?.passwordHash;
     const hashValid = typeof storedHash === "string" && HASH_FORMAT.test(storedHash);
     const matches = await verifyPassword(credentials.password, hashValid ? storedHash : DUMMY_HASH);
@@ -192,13 +201,12 @@ export async function endParticipantSession() {
   store.set(COOKIE_NAME, "", { httpOnly: true, secure: participantCookieSecure(), sameSite: "strict", path: COOKIE_PATH, maxAge: 0 });
 }
 
-export async function participantPeriods(): Promise<ParticipantPeriod[]> {
-  const result = await getPostgresPool().query<ParticipantPeriod>(
-    `SELECT id::text AS id, name, to_char(start_date, 'DD/MM/YYYY') AS "startDate",
-       CASE WHEN end_date IS NULL THEN NULL ELSE to_char(end_date, 'DD/MM/YYYY') END AS "endDate"
-     FROM exam_periods ORDER BY start_date DESC, id DESC`,
+export async function participantLoginEnabled(): Promise<boolean> {
+  const result = await getPostgresPool().query<{ enabled: boolean }>(
+    "SELECT period_id IS NOT NULL AS enabled FROM participant_login_settings WHERE id = 1",
   );
-  return result.rows;
+  if (result.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
+  return result.rows[0].enabled;
 }
 
 export async function participantView(requestedPage: number): Promise<ParticipantView | null> {
@@ -214,6 +222,7 @@ export async function participantView(requestedPage: number): Promise<Participan
        JOIN participant_identities i ON i.id = sess.participant_identity_id
        JOIN school_students st ON st.id = i.student_id
        JOIN exam_periods ep ON ep.id = i.period_id
+       JOIN participant_login_settings ls ON ls.id = 1 AND ls.period_id = i.period_id
        JOIN student_class_placements pl ON pl.id = sess.placement_id AND pl.student_id = i.student_id
          AND pl.period_id = i.period_id AND pl.ended_at IS NULL
        JOIN school_classes c ON c.id = pl.class_id JOIN school_majors m ON m.id = c.major_id

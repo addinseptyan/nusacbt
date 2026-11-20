@@ -7,26 +7,16 @@ import { participantLoginAction } from "@/app/peserta/login/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { ParticipantPeriod } from "@/lib/participant-auth";
 
-export function ParticipantLoginForm({ periods, available }: { periods: ParticipantPeriod[]; available: boolean }) {
+export function ParticipantLoginForm({ enabled, available }: { enabled: boolean; available: boolean }) {
   const [state, action, pending] = useActionState(participantLoginAction, { error: "" });
-  const [period, setPeriod] = useState("");
   const [username, setUsername] = useState("");
   const [visible, setVisible] = useState(false);
-  const canLogin = available && periods.length > 0;
+  const canLogin = available && enabled;
   return (
     <form action={action} className="mt-6 space-y-4">
       {state.error && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertDescription>{state.error}</AlertDescription></Alert>}
-      {available && !periods.length && <Alert role="status"><CircleAlert className="size-4" /><AlertDescription>Belum ada periode ujian. Hubungi pengawas.</AlertDescription></Alert>}
-      <div className="space-y-2">
-        <label htmlFor="participant-period" className="text-sm font-semibold">Periode ujian</label>
-        <select id="participant-period" name="period" value={period} onChange={(event) => setPeriod(event.target.value)} required disabled={!canLogin || pending}
-          className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none focus-visible:ring-[3px] disabled:opacity-50">
-          <option value="">Pilih periode ujian</option>
-          {periods.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.startDate}{item.endDate ? `–${item.endDate}` : ""}</option>)}
-        </select>
-      </div>
+      {available && !enabled && <Alert role="status"><CircleAlert className="size-4" /><AlertDescription>Login peserta belum diaktifkan. Hubungi pengawas.</AlertDescription></Alert>}
       <div className="space-y-2">
         <label htmlFor="participant-username" className="text-sm font-semibold">Username peserta</label>
         <Input id="participant-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={64} required disabled={!canLogin || pending}

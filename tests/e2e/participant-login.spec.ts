@@ -25,7 +25,7 @@ test("peserta masuk per periode dan hanya melihat identitas serta jadwal periode
     await page.goto("/peserta"); await expect(page).toHaveURL(/\/peserta\/login\?sesi=berakhir$/);
     await page.goto("/login"); await page.getByRole("link", { name: "Masuk sebagai peserta" }).click();
     await expect(page).toHaveURL(/\/peserta\/login$/);
-    await loginParticipant(page, f.periodA, f.username.toUpperCase(), f.passwordA);
+    await loginParticipant(page, f.username.toUpperCase(), f.passwordA);
     await expect(page.getByRole("heading", { name: `Halo, ${f.studentAName}!` })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Identitas peserta" })).toBeVisible();
     await expect(page.getByText(f.periodAName, { exact: true })).toBeVisible();

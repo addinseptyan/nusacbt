@@ -6,7 +6,7 @@ test("keluar yang gagal tidak mengklaim sesi berakhir dan dapat dicoba ulang", a
   const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client);
   const f = await seedLoginFixture(client); const trigger = `e2e_logout_${f.suffix}`; const fn = `${trigger}_fn`;
   try {
-    await loginParticipant(page, f.periodA, f.username, f.passwordA);
+    await loginParticipant(page, f.username, f.passwordA);
     const cookie = (await page.context().cookies()).find((c) => c.name === "nusacbt_participant_session");
     await client.query(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.participant_identity_id = ${f.identityA} THEN RAISE EXCEPTION 'synthetic logout failure'; END IF; RETURN OLD; END $$`);
     await client.query(`CREATE TRIGGER ${trigger} BEFORE DELETE ON participant_sessions FOR EACH ROW EXECUTE FUNCTION ${fn}()`);

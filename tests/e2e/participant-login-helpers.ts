@@ -30,8 +30,8 @@ export async function resetLoginGlobal(client: pg.Client) {
 export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture> {
   const suffix = randomBytes(5).toString("hex");
   const username = `p${suffix}`;
-  const passwordA = `Sandi-A-${suffix}-Fiktif!`;
-  const passwordB = `Sandi-B-${suffix}-Fiktif!`;
+  const passwordA = "ABCDEFGH";
+  const passwordB = "HGFEDCBA";
   const [hashA, hashB] = await Promise.all([hashParticipantPassword(passwordA), hashParticipantPassword(passwordB)]);
   const key = await readParticipantKeyFile(process.env.NUSACBT_PARTICIPANT_KEY_FILE, process.cwd());
   try {
@@ -89,6 +89,9 @@ export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture>
        VALUES($1,$2,'Pilihan A','Pilihan B','Pilihan C','Jawaban rahasia','Pilihan E','D') RETURNING id::text AS id`, [topicId, questionSecret],
     )).rows[0].id;
     await client.query("INSERT INTO exam_test_questions(exam_test_id,question_id,position) VALUES($1,$2,1)", [activeTest, questionId]);
+    const setting = await client.query<{ period: string | null }>('SELECT period_id::text AS period FROM participant_login_settings WHERE id=1 FOR UPDATE');
+    if (setting.rowCount !== 1 || setting.rows[0].period !== null) throw new Error("Pengaturan DB uji harus tersedia dan tidak memiliki periode aktif sebelum fixture.");
+    await client.query("UPDATE participant_login_settings SET period_id=$1 WHERE id=1", [periodA]);
     await client.query("COMMIT");
     return { suffix, username, passwordA, passwordB, periodA, periodB, periodAName, periodBName, majorId, classId, majorName,
       studentA, studentB, studentAName, studentBName, identityA, identityB, placementA, placementB,
@@ -100,6 +103,7 @@ export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture>
 export async function cleanupLoginFixture(client: pg.Client, f: LoginFixture, extraBuckets: Array<{ period: string; username: string }> = []) {
   const periods = [f.periodA, f.periodB];
   await client.query("DELETE FROM participant_sessions WHERE participant_identity_id=ANY($1::bigint[])", [[f.identityA, f.identityB]]);
+  await client.query("UPDATE participant_login_settings SET period_id=NULL WHERE id=1 AND period_id=ANY($1::bigint[])", [periods]);
   const buckets = [
     participantAttemptBucket(f.periodA, f.username.toLowerCase()), participantAttemptBucket(f.periodB, f.username.toLowerCase()),
     ...extraBuckets.map((item) => participantAttemptBucket(item.period, item.username.toLowerCase())),
@@ -121,16 +125,25 @@ export async function cleanupLoginFixture(client: pg.Client, f: LoginFixture, ex
   await resetLoginGlobal(client);
 }
 
-export async function openParticipantLogin(page: Page, period: string, username: string, password: string) {
+export async function openParticipantLogin(page: Page, username: string, password: string) {
   await page.goto("/peserta/login");
-  await page.getByLabel("Periode ujian").selectOption(period);
   await page.getByLabel("Username peserta").fill(username);
   await page.getByLabel("Kata sandi", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Masuk sebagai peserta" }).click();
 }
 
-export async function loginParticipant(page: Page, period: string, username: string, password: string) {
-  await openParticipantLogin(page, period, username, password);
+export async function loginParticipant(page: Page, username: string, password: string) {
+  await openParticipantLogin(page, username, password);
   await expect(page).toHaveURL(/\/peserta(?:\?|$)/);
   await expect(page.getByRole("heading", { name: /Halo,/ })).toBeVisible();
+}
+
+// Pembantu ini menguji tindakan admin sungguhan, bukan mengubah DB langsung.
+export async function activateLoginPeriod(admin: Page, periodName: string) {
+  await admin.goto("/data-peserta/periode");
+  await admin.getByRole("button", { name: `Aktifkan login ${periodName}` }).click();
+  const dialog = admin.getByRole("dialog", { name: "Aktifkan periode login?" });
+  await expect(dialog).toContainText("Semua sesi peserta sebelumnya diakhiri");
+  await dialog.getByRole("button", { name: "Ya, aktifkan login" }).click();
+  await expect(dialog).toBeHidden();
 }

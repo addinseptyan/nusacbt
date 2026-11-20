@@ -14,7 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PARTICIPANT_PASSWORD_BATCH_SIZE } from "@/lib/participant-password-constants.mjs";
+import { isNewParticipantPassword, NEW_PARTICIPANT_PASSWORD_ERROR, PARTICIPANT_PASSWORD_BATCH_SIZE } from "@/lib/participant-password-constants.mjs";
 import type { IdentityPeriod } from "@/lib/participant-identity-types";
 import type { PasswordAudit, PasswordDisplayRow, PasswordKeyStatus, PasswordPageData } from "@/lib/participant-password-types";
 
@@ -32,6 +32,17 @@ function PasswordEditor({ row, period, onClose }: { row: PasswordDisplayRow; per
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    if (mode === "manual") {
+      const password = form.get("password");
+      if (!isNewParticipantPassword(password)) {
+        setError(NEW_PARTICIPANT_PASSWORD_ERROR);
+        return;
+      }
+      if (form.get("passwordConfirmation") !== password) {
+        setError("Konfirmasi sandi tidak sama.");
+        return;
+      }
+    }
     form.set("periodId", period.id);
     form.set("candidates", JSON.stringify([row.candidate]));
     form.set("operation", reset ? "reset" : "create");
@@ -56,14 +67,14 @@ function PasswordEditor({ row, period, onClose }: { row: PasswordDisplayRow; per
         <DialogTitle className="text-lg font-bold">{reset ? "Reset sandi peserta" : "Buat sandi peserta"}</DialogTitle>
         <DialogDescription><strong className="text-foreground">{row.studentName}</strong> · NISN {row.nisn} · {row.classLabel}. Periode <strong className="text-foreground">{period.name}</strong>.</DialogDescription>
       </DialogHeader>
-      <form onSubmit={submit} autoComplete="off" className="space-y-4 pt-2">
+      <form onSubmit={submit} autoComplete="off" noValidate className="space-y-4 pt-2">
         {error && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
         {reset && <Alert variant="destructive"><CircleAlert className="size-4" /><AlertTitle>Sandi lama akan diganti</AlertTitle><AlertDescription>Reset ini tidak dapat dibatalkan. Sandi lama tidak lagi cocok dengan hash yang tersimpan.</AlertDescription></Alert>}
         <fieldset disabled={pending} className="space-y-2"><legend className="text-sm font-semibold">Metode sandi</legend><div className="grid gap-2 sm:grid-cols-2">
-          <label className="flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-sm"><input type="radio" name="passwordMode" value="auto" checked={mode === "auto"} onChange={() => setMode("auto")} className="mt-1 accent-primary" /><span><strong>Otomatis</strong><span className="mt-1 block text-[11px] leading-5 text-muted-foreground">16 karakter acak untuk tiap peserta.</span></span></label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-sm"><input type="radio" name="passwordMode" value="auto" checked={mode === "auto"} onChange={() => setMode("auto")} className="mt-1 accent-primary" /><span><strong>Otomatis</strong><span className="mt-1 block text-[11px] leading-5 text-muted-foreground">8 huruf kapital acak untuk tiap peserta.</span></span></label>
           <label className="flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-sm"><input type="radio" name="passwordMode" value="manual" checked={mode === "manual"} onChange={() => setMode("manual")} className="mt-1 accent-primary" /><span><strong>Manual</strong><span className="mt-1 block text-[11px] leading-5 text-muted-foreground">Masukkan sandi sendiri dua kali.</span></span></label>
         </div></fieldset>
-        {mode === "manual" && <div className="space-y-4"><div className="space-y-2"><label htmlFor="new-participant-password" className="text-sm font-semibold">Sandi baru</label><Input id="new-participant-password" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={256} required disabled={pending} className="h-11 rounded-xl" /></div><div className="space-y-2"><label htmlFor="confirm-participant-password" className="text-sm font-semibold">Ulangi sandi baru</label><Input id="confirm-participant-password" name="passwordConfirmation" type="password" autoComplete="new-password" minLength={12} maxLength={256} required disabled={pending} className="h-11 rounded-xl" /></div><p className="text-[11px] leading-5 text-muted-foreground">12–128 karakter, maksimal 512 byte, tanpa karakter kontrol. Spasi termasuk bagian sandi; pilih sandi yang sulit ditebak.</p></div>}
+        {mode === "manual" && <div className="space-y-4"><div className="space-y-2"><label htmlFor="new-participant-password" className="text-sm font-semibold">Sandi baru</label><Input id="new-participant-password" name="password" type="password" autoComplete="new-password" autoCapitalize="characters" spellCheck={false} maxLength={128} aria-describedby="participant-password-rule" required disabled={pending} className="h-11 rounded-xl" /></div><div className="space-y-2"><label htmlFor="confirm-participant-password" className="text-sm font-semibold">Ulangi sandi baru</label><Input id="confirm-participant-password" name="passwordConfirmation" type="password" autoComplete="new-password" autoCapitalize="characters" spellCheck={false} maxLength={128} aria-describedby="participant-password-rule" required disabled={pending} className="h-11 rounded-xl" /></div><p id="participant-password-rule" className="text-[11px] leading-5 text-muted-foreground">Tepat 8 huruf kapital A–Z, tanpa angka, spasi, atau simbol. Sandi lama tetap berlaku sampai di-reset.</p></div>}
         <p className="rounded-xl bg-muted/40 p-3 text-[11px] leading-5 text-muted-foreground">Sandi tidak ditampilkan setelah disimpan. Gunakan tombol <strong>Lihat sandi</strong> jika diperlukan; setiap penampilan berhasil dicatat.</p>
         <DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="submit" disabled={pending}>{pending ? "Menyimpan..." : reset ? "Ya, reset sandi" : "Buat sandi"}</Button></DialogFooter>
       </form>
@@ -185,7 +196,7 @@ function RevealDialog({ row, period, onClose }: { row: PasswordDisplayRow; perio
 }
 
 const keyMessages: Record<Exclude<PasswordKeyStatus, "ready">, { title: string; detail: string }> = {
-  missing: { title: "Kunci belum dikonfigurasi", detail: "Minta pengelola server membuat file kunci di luar proyek dan mengatur NUSACBT_PARTICIPANT_KEY_FILE sesuai README." },
+  missing: { title: "Kunci belum dikonfigurasi", detail: "Minta pengelola mengatur path kunci lama yang sesuai. Jangan membuat kunci pengganti jika database sudah memiliki pengikat atau sandi; lihat README." },
   invalid: { title: "File kunci tidak dapat digunakan", detail: "Periksa lokasi di luar proyek, format, dan izin file di server. Jangan mengganti kunci lama sembarangan." },
   mismatch: { title: "Kunci tidak cocok dengan database", detail: "Pulihkan kunci yang benar dari cadangan terpisah. Pembuatan, reset, dan penampilan sandi dinonaktifkan." },
   inconsistent: { title: "Pengikat kunci tidak tersedia", detail: "Pulihkan database dan kunci yang sesuai dari cadangan. Jangan menghapus atau mengganti data sandi sembarangan." },

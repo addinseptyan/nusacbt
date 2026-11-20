@@ -7,18 +7,24 @@ import type { ExamPeriod } from "@/lib/period-types";
 import { getPostgresPool } from "@/lib/postgres";
 
 export const metadata = { title: "Periode Ujian — NusaCBT" };
+export const dynamic = "force-dynamic";
 
 export default async function PeriodPage() {
   await requireAdmin();
-  let periods: ExamPeriod[];
+  let periods: ExamPeriod[]; let activePeriodId: string | null; let activeRevision: string;
   try {
-    const result = await getPostgresPool().query<ExamPeriod>(
-      `SELECT id::text AS id, name,
-        to_char(start_date, 'YYYY-MM-DD') AS "startDate",
-        CASE WHEN end_date IS NULL THEN NULL ELSE to_char(end_date, 'YYYY-MM-DD') END AS "endDate"
-       FROM exam_periods ORDER BY start_date DESC, id DESC`,
+    // Baca pengaturan dan daftar dari snapshot yang sama, termasuk saat daftar kosong.
+    const result = await getPostgresPool().query<{ activePeriodId: string | null; activeRevision: string; periods: ExamPeriod[] }>(
+      `SELECT settings.period_id::text AS "activePeriodId", settings.xmin::text AS "activeRevision",
+        COALESCE((SELECT json_agg(json_build_object(
+          'id', e.id::text, 'name', e.name, 'startDate', to_char(e.start_date, 'YYYY-MM-DD'),
+          'endDate', CASE WHEN e.end_date IS NULL THEN NULL ELSE to_char(e.end_date, 'YYYY-MM-DD') END,
+          'revision', e.xmin::text
+        ) ORDER BY e.start_date DESC, e.id DESC) FROM exam_periods e), '[]'::json) AS periods
+       FROM participant_login_settings settings WHERE settings.id = 1`,
     );
-    periods = result.rows;
+    if (result.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
+    ({ periods, activePeriodId, activeRevision } = result.rows[0]);
   } catch {
     return (
       <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9">
@@ -43,7 +49,7 @@ export default async function PeriodPage() {
           <p className="mt-2 text-[13px] leading-6 text-muted-foreground">Kelola periode sebagai dasar pengelolaan peserta dan ujian.</p>
         </div>
       </div>
-      <PeriodManager periods={periods} />
+      <PeriodManager periods={periods} activePeriodId={activePeriodId} activeRevision={activeRevision} />
     </div>
   );
 }

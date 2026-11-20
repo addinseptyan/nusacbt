@@ -7,7 +7,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { participantPeriods, type ParticipantPeriod } from "@/lib/participant-auth";
+import { participantLoginEnabled } from "@/lib/participant-auth";
 
 export const metadata = { title: "Masuk Peserta — NusaCBT", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -16,8 +16,8 @@ type Props = { searchParams: Promise<{ error?: string; sesi?: string }> };
 
 export default async function ParticipantLoginPage({ searchParams }: Props) {
   const params = await searchParams;
-  let periods: ParticipantPeriod[] = []; let available = true;
-  try { periods = await participantPeriods(); } catch { available = false; }
+  let enabled = false; let available = true;
+  try { enabled = await participantLoginEnabled(); } catch { available = false; }
   return (
     <main className="relative min-h-svh overflow-hidden bg-[#f5f8f5] px-4 py-7 dark:bg-[#101813] sm:py-10">
       <div aria-hidden="true" className="pointer-events-none absolute -right-32 -top-44 size-96 rounded-full bg-emerald-200/40 blur-3xl dark:bg-emerald-900/25" />
@@ -35,7 +35,7 @@ export default async function ParticipantLoginPage({ searchParams }: Props) {
           <p className="mt-4 max-w-md text-sm leading-7 text-muted-foreground sm:text-base">Masuk menggunakan akun dari pengawas untuk melihat identitas dan jadwal pada periode ujianmu.</p>
           <div className="mt-7 flex max-w-md gap-3 rounded-2xl border border-emerald-100 bg-white/75 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200"><BookOpenCheck className="size-5" /></span>
-            <div><p className="text-sm font-semibold">Siapkan akun peserta</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Pilih periode yang benar, lalu masukkan username dan kata sandi dari pengawas.</p></div>
+            <div><p className="text-sm font-semibold">Siapkan akun peserta</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Masukkan username dan kata sandi dari pengawas. Periode login ditentukan oleh admin.</p></div>
           </div>
         </section>
         <Card className="gap-0 rounded-[26px] border border-border bg-card p-6 shadow-[0_20px_70px_rgba(26,75,45,0.08)] sm:p-8">
@@ -44,8 +44,8 @@ export default async function ParticipantLoginPage({ searchParams }: Props) {
           <p className="mt-1.5 text-sm leading-6 text-muted-foreground">Gunakan identitas yang sesuai dengan periode ujian.</p>
           {(!available || params.error === "database") && <Alert variant="destructive" className="mt-5" role="alert"><CircleAlert className="size-4" /><AlertDescription>Server belum dapat memuat data. Minta pengelola memeriksa database dan migrasi.</AlertDescription></Alert>}
           {params.error === "logout" && <div className="mt-5 space-y-2"><Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertDescription>Sesi belum berhasil diakhiri di server. Jangan tinggalkan perangkat; coba keluar lagi atau hubungi pengawas.</AlertDescription></Alert><form action={participantLogoutAction}><Button type="submit" variant="outline" className="h-9 rounded-xl text-xs">Coba keluar lagi</Button></form></div>}
-          {params.sesi === "berakhir" && <Alert className="mt-5" role="status"><CircleAlert className="size-4" /><AlertDescription>Sesi berakhir, data akun berubah, atau akun masuk dari perangkat lain. Silakan masuk kembali.</AlertDescription></Alert>}
-          <ParticipantLoginForm periods={periods} available={available} />
+          {params.sesi === "berakhir" && <Alert className="mt-5" role="status"><CircleAlert className="size-4" /><AlertDescription>Sesi berakhir, periode atau data akun berubah, atau akun masuk dari perangkat lain. Silakan masuk kembali.</AlertDescription></Alert>}
+          <ParticipantLoginForm enabled={enabled} available={available} />
           <div className="mt-6 border-t pt-5 text-center"><Link href="/login" className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" /> Masuk sebagai admin</Link></div>
         </Card>
       </div>

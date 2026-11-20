@@ -11,6 +11,7 @@ import { createParticipantKeyFile, decryptParticipantPassword, readParticipantKe
 import { verifyPassword } from "../../src/lib/password.mjs";
 import { postgresConfig } from "../../src/lib/postgres-config.mjs";
 import { loginAsAdmin } from "./helpers";
+import { insertLegacyPassword } from "./legacy-password-fixture";
 
 type Student = { id: string; name: string; nisn: string; identityId: string };
 type Fixture = { majorId: string; classId: string; major: string; periodA: string; periodAId: string; periodB: string; periodBId: string; students: Student[] };
@@ -132,8 +133,8 @@ test("manual, tampilan tercatat, dan reset berlaku per periode tanpa membocorkan
   const client = testDatabase(); await client.connect();
   const fixture = await seedSchool(client, 2);
   const student = fixture.students[0];
-  const firstPassword = "  Sandi Fiktif Pertama 2026  ";
-  const secondPassword = "Sandi Fiktif Reset 2026!";
+  const firstPassword = "ABCDEFGH";
+  const secondPassword = "IJKLMNOP";
   try {
     const otherIdentity = await placeSecondPeriod(client, fixture, student);
     await loginAsAdmin(page);
@@ -147,7 +148,7 @@ test("manual, tampilan tercatat, dan reset berlaku per periode tanpa membocorkan
     expect(await dialog.getByLabel("Sandi baru", { exact: true }).getAttribute("type")).toBe("password");
     expect(await dialog.getByLabel("Ulangi sandi baru").getAttribute("type")).toBe("password");
     await dialog.getByLabel("Sandi baru", { exact: true }).fill(firstPassword);
-    await dialog.getByLabel("Ulangi sandi baru").fill("Sandi Fiktif Tidak Sama");
+    await dialog.getByLabel("Ulangi sandi baru").fill("HGFEDCBA");
     await dialog.getByRole("button", { name: "Buat sandi", exact: true }).click();
     await expect(dialog.getByRole("alert")).toContainText("Konfirmasi sandi tidak sama");
     expect(await storedPassword(client, student.identityId)).toBeNull();
@@ -161,7 +162,7 @@ test("manual, tampilan tercatat, dan reset berlaku per periode tanpa membocorkan
     expect(first).not.toBeNull();
     if (!first) throw new Error("Sandi uji tidak tersimpan.");
     expect(await verifyPassword(firstPassword, first.hash)).toBe(true);
-    expect(await verifyPassword(firstPassword.trim(), first.hash)).toBe(false);
+    expect(await verifyPassword(firstPassword.toLowerCase(), first.hash)).toBe(false);
     expect(await decrypted(first, fixture.periodAId)).toBe(firstPassword);
     expect(first.hash).not.toContain(firstPassword);
     expect(first.ciphertext.includes(Buffer.from(firstPassword))).toBe(false);
@@ -188,9 +189,9 @@ test("manual, tampilan tercatat, dan reset berlaku per periode tanpa membocorkan
 
     await openPasswords(page, fixture.periodBId);
     expect(await storedPassword(client, otherIdentity)).toBeNull();
-    await submitManual(page, student, "Sandi Periode B Fiktif 2026");
+    await submitManual(page, student, "QRSTUVWX");
     const other = await storedPassword(client, otherIdentity);
-    expect(other && await decrypted(other, fixture.periodBId)).toBe("Sandi Periode B Fiktif 2026");
+    expect(other && await decrypted(other, fixture.periodBId)).toBe("QRSTUVWX");
     await openPasswords(page, fixture.periodAId);
     await submitManual(page, student, secondPassword, true);
     const updated = await storedPassword(client, student.identityId);
@@ -215,7 +216,7 @@ test("batch otomatis maksimal 25, tidak dipengaruhi pencarian dan tidak menimpa 
   try {
     await loginAsAdmin(page);
     await openPasswords(page, fixture.periodAId);
-    await submitManual(page, fixture.students[0], "Sandi Lama Fiktif 2026");
+    await submitManual(page, fixture.students[0], "SANDILAM");
     const old = await storedPassword(client, fixture.students[0].identityId);
     await page.getByLabel("Cari peserta").fill("pencarian-tidak-cocok");
     await expect(page.getByText("Peserta tidak ditemukan")).toBeVisible();
@@ -230,7 +231,7 @@ test("batch otomatis maksimal 25, tidak dipengaruhi pencarian dan tidak menimpa 
     const autoIds = result.rows.filter((row) => row.identityId !== fixture.students[0].identityId);
     const values: string[] = [];
     for (const entry of autoIds) values.push(await decrypted((await storedPassword(client, entry.identityId))!, fixture.periodAId));
-    expect(values.every((value) => /^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789]{16}$/.test(value))).toBe(true);
+    expect(values.every((value) => /^[A-Z]{8}$/.test(value))).toBe(true);
     expect(new Set(values).size).toBe(25);
     expect(await page.content()).not.toContain(values[0]);
     await page.getByRole("button", { name: "Buat otomatis", exact: true }).click();
@@ -254,8 +255,8 @@ test("pembuatan manual dan batch bersamaan tidak saling menimpa", async ({ page,
     await openPasswords(page, fixture.periodAId); await openPasswords(other, fixture.periodAId);
     const manual = await editor(page, fixture.students[0]);
     await manual.getByRole("radio", { name: /Manual/ }).check();
-    await manual.getByLabel("Sandi baru", { exact: true }).fill("Sandi Manual Balapan 2026");
-    await manual.getByLabel("Ulangi sandi baru").fill("Sandi Manual Balapan 2026");
+    await manual.getByLabel("Sandi baru", { exact: true }).fill("BALAPANX");
+    await manual.getByLabel("Ulangi sandi baru").fill("BALAPANX");
     await other.getByRole("button", { name: "Buat otomatis", exact: true }).click();
     const batch = other.getByRole("dialog", { name: "Buat sandi otomatis?" });
     await Promise.all([manual.getByRole("button", { name: "Buat sandi", exact: true }).click(), batch.getByRole("button", { name: "Ya, buat sandi" }).click()]);
@@ -268,7 +269,7 @@ test("pembuatan manual dan batch bersamaan tidak saling menimpa", async ({ page,
     const first = await storedPassword(client, fixture.students[0].identityId);
     if (!first) throw new Error("Sandi pertama tidak tersedia.");
     const password = await decrypted(first, fixture.periodAId);
-    expect(manualLost ? /^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789]{16}$/.test(password) : password === "Sandi Manual Balapan 2026").toBe(true);
+    expect(manualLost ? /^[A-Z]{8}$/.test(password) : password === "BALAPANX").toBe(true);
     expect((await audit(client, fixture.students[0].identityId)).map((row) => row.event)).toEqual([manualLost ? "create_auto" : "create_manual"]);
   } finally { await otherContext.close(); await cleanup(client, fixture); await client.end(); }
 });
@@ -280,10 +281,10 @@ test("dua reset bersamaan mempertahankan satu hasil dan satu audit", async ({ pa
   const context = await browser.newContext(); const other = await context.newPage();
   try {
     await loginAsAdmin(page); await openPasswords(page, fixture.periodAId);
-    await submitManual(page, student, "Sandi Awal Fiktif 2026");
+    await submitManual(page, student, "AWALTEST");
     await loginAsAdmin(other); await openPasswords(other, fixture.periodAId);
     const first = await editor(page, student, true); const second = await editor(other, student, true);
-    for (const [dialog, value] of [[first, "Reset Pilihan Pertama 2026"], [second, "Reset Pilihan Kedua 2026"]] as const) {
+    for (const [dialog, value] of [[first, "PERTAMAA"], [second, "KEDUAAAA"]] as const) {
       await dialog.getByRole("radio", { name: /Manual/ }).check();
       await dialog.getByLabel("Sandi baru", { exact: true }).fill(value);
       await dialog.getByLabel("Ulangi sandi baru").fill(value);
@@ -295,7 +296,7 @@ test("dua reset bersamaan mempertahankan satu hasil dan satu audit", async ({ pa
     const stored = await storedPassword(client, student.identityId);
     if (!stored) throw new Error("Sandi tidak tersedia.");
     const value = await decrypted(stored, fixture.periodAId);
-    expect(value).toBe(await first.isVisible() ? "Reset Pilihan Kedua 2026" : "Reset Pilihan Pertama 2026");
+    expect(value).toBe(await first.isVisible() ? "KEDUAAAA" : "PERTAMAA");
     expect(await verifyPassword(value, stored.hash)).toBe(true);
     expect((await audit(client, student.identityId)).map((row) => row.event)).toEqual(["create_manual", "reset_manual"]);
   } finally { await context.close(); await cleanup(client, fixture); await client.end(); }
@@ -343,7 +344,7 @@ test("sandi tetap disimpan tetapi tidak dapat dikelola saat kelas tidak aktif", 
   const fixture = await seedSchool(client, 1); const student = fixture.students[0];
   try {
     await loginAsAdmin(page); await openPasswords(page, fixture.periodAId);
-    await submitManual(page, student, "Sandi Tidak Aktif Fiktif");
+    await submitManual(page, student, "TIDAKAKT");
     const before = await storedPassword(client, student.identityId);
     await client.query("UPDATE student_class_placements SET ended_at=clock_timestamp() WHERE student_id=$1 AND period_id=$2", [student.id, fixture.periodAId]);
     await page.reload();
@@ -363,7 +364,7 @@ test("pengikat kunci yang salah atau hilang ditolak tanpa mengubah sandi maupun 
   let original: { verifier: Buffer; created_at: string } | undefined;
   try {
     await loginAsAdmin(page); await openPasswords(page, fixture.periodAId);
-    await submitManual(page, student, "Sandi Pengikat Fiktif 2026");
+    await submitManual(page, student, "PENGIKAT");
     const passwordBefore = await storedPassword(client, student.identityId);
     original = (await client.query<{ verifier: Buffer; created_at: string }>("SELECT verifier,created_at::text FROM participant_password_key_binding WHERE id=1")).rows[0];
     if (!original) throw new Error("Pengikat uji tidak tersedia.");
@@ -400,7 +401,7 @@ test("ciphertext yang rusak tidak ditampilkan dan tidak menghasilkan audit tampi
   const fixture = await seedSchool(client, 1); const student = fixture.students[0];
   try {
     await loginAsAdmin(page); await openPasswords(page, fixture.periodAId);
-    await submitManual(page, student, "Sandi Integritas Fiktif 2026");
+    await submitManual(page, student, "INTEGRIT");
     const before = await storedPassword(client, student.identityId);
     if (!before) throw new Error("Sandi uji tidak tersedia.");
     const changed = Buffer.from(before.ciphertext); changed[0] ^= 1;
@@ -416,7 +417,7 @@ test("ciphertext yang rusak tidak ditampilkan dan tidak menghasilkan audit tampi
     await page.reload();
     dialog = await showDialog(page, student);
     await dialog.getByRole("button", { name: "Tampilkan sandi" }).click();
-    await expect(dialog.locator("output")).toHaveText("Sandi Integritas Fiktif 2026");
+    await expect(dialog.locator("output")).toHaveText("INTEGRIT");
     expect((await audit(client, student.identityId)).map((item) => item.event)).toEqual(["create_manual", "reveal"]);
   } finally { await cleanup(client, fixture); await client.end(); }
 });
@@ -428,7 +429,7 @@ test("kegagalan audit membatalkan penampilan, pembuatan, dan reset secara atomik
   const constraint = `e2e_block_${randomBytes(6).toString("hex")}`;
   try {
     await loginAsAdmin(page); await openPasswords(page, fixture.periodAId);
-    await submitManual(page, first, "Sandi Sebelum Audit Fiktif");
+    await submitManual(page, first, "SEBELUMA");
     const before = await storedPassword(client, first.identityId);
     await client.query(`ALTER TABLE participant_password_audit ADD CONSTRAINT ${constraint} CHECK (event NOT IN ('reveal','reset_auto','create_auto')) NOT VALID`);
     let dialog = await showDialog(page, first);
@@ -458,7 +459,7 @@ test("tindakan sandi memerlukan sesi admin dan menolak Origin asing", async ({ p
   const client = testDatabase(); await client.connect();
   const fixture = await seedSchool(client, 1); const student = fixture.students[0];
   const anonymous = await browser.newContext(); const anonymousPage = await anonymous.newPage();
-  const password = "Sandi Akses Fiktif 2026";
+  const password = "AKSESTES";
   try {
     await anonymousPage.goto(`/data-peserta/sandi?periode=${fixture.periodAId}`);
     await expect(anonymousPage).toHaveURL(/\/login$/);
@@ -540,16 +541,16 @@ test("tampilan sandi otomatis tersamarkan setelah 60 detik atau halaman tidak ak
   const fixture = await seedSchool(client, 1); const student = fixture.students[0];
   try {
     await loginAsAdmin(page); await openPasswords(page, fixture.periodAId);
-    await submitManual(page, student, "Sandi Waktu Fiktif 2026");
+    await submitManual(page, student, "WAKTUTES");
     await page.clock.install();
     const dialog = await showDialog(page, student);
     await dialog.getByRole("button", { name: "Tampilkan sandi" }).click();
-    await expect(dialog.locator("output")).toHaveText("Sandi Waktu Fiktif 2026");
+    await expect(dialog.locator("output")).toHaveText("WAKTUTES");
     await page.clock.fastForward(60_100);
     await expect(dialog.locator("output")).toHaveCount(0);
     await expect(dialog.getByLabel("Sandi tersamarkan")).toBeVisible();
     await dialog.getByRole("button", { name: "Tampilkan sandi" }).click();
-    await expect(dialog.locator("output")).toHaveText("Sandi Waktu Fiktif 2026");
+    await expect(dialog.locator("output")).toHaveText("WAKTUTES");
     await page.evaluate(() => {
       Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
       document.dispatchEvent(new Event("visibilitychange"));
@@ -648,7 +649,7 @@ test("server menolak kunci yang belum diatur, hilang, berbeda, atau berada di re
   const fakeRepo = join(temp, "repo-fiktif");
   const keyInRepo = join(fakeRepo, "key-untuk-tes.key");
   const outsideCwd = join(temp, "cwd-di-luar");
-  const password = "Sandi Kunci Hilang Fiktif";
+  const password = "KUNCITES";
   const configuredKey = process.env.NUSACBT_PARTICIPANT_KEY_FILE;
   if (!configuredKey) throw new Error("Kunci fiktif khusus tes harus dikonfigurasi.");
   let inProjectDir: string | undefined;
@@ -713,14 +714,14 @@ test("server menolak kunci yang belum diatur, hilang, berbeda, atau berada di re
   }
 });
 
-test("sandi manual yang menyerupai HTML tetap teks biasa saat ditampilkan", async ({ page }) => {
+test("sandi lama yang menyerupai HTML tetap dapat dibuka sebagai teks biasa", async ({ page }) => {
   test.setTimeout(60_000);
   const client = testDatabase(); await client.connect();
   const fixture = await seedSchool(client, 1); const student = fixture.students[0];
   const password = '<img src=x onerror="window.__sandiTes=1">RahasiaFiktif2026';
   try {
+    await insertLegacyPassword(client, student.identityId, fixture.periodAId, password);
     await loginAsAdmin(page); await openPasswords(page, fixture.periodAId);
-    await submitManual(page, student, password);
     const dialog = await showDialog(page, student);
     await dialog.getByRole("button", { name: "Tampilkan sandi" }).click();
     const output = dialog.locator('output[aria-label="Sandi peserta"]');
@@ -738,7 +739,7 @@ test("perubahan sandi tanpa timestamp tetap menolak reset dari halaman usang", a
   const fixture = await seedSchool(client, 1); const student = fixture.students[0];
   try {
     await loginAsAdmin(page); await openPasswords(page, fixture.periodAId);
-    await submitManual(page, student, "Sandi Awal Usang Fiktif");
+    await submitManual(page, student, "USANGTES");
     const before = await storedPassword(client, student.identityId);
     if (!before) throw new Error("Sandi uji tidak tersedia.");
     const dialog = await editor(page, student, true);
@@ -751,5 +752,76 @@ test("perubahan sandi tanpa timestamp tetap menolak reset dari halaman usang", a
     expect(after?.ciphertext).toEqual(changed);
     expect(after?.hash).toBe(before.hash);
     expect((await audit(client, student.identityId)).map((item) => item.event)).toEqual(["create_manual"]);
+  } finally { await cleanup(client, fixture); await client.end(); }
+});
+
+test("validasi manual di UI dan server, batas ciphertext, serta reset otomatis", async ({ page }) => {
+  test.setTimeout(90_000);
+  const client = testDatabase(); await client.connect();
+  const fixture = await seedSchool(client, 1); const student = fixture.students[0];
+  try {
+    await loginAsAdmin(page); await openPasswords(page, fixture.periodAId);
+    let dialog = await editor(page, student);
+    await dialog.getByRole("radio", { name: /Manual/ }).check();
+    for (const invalid of ["ABCDEFG", "ABCDEFGHI", "abcDEFGH", "ABCD1234", "ABC DEFH", "ABCD!FGH"]) {
+      await dialog.getByLabel("Sandi baru", { exact: true }).fill(invalid);
+      await dialog.getByLabel("Ulangi sandi baru").fill(invalid);
+      await dialog.getByRole("button", { name: "Buat sandi", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText("tepat 8 huruf kapital");
+      expect(await storedPassword(client, student.identityId)).toBeNull();
+    }
+    const valid = "QAZWSXED";
+    await dialog.getByLabel("Sandi baru", { exact: true }).fill(valid); await dialog.getByLabel("Ulangi sandi baru").fill(valid);
+    const createPost = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/data-peserta/sandi");
+    await dialog.getByRole("button", { name: "Buat sandi", exact: true }).click();
+    const createRequest = await createPost; await expect(dialog).toBeHidden();
+    const created = await storedPassword(client, student.identityId);
+    if (!created) throw new Error("Sandi baru tidak tersedia.");
+    expect(created.ciphertext.length).toBe(8);
+    for (const length of [7, 513]) {
+      await expect(client.query("UPDATE participant_passwords SET ciphertext=$2 WHERE participant_identity_id=$1", [student.identityId, Buffer.alloc(length)])).rejects.toMatchObject({ code: "23514" });
+    }
+    expect(await storedPassword(client, student.identityId)).toEqual(created);
+
+    // Abaikan validasi browser: replay aksi admin dengan kedua field sandi dimodifikasi.
+    async function replayInvalid(request: import("@playwright/test").Request, good: string, bad: string) {
+      const headers = request.headers(); const body = request.postDataBuffer();
+      if (!headers["next-action"] || !headers["content-type"] || !body) throw new Error("Aksi sandi tidak dapat diperiksa.");
+      const serialized = body.toString("utf8");
+      if (serialized.split(good).length - 1 !== 2) throw new Error("Dua field sandi tidak ditemukan dalam aksi.");
+      const response = await page.request.post("/data-peserta/sandi", {
+        headers: { origin: "http://127.0.0.1:3100", "content-type": headers["content-type"], "next-action": headers["next-action"] },
+        data: Buffer.from(serialized.split(good).join(bad)), failOnStatusCode: false,
+      });
+      expect(response.status()).toBe(200);
+      expect(await response.text()).toContain("Sandi baru harus tepat 8 huruf kapital");
+    }
+    const auditBefore = await audit(client, student.identityId);
+    for (const bad of ["abcdefGH", "ABCDEFG1", "ABCDEFG", "ABCDEFGHI", "ABCDEFGH\n"]) await replayInvalid(createRequest, valid, bad);
+    expect(await storedPassword(client, student.identityId)).toEqual(created);
+    expect(await audit(client, student.identityId)).toEqual(auditBefore);
+
+    dialog = await editor(page, student, true); await dialog.getByRole("radio", { name: /Manual/ }).check();
+    const resetValue = "PLMOKNIJ";
+    await dialog.getByLabel("Sandi baru", { exact: true }).fill(resetValue); await dialog.getByLabel("Ulangi sandi baru").fill(resetValue);
+    const resetPost = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/data-peserta/sandi");
+    await dialog.getByRole("button", { name: "Ya, reset sandi" }).click();
+    const resetRequest = await resetPost; await expect(dialog).toBeHidden();
+    const reset = await storedPassword(client, student.identityId);
+    if (!reset) throw new Error("Sandi reset tidak tersedia.");
+    expect(await decrypted(reset, fixture.periodAId)).toBe(resetValue);
+    const auditAfterReset = await audit(client, student.identityId);
+    await replayInvalid(resetRequest, resetValue, "ABC12345");
+    expect(await storedPassword(client, student.identityId)).toEqual(reset);
+    expect(await audit(client, student.identityId)).toEqual(auditAfterReset);
+
+    dialog = await editor(page, student, true); // Otomatis adalah pilihan default.
+    await dialog.getByRole("button", { name: "Ya, reset sandi" }).click(); await expect(dialog).toBeHidden();
+    const automatic = await storedPassword(client, student.identityId);
+    if (!automatic) throw new Error("Reset otomatis tidak tersedia.");
+    const autoPassword = await decrypted(automatic, fixture.periodAId);
+    expect(autoPassword).toMatch(/^[A-Z]{8}$/); expect(automatic.ciphertext.length).toBe(8);
+    expect(await verifyPassword(autoPassword, automatic.hash)).toBe(true);
+    expect((await audit(client, student.identityId)).map((entry) => entry.event)).toEqual(["create_manual", "reset_manual", "reset_auto"]);
   } finally { await cleanup(client, fixture); await client.end(); }
 });
