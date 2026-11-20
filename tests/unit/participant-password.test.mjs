@@ -16,36 +16,37 @@ import { hashParticipantPassword, verifyPassword } from "../../src/lib/password.
 
 const hasReason = (reason) => (error) => error instanceof ParticipantKeyFileError && error.reason === reason;
 
-test("validasi sandi manual mempertahankan spasi dan mendukung Unicode dalam batas", () => {
-  for (const input of [null, undefined, 123, "x".repeat(11), "x".repeat(129), "😀".repeat(129), "a".repeat(12) + "\n", "a".repeat(12) + "\u0080", "a".repeat(12) + "\ud800"]) {
-    assert.equal(validateParticipantPassword(input).ok, false);
+test("sandi baru dan reset harus tepat delapan huruf ASCII kapital", () => {
+  for (const input of [null, undefined, 123, "ABCDEFG", "ABCDEFGHI", "ABCDEFGH\n", "ABCDEFGH\r", "abcdefgh", "ABCD1234", "ABC DEFH", "ABC-DEFH", "ÉBCDEFGH", "😀".repeat(8), "ABC\ud800EFGH", "  Sandi lama 2026  "]) {
+    assert.equal(validateParticipantPassword(input).ok, false, String(input));
   }
-  for (const input of ["123456789012", "   kata sandi panjang   ", "😀".repeat(128)]) {
+  for (const input of ["ABCDEFGH", "ZZZZZZZZ", "OILAZXYZ"]) {
     assert.deepEqual(validateParticipantPassword(input), { ok: true, value: input });
   }
 });
 
-test("generator memakai 16 karakter acak dan batch dibatasi", () => {
-  assert.equal(GENERATED_PARTICIPANT_PASSWORD_LENGTH, 16);
+test("generator memakai delapan huruf kapital acak dan batch dibatasi", () => {
+  assert.equal(GENERATED_PARTICIPANT_PASSWORD_LENGTH, 8);
   assert.equal(PARTICIPANT_PASSWORD_BATCH_SIZE, 25);
   const values = Array.from({ length: 500 }, () => generateParticipantPassword());
-  assert.ok(values.every((value) => /^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789]{16}$/.test(value)));
-  assert.equal(new Set(values).size, values.length);
+  assert.ok(values.every((value) => value.length === 8 && /^[A-Z]{8}$/.test(value)));
+  assert.ok(new Set(values).size > 495);
 });
 
-test("hash scrypt dan salinan AES-GCM dapat diverifikasi tanpa menyimpan plaintext", async () => {
+test("hash scrypt dan salinan AES-GCM untuk sandi baru dapat diverifikasi", async () => {
   const key = randomBytes(32);
-  const password = "  contoh sandi fiktif 2026  ";
+  const password = "ABCDEFGH";
   const binding = { identityId: "42", periodId: "19" };
   const hash = await hashParticipantPassword(password);
   const secondHash = await hashParticipantPassword(password);
   assert.notEqual(hash, secondHash);
   assert.ok(hash.startsWith("scrypt$32768$8$3$"));
   assert.equal(await verifyPassword(password, hash), true);
-  assert.equal(await verifyPassword(password.trim(), hash), false);
+  assert.equal(await verifyPassword(password.toLowerCase(), hash), false);
   const first = encryptParticipantPassword(password, key, binding);
   const second = encryptParticipantPassword(password, key, binding);
   assert.equal(first.nonce.length, 12);
+  assert.equal(first.ciphertext.length, 8);
   assert.equal(first.authenticationTag.length, 16);
   assert.notDeepEqual(first.nonce, second.nonce);
   assert.notDeepEqual(first.ciphertext, Buffer.from(password));
@@ -57,26 +58,36 @@ test("hash scrypt dan salinan AES-GCM dapat diverifikasi tanpa menyimpan plainte
   assert.equal(sameParticipantVerifier(verifier, Buffer.alloc(1)), false);
 });
 
-test("format hash yang sama mendukung 128 karakter Unicode multi-byte", async () => {
-  const password = "😀".repeat(128);
-  const hash = await hashParticipantPassword(password);
-  assert.equal(await verifyPassword(password, hash), true);
-  await assert.rejects(() => hashParticipantPassword("😀".repeat(129)));
+test("vektor PR 17 tetap terbuka dan terverifikasi, tetapi tidak dapat dibuat sebagai sandi baru", async () => {
+  const fixture = JSON.parse(await readFile(new URL("../fixtures/participant-password-v014.json", import.meta.url), "utf8"));
+  const key = Buffer.from(fixture.key, "base64");
+  try {
+    for (const vector of fixture.vectors) {
+      const encrypted = { nonce: Buffer.from(vector.nonce, "base64"), ciphertext: Buffer.from(vector.ciphertext, "base64"), authenticationTag: Buffer.from(vector.authenticationTag, "base64") };
+      assert.equal(await verifyPassword(vector.password, vector.hash), true);
+      assert.equal(decryptParticipantPassword(encrypted, key, fixture.binding), vector.password);
+      assert.equal(validateParticipantPassword(vector.password).ok, false);
+      await assert.rejects(() => hashParticipantPassword(vector.password));
+      assert.throws(() => encryptParticipantPassword(vector.password, key, fixture.binding));
+    }
+  } finally { key.fill(0); }
 });
 
 test("AES-GCM menolak ciphertext, nonce, tag, kunci, dan identitas yang berubah", () => {
   const key = randomBytes(32);
   const binding = { identityId: "123", periodId: "456" };
-  const encrypted = encryptParticipantPassword("sandi fiktif 123456", key, binding);
+  const encrypted = encryptParticipantPassword("ABCDEFGH", key, binding);
   for (const field of ["nonce", "ciphertext", "authenticationTag"]) {
     const changed = { ...encrypted, [field]: Buffer.from(encrypted[field]) };
     changed[field][0] ^= 1;
     assert.throws(() => decryptParticipantPassword(changed, key, binding));
   }
+  assert.throws(() => decryptParticipantPassword({ ...encrypted, ciphertext: Buffer.alloc(7) }, key, binding));
+  assert.throws(() => decryptParticipantPassword({ ...encrypted, ciphertext: Buffer.alloc(513) }, key, binding));
   assert.throws(() => decryptParticipantPassword(encrypted, randomBytes(32), binding));
   assert.throws(() => decryptParticipantPassword(encrypted, key, { ...binding, identityId: "124" }));
   assert.throws(() => decryptParticipantPassword(encrypted, key, { ...binding, periodId: "457" }));
-  assert.throws(() => encryptParticipantPassword("sandi fiktif 123456", key, { ...binding, identityId: "01" }));
+  assert.throws(() => encryptParticipantPassword("ABCDEFGH", key, { ...binding, identityId: "01" }));
   assert.throws(() => encryptParticipantPassword("pendek", key, binding));
 });
 

@@ -12,7 +12,7 @@ test("dua login bersamaan tetap hanya menghasilkan satu sesi sah", async ({ brow
   let pending: Promise<unknown>[] = [];
   try {
     for (const page of [one, two]) {
-      await page.goto("/peserta/login"); await page.getByLabel("Periode ujian").selectOption(f.periodA);
+      await page.goto("/peserta/login");
       await page.getByLabel("Username peserta").fill(f.username); await page.getByLabel("Kata sandi", { exact: true }).fill(f.passwordA);
     }
     const postOne = one.waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/peserta/login");
@@ -29,7 +29,7 @@ test("dua login bersamaan tetap hanya menghasilkan satu sesi sah", async ({ brow
 test("reset sandi yang sedang bertransaksi tidak menghasilkan sesi dari sandi lama", async ({ page }) => {
   test.setTimeout(40_000);
   const client = loginTestDatabase(); const locker = loginTestDatabase(); await client.connect(); await locker.connect(); await resetLoginGlobal(client);
-  const f = await seedLoginFixture(client); const replacement = `Sandi-Baru-${f.suffix}-Fiktif!`;
+  const f = await seedLoginFixture(client); const replacement = "BARUTEST";
   const key = await readParticipantKeyFile(process.env.NUSACBT_PARTICIPANT_KEY_FILE, process.cwd());
   let committed = false;
   try {
@@ -39,7 +39,7 @@ test("reset sandi yang sedang bertransaksi tidak menghasilkan sesi dari sandi la
     await locker.query(`UPDATE participant_passwords SET password_hash=$2,nonce=$3,ciphertext=$4,authentication_tag=$5,
       updated_at=GREATEST(clock_timestamp(),updated_at+interval '1 microsecond') WHERE participant_identity_id=$1`,
     [f.identityA, hash, encrypted.nonce, encrypted.ciphertext, encrypted.authenticationTag]);
-    await page.goto("/peserta/login"); await page.getByLabel("Periode ujian").selectOption(f.periodA);
+    await page.goto("/peserta/login");
     await page.getByLabel("Username peserta").fill(f.username); await page.getByLabel("Kata sandi", { exact: true }).fill(f.passwordA);
     const post = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/peserta/login");
     const submit = page.getByRole("button", { name: "Masuk sebagai peserta" }).click(); await post;
@@ -48,9 +48,9 @@ test("reset sandi yang sedang bertransaksi tidak menghasilkan sesi dari sandi la
        AND query LIKE '%participant_passwords%' AND query LIKE '%FOR SHARE%'`,
     )).rows[0].n), { timeout: 7000 }).toBeGreaterThan(0);
     await locker.query("COMMIT"); committed = true; await submit;
-    await expect(page.getByRole("alert").filter({ hasText: "Periode, username, atau kata sandi" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "Username atau kata sandi" })).toBeVisible();
     expect((await client.query("SELECT 1 FROM participant_sessions WHERE participant_identity_id=$1", [f.identityA])).rowCount).toBe(0);
-    await loginParticipant(page, f.periodA, f.username, replacement);
+    await loginParticipant(page, f.username, replacement);
   } finally {
     key.fill(0); if (!committed) await locker.query("ROLLBACK").catch(() => {});
     await locker.end(); await cleanupLoginFixture(client, f); await client.end();
@@ -61,7 +61,7 @@ test("kembali setelah keluar tidak membuka lagi halaman yang dilindungi", async 
   const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client);
   const f = await seedLoginFixture(client);
   try {
-    await loginParticipant(page, f.periodA, f.username, f.passwordA);
+    await loginParticipant(page, f.username, f.passwordA);
     await page.goto("/peserta?halaman=1"); await expect(page.getByRole("heading", { name: `Halo, ${f.studentAName}!` })).toBeVisible();
     await page.getByRole("button", { name: "Keluar" }).click(); await expect(page).toHaveURL(/\/peserta\/login$/);
     await page.goBack();

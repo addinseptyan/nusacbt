@@ -6,12 +6,13 @@ import { authenticateParticipant, endParticipantSession, participantCookieSecure
 import { parseParticipantCredentials } from "@/lib/participant-login-validation.mjs";
 
 export type ParticipantLoginState = { error: string };
-const AUTH_ERROR = "Periode, username, atau kata sandi tidak cocok, atau akses terkunci sementara. Hubungi pengawas jika masih tidak dapat masuk.";
+const AUTH_ERROR = "Username atau kata sandi tidak cocok, atau akses terkunci sementara. Hubungi pengawas jika masih tidak dapat masuk.";
 
 export async function participantLoginAction(_previous: ParticipantLoginState, form: FormData): Promise<ParticipantLoginState> {
-  const periods = form.getAll("period"); const usernames = form.getAll("username"); const passwords = form.getAll("password");
-  if (periods.length !== 1 || usernames.length !== 1 || passwords.length !== 1) return { error: AUTH_ERROR };
-  const credentials = parseParticipantCredentials(periods[0], usernames[0], passwords[0]);
+  const usernames = form.getAll("username"); const passwords = form.getAll("password");
+  if (usernames.length !== 1 || passwords.length !== 1) return { error: AUTH_ERROR };
+  // Field periode apa pun yang dikirim klien diabaikan; server menentukan sendiri.
+  const credentials = parseParticipantCredentials(usernames[0], passwords[0]);
   if (!credentials) return { error: AUTH_ERROR };
   let token: string | null;
   try {

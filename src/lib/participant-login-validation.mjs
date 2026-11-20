@@ -1,18 +1,18 @@
 import { createHash } from "node:crypto";
 
-import { validDataId } from "./class-validation.mjs";
 import { validateParticipantUsername } from "./participant-identity-validation.mjs";
 
 const TOKEN_FORMAT = /^[A-Za-z0-9_-]{43}$/;
 
-/** @param {unknown} period @param {unknown} username @param {unknown} password */
-export function parseParticipantCredentials(period, username, password) {
-  const periodId = validDataId(period);
+// Login tetap menerima sandi lama; aturan delapan huruf hanya untuk sandi baru/reset.
+// Periode tidak berasal dari formulir, melainkan diambil server di dalam transaksi.
+/** @param {unknown} username @param {unknown} password */
+export function parseParticipantCredentials(username, password) {
   if (typeof username !== "string" || username.length > 128) return null;
   const checked = validateParticipantUsername(username);
-  if (!periodId || !checked.ok || typeof password !== "string" || password.length < 1 ||
+  if (!checked.ok || typeof password !== "string" || password.length < 1 ||
       password.length > 256 || !password.isWellFormed() || Buffer.byteLength(password, "utf8") > 512) return null;
-  return { periodId, username: checked.value.toLowerCase(), password };
+  return { username: checked.value.toLowerCase(), password };
 }
 
 /** @param {string} periodId @param {string} normalizedUsername */

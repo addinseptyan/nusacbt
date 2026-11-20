@@ -198,8 +198,11 @@ test("enam gambar disimpan atomik, hanya admin dapat mengakses, dan perubahan ti
     let again = (await client.query(query, [topics[0]])).rows[0];
     expect(again.revision).toBe(revision);
     for (const key of ["prompt_hash", "a_hash", "b_hash", "c_hash", "d_hash", "e_hash"]) expect(again[key]).toBe(stored[key]);
+    // Tunggu editor kembali dapat diedit setelah transisi validasi selesai.
     // Penggantian sekaligus penghapusan pada slot sama ditolak tanpa perubahan.
-    await edit.getByRole("textbox", { name: "Isi soal", exact: true }).fill(`Teks pengganti ${tag}`);
+    const promptEditor = edit.getByRole("textbox", { name: "Isi soal", exact: true });
+    await expect(promptEditor).toHaveAttribute("contenteditable", "true");
+    await promptEditor.fill(`Teks pengganti ${tag}`);
     await edit.locator('input[name="remove_A"]').check();
     await edit.getByLabel("Gambar pilihan A", { exact: true }).setInputFiles({ name: "baru.jpg", mimeType: "image/jpeg", buffer: jpeg });
     await edit.getByRole("button", { name: "Simpan soal" }).click();
@@ -225,7 +228,9 @@ test("enam gambar disimpan atomik, hanya admin dapat mengakses, dan perubahan ti
     await edit.locator('input[name="remove_A"]').check();
     await edit.getByRole("button", { name: "Simpan soal" }).click();
     await expect(edit.getByRole("alert")).toContainText("Pilihan A harus berisi teks atau gambar");
-    await edit.getByLabel("Pilihan A", { exact: true }).fill("Pengganti gambar A");
+    const optionAEditor = edit.getByLabel("Pilihan A", { exact: true });
+    await expect(optionAEditor).toHaveAttribute("contenteditable", "true");
+    await optionAEditor.fill("Pengganti gambar A");
     await edit.getByRole("button", { name: "Simpan soal" }).click();
     await expect(edit).toBeHidden();
     const final = (await client.query(query, [topics[0]])).rows[0];

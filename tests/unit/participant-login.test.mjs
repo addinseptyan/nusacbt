@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { participantAttemptBucket, participantPageNumber, participantSessionDigest, parseParticipantCredentials } from "../../src/lib/participant-login-validation.mjs";
 
-test("kredensial memerlukan periode bigint dan username per periode; kapitalisasi dinormalisasi", () => {
-  assert.deepEqual(parseParticipantCredentials("17", "  Abc.07 ", "Password-fiktif-123"), { periodId: "17", username: "abc.07", password: "Password-fiktif-123" });
-  for (const period of [null, "0", "01", "-1", "9223372036854775808", "1 OR 1=1"]) assert.equal(parseParticipantCredentials(period, "abc", "a"), null);
-  for (const username of ["ab", "a b", "x' OR 1=1", null, "ééé", "x".repeat(65)]) assert.equal(parseParticipantCredentials("1", username, "a"), null);
-  for (const password of [null, "", "x".repeat(257), "🧪".repeat(129), "\ud800"]) assert.equal(parseParticipantCredentials("1", "abc", password), null);
-  assert.equal(parseParticipantCredentials("1", "abc", "🧪".repeat(128))?.password.length, 256);
+test("kredensial tidak menerima periode dari klien dan tetap menerima sandi lama", () => {
+  assert.deepEqual(parseParticipantCredentials("  Abc.07 ", "  Password-fiktif-123  "), { username: "abc.07", password: "  Password-fiktif-123  " });
+  assert.deepEqual(parseParticipantCredentials("abc", "ABCDEFGH"), { username: "abc", password: "ABCDEFGH" });
+  for (const username of ["ab", "a b", "x' OR 1=1", null, "ééé", "x".repeat(65)]) assert.equal(parseParticipantCredentials(username, "a"), null);
+  for (const password of [null, "", "x".repeat(257), "🧪".repeat(129), "\ud800"]) assert.equal(parseParticipantCredentials("abc", password), null);
+  assert.equal(parseParticipantCredentials("abc", "🧪".repeat(128))?.password.length, 256);
 });
 
 test("bucket terpisah menurut periode dan username serta tidak menyimpan input", () => {

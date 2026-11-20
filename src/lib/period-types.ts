@@ -3,4 +3,5 @@ export type ExamPeriod = {
   name: string;
   startDate: string;
   endDate: string | null;
+  revision: string;
 };
