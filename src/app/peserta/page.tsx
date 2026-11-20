@@ -45,7 +45,7 @@ export default async function ParticipantPage({ searchParams }: Props) {
           <div className="relative max-w-3xl">
             <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.12em] text-emerald-200 uppercase"><CheckCircle2 className="size-3.5" /> Berhasil masuk</p>
             <h1 className="mt-3 break-words text-[27px] leading-tight font-bold tracking-[-0.035em] sm:text-[34px]">Halo, {view.studentName}!</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-emerald-50/85">Periksa identitas dan jadwal pada periode yang kamu pilih. Jika ada yang tidak sesuai, hubungi pengawas.</p>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-emerald-50/85">Periksa identitas dan jadwal pada periode yang diaktifkan admin. Jika ada yang tidak sesuai, hubungi pengawas.</p>
           </div>
         </section>
 
@@ -64,12 +64,12 @@ export default async function ParticipantPage({ searchParams }: Props) {
 
           <Card className="min-w-0 gap-0 rounded-[22px] border-border p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"><CalendarDays className="size-5" /></span><div><h2 className="text-base font-bold">Jadwal tes</h2><p className="text-xs leading-5 text-muted-foreground">{view.total} tes dalam periode ini</p></div></div>
+              <div className="flex min-w-0 items-center gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"><CalendarDays className="size-5" /></span><div><h2 className="text-base font-bold">Jadwal tes</h2><p className="text-xs leading-5 text-muted-foreground">{view.total} jadwal untukmu dalam periode ini</p></div></div>
               <Button asChild variant="outline" className="h-9 rounded-xl px-3 text-xs font-semibold"><a href={`/peserta?halaman=${view.page}`}><RefreshCw className="size-3.5" /> Muat ulang</a></Button>
             </div>
             <Alert className="mt-5 rounded-xl border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               <Info className="size-4" /><AlertTitle>Informasi jadwal</AlertTitle>
-              <AlertDescription className="text-xs leading-5">Semua rancangan tes dalam periode ini ditampilkan, belum dibatasi kelas atau kategori. Soal dan tombol mulai belum tersedia.</AlertDescription>
+              <AlertDescription className="text-xs leading-5">Hanya jadwal yang telah dirilis admin untukmu yang ditampilkan. Soal dan tombol mulai belum tersedia.</AlertDescription>
             </Alert>
             {view.tests.length === 0 ? (
               <div className="py-12 text-center"><CalendarDays className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-3 text-sm font-semibold">Belum ada jadwal tes</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Jadwal untuk periode ini akan muncul di sini.</p></div>
@@ -81,6 +81,7 @@ export default async function ParticipantPage({ searchParams }: Props) {
                       <h3 className="min-w-0 break-words text-sm leading-6 font-bold">{test.name}</h3>
                       <Badge variant="outline" className={test.status === "Berlangsung" ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" : test.status === "Berakhir" ? "bg-muted text-muted-foreground" : "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"}>{test.status}</Badge>
                     </div>
+                    <p className="mt-1 break-words text-xs text-muted-foreground">{test.kind === "regular" ? "Reguler" : test.kind === "makeup" ? "Susulan" : "Remidi"} · {test.label}</p>
                     <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs leading-5 text-muted-foreground">
                       <span className="inline-flex items-start gap-1.5"><CalendarDays className="mt-0.5 size-3.5 shrink-0" /> Mulai {test.startLocal} {test.zone}</span>
                       <span className="inline-flex items-start gap-1.5"><Clock3 className="mt-0.5 size-3.5 shrink-0" /> {test.durationMinutes} menit · berakhir {test.endLocal} {test.zone}</span>

@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 
 import { displayToken, TOKEN_COLUMNS, TOKEN_JOINS, type TokenRow } from "@/app/data-tes/token/token-data";
 import { TokenManager } from "@/app/data-tes/token/token-manager";
+import { TOKEN_SCHEDULE_LATERAL } from "@/app/data-tes/token/token-schedule-sql";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
 import { parseTokenDateFilter, parseTokenZone, tokenDayBounds, tokenPageNumber } from "@/lib/exam-token-date.mjs";
@@ -17,8 +18,6 @@ const TESTS_PER_PAGE = 20;
 class SessionExpired extends Error {}
 type TestRow = Omit<AccessTokenTestOption, "startsAt" | "endsAt"> & { startsAt: Date; endsAt: Date };
 type QueryParams = { tanggal?: string | string[]; zona?: string | string[]; halaman?: string | string[] };
-const TEST_WHERE = `t.starts_at + t.duration_minutes * interval '1 minute' > $1::timestamptz
-  AND ($2::timestamptz IS NULL OR (t.starts_at < $3::timestamptz AND t.starts_at + t.duration_minutes * interval '1 minute' > $2::timestamptz))`;
 
 export default async function TokenPage({ searchParams }: { searchParams: Promise<QueryParams> }) {
   await requireAdmin();
@@ -39,14 +38,14 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
     const now = clock.rows[0].now; filter = parseTokenDateFilter(params.tanggal, now, zone);
     const bounds = filter.date ? tokenDayBounds(filter.date, zone) : null;
     const args = [now, bounds?.start ?? null, bounds?.end ?? null];
-    const count = await client.query<{ total: string }>(`SELECT count(*)::text AS total FROM exam_tests t WHERE ${TEST_WHERE}`, args);
+    const count = await client.query<{ total: string }>(`SELECT count(*)::text AS total FROM exam_tests t ${TOKEN_SCHEDULE_LATERAL}`, args);
     total = Math.min(Number(count.rows[0].total), Number.MAX_SAFE_INTEGER);
     pages = Math.max(1, Math.ceil(total / TESTS_PER_PAGE)); page = Math.min(rawPage, pages);
     const testResult = await client.query<TestRow>(
-      `SELECT t.id::text AS id,t.xmin::text AS revision,t.name,p.name AS "periodName",t.starts_at AS "startsAt",
-         t.starts_at + t.duration_minutes * interval '1 minute' AS "endsAt",t.time_zone AS "timeZone"
-       FROM exam_tests t JOIN exam_periods p ON p.id=t.period_id WHERE ${TEST_WHERE}
-       ORDER BY (t.starts_at <= $1::timestamptz) DESC,t.starts_at,t.id LIMIT $4 OFFSET $5`,
+      `SELECT t.id::text AS id,t.xmin::text AS revision,t.name,p.name AS "periodName",sched.starts_at AS "startsAt",
+         sched.ends_at AS "endsAt",sched.time_zone AS "timeZone",sched.label AS "scheduleLabel",sched.kind AS "scheduleKind",sched.published AS "schedulePublished"
+       FROM exam_tests t JOIN exam_periods p ON p.id=t.period_id ${TOKEN_SCHEDULE_LATERAL}
+       ORDER BY (sched.starts_at <= $1::timestamptz) DESC,sched.starts_at,t.id LIMIT $4 OFFSET $5`,
       [...args, TESTS_PER_PAGE, (page - 1) * TESTS_PER_PAGE],
     );
     const ids = testResult.rows.map((row) => row.id);

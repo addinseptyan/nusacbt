@@ -1,6 +1,7 @@
 export type AccessTokenScope = "global" | "test";
 export type TokenKeyStatus = "ready" | "missing" | "invalid" | "same" | "mismatch" | "inconsistent";
-export type AccessTokenTestOption = { id: string; revision: string; name: string; periodName: string; startsAt: string; endsAt: string; timeZone: string };
+export type AccessTokenTestOption = { id: string; revision: string; name: string; periodName: string; startsAt: string; endsAt: string; timeZone: string;
+  scheduleLabel: string | null; scheduleKind: "regular" | "makeup" | "remedial" | null; schedulePublished: boolean };
 export type AccessTokenRecord = {
   id: string; revision: string; scope: AccessTokenScope; testId: string | null;
   testNameSnapshot: string | null; currentTestName: string | null; periodName: string | null; testEndsAt: string | null;
