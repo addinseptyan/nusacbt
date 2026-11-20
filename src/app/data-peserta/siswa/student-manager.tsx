@@ -68,7 +68,8 @@ function StudentEditor({ student, open, onOpenChange }: { student: Student | nul
           {error && <Alert variant="destructive" role="alert"><Info className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
           <div className="space-y-2">
             <label htmlFor="student-name" className="text-sm font-semibold">Nama siswa <span className="text-destructive">*</span></label>
-            <Input id="student-name" name="name" maxLength={200} defaultValue={student?.name ?? ""} placeholder="Nama lengkap siswa" required disabled={pending} className="h-11 rounded-xl" />
+            <Input id="student-name" name="name" maxLength={200} defaultValue={student?.name ?? ""} placeholder="Nama lengkap siswa" required disabled={pending} aria-describedby="student-name-help" className="h-11 rounded-xl" />
+            <p id="student-name-help" className="text-[11px] leading-5 text-muted-foreground">Nama disimpan dengan HURUF KAPITAL. Nama lama hanya berubah jika disimpan ulang.</p>
           </div>
           <div className="space-y-2">
             <label htmlFor="student-nisn" className="text-sm font-semibold">NISN <span className="text-destructive">*</span></label>

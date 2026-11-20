@@ -12,6 +12,11 @@ function classKey(value) {
   return value.normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
+// Hanya untuk membandingkan; nama lama yang tersimpan tidak ditulis ulang.
+function studentNameKey(value) {
+  return value.trim().normalize("NFC").toUpperCase().normalize("NFC");
+}
+
 function nonEmptyCell(cell) {
   return cell.kind === "formula" || cell.kind === "other" || cell.value.trim() !== "";
 }
@@ -72,10 +77,15 @@ export function planStudentImport(rows, classes, students, placements) {
     const classText = textCell(row.cells[3], "Kelas", issues);
     const parsedName = validateStudentName(nameText);
     const parsedNisn = validateNisn(nisnText);
-    if (nameText && !parsedName.ok) issues.push(parsedName.error);
+    const student = parsedNisn.ok ? (studentsByNisn.get(parsedNisn.value) ?? null) : null;
+    const comparableName = nameText.trim();
+    const validForComparison = Boolean(comparableName) && comparableName.isWellFormed() && !/[\u0000-\u001f\u007f]/.test(comparableName);
+    const sameName = Boolean(student && validForComparison && studentNameKey(student.name) === studentNameKey(comparableName));
+    // Nama lama tidak disimpan ulang, sehingga tetap dapat dicocokkan walau
+    // kapitalisasi Unicode memperpanjang hasilnya melewati batas nama baru.
+    if (nameText && !parsedName.ok && !sameName) issues.push(parsedName.error);
     if (nameText && !nameText.isWellFormed()) issues.push("Nama mengandung karakter Unicode yang tidak valid.");
     if (nisnText && !parsedNisn.ok) issues.push(parsedNisn.error);
-    const name = nameText.trim();
     const nisn = nisnText.trim();
     const className = classText.trim().replace(/\s+/gu, " ");
     if (row.cells.slice(4).some(nonEmptyCell)) issues.push("Kolom tambahan tidak didukung; gunakan empat kolom template.");
@@ -93,11 +103,12 @@ export function planStudentImport(rows, classes, students, placements) {
         else schoolClass = matches[0];
       }
     }
-    const student = parsedNisn.ok ? (studentsByNisn.get(parsedNisn.value) ?? null) : null;
     const placement = student ? (placementsByStudent.get(student.id) ?? null) : null;
-    if (student && parsedName.ok && student.name.normalize("NFC") !== parsedName.value.normalize("NFC")) {
+    if (student && parsedName.ok && !sameName) {
       issues.push(`Nama berbeda dengan data siswa yang sudah ada (${student.name}). Periksa data sebelum melanjutkan.`);
     }
+    // Pratinjau menampilkan nama yang benar-benar akan dipertahankan/disimpan.
+    const name = sameName && student ? student.name : parsedName.ok ? parsedName.value : nameText.trim();
     if (schoolClass && placement && placement.classId !== schoolClass.id) {
       const activeName = classesById.get(placement.classId)?.label ?? placement.classNameSnapshot;
       issues.push(`Kelas aktif di periode ini adalah ${activeName}, berbeda dari Excel. Ubah penempatan secara manual atau perbaiki file.`);

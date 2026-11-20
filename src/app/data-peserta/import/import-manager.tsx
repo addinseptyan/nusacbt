@@ -115,7 +115,7 @@ export function ImportManager({ periods, classCount }: { periods: PlacementPerio
       <Alert className="rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
         <Info className="size-4 text-[#727fc8] dark:text-indigo-300" />
         <AlertTitle className="text-[12px] font-bold">Impor aman dengan pratinjau</AlertTitle>
-        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Siswa lama tidak ditimpa. Jika nama atau kelas aktif berbeda, perbaiki konfliknya terlebih dahulu. Semua baris harus lolos sebelum disimpan bersama.</AlertDescription>
+        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Nama siswa baru disimpan dengan HURUF KAPITAL. Siswa lama tidak ditimpa; perbedaan huruf besar/kecil saja bukan konflik. Jika nama atau kelas aktif berbeda, perbaiki konfliknya. Semua baris harus lolos sebelum disimpan bersama.</AlertDescription>
       </Alert>
       {!ready && <Alert className="rounded-2xl"><Info className="size-4" /><AlertTitle>Siapkan periode dan kelas</AlertTitle><AlertDescription>Buat <Link href="/data-peserta/periode" className="font-semibold text-primary underline">periode</Link> dan <Link href="/data-peserta/kelas" className="font-semibold text-primary underline">kelas</Link> terlebih dahulu.</AlertDescription></Alert>}
       {error && <Alert variant="destructive" role="alert" className="rounded-2xl"><CircleAlert className="size-4" /><AlertTitle>Perlu diperiksa</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}

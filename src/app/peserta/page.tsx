@@ -1,8 +1,9 @@
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, GraduationCap, Info, LogOut, RefreshCw, UserRound } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, GraduationCap, Info, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { participantLogoutAction } from "@/app/peserta/login/actions";
+import { RefreshScheduleButton } from "@/app/peserta/refresh-schedule-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -65,7 +66,7 @@ export default async function ParticipantPage({ searchParams }: Props) {
           <Card className="min-w-0 gap-0 rounded-[22px] border-border p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"><CalendarDays className="size-5" /></span><div><h2 className="text-base font-bold">Jadwal tes</h2><p className="text-xs leading-5 text-muted-foreground">{view.total} jadwal untukmu dalam periode ini</p></div></div>
-              <Button asChild variant="outline" className="h-9 rounded-xl px-3 text-xs font-semibold"><a href={`/peserta?halaman=${view.page}`}><RefreshCw className="size-3.5" /> Muat ulang</a></Button>
+              <RefreshScheduleButton page={view.page} />
             </div>
             <Alert className="mt-5 rounded-xl border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               <Info className="size-4" /><AlertTitle>Informasi jadwal</AlertTitle>

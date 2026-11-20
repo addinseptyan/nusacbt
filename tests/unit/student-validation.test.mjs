@@ -3,11 +3,14 @@ import test from "node:test";
 
 import { validateNisn, validateStudentInput, validateStudentName } from "../../src/lib/student-validation.mjs";
 
-test("nama siswa wajib, dibersihkan, dan dibatasi 100 karakter tanpa karakter kontrol", () => {
-  assert.deepEqual(validateStudentName("  Siswa Contoh  "), { ok: true, value: "Siswa Contoh" });
+test("nama siswa disimpan kapital dan dibatasi setelah konversi Unicode", () => {
+  assert.deepEqual(validateStudentName("  Siswa Contoh  "), { ok: true, value: "SISWA CONTOH" });
+  assert.deepEqual(validateStudentName("Éka Straße 李"), { ok: true, value: "ÉKA STRASSE 李" });
   assert.equal(validateStudentName("x".repeat(100)).ok, true);
   assert.equal(validateStudentName("x".repeat(101)).ok, false);
-  for (const value of ["", "   ", "A\nB", "A\u0000B", null, 123]) {
+  assert.equal(validateStudentName("ß".repeat(50)).ok, true);
+  assert.equal(validateStudentName("ß".repeat(51)).ok, false);
+  for (const value of ["", "   ", "A\nB", "A\u0000B", "A\ud800B", null, 123]) {
     assert.equal(validateStudentName(value).ok, false);
   }
 });
@@ -23,7 +26,7 @@ test("NISN wajib tepat sepuluh digit dan tetap berbentuk teks dengan nol di depa
 test("validasi siswa mengembalikan nilai yang sudah dibersihkan", () => {
   assert.deepEqual(validateStudentInput({ name: "  Contoh Siswa A  ", nisn: " 0000000001 " }), {
     ok: true,
-    value: { name: "Contoh Siswa A", nisn: "0000000001" },
+    value: { name: "CONTOH SISWA A", nisn: "0000000001" },
   });
   assert.equal(validateStudentInput({ name: "", nisn: "0000000001" }).ok, false);
   assert.equal(validateStudentInput({ name: "Contoh", nisn: "1" }).ok, false);
