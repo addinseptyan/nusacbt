@@ -1,0 +1,212 @@
+import "server-only";
+import type { PoolClient } from "pg";
+
+import { EXAM_OPTION_IDS, validExamOptionOrder } from "@/lib/exam-attempt-validation.mjs";
+import { lockParticipantSession, participantCandidate, participantSessionHash, participantSessionStillActive } from "@/lib/participant-session-lock";
+import { getPostgresPool } from "@/lib/postgres";
+
+type AttemptRow = {
+  id: string; testName: string; runLabel: string; deadline: Date; questionCount: number;
+  completedAt: Date | null; completionReason: "submitted" | "time_expired" | null; expired: boolean; now: Date;
+};
+type OptionContent = { text: string; rich: unknown | null; hasImage: boolean };
+type RawQuestion = {
+  position: number; answer: string | null; revision: string; order: string;
+  prompt: string; promptRich: unknown | null; hasPromptImage: boolean; options: Record<string, OptionContent>;
+};
+export type AttemptView =
+  | { state: "finished"; testName: string; runLabel: string; reason: "submitted" | "time_expired" }
+  | { state: "working"; attemptId: string; testName: string; runLabel: string; deadline: string; serverNow: string;
+      total: number; position: number; answered: number; navigation: { position: number; answered: boolean }[];
+      question: { prompt: string; promptRich: unknown | null; hasPromptImage: boolean; answer: string | null; revision: string;
+        options: { id: string; label: string; text: string; rich: unknown | null; hasImage: boolean }[] } };
+export type WorkResult = { ok: true; revision?: string; answer?: string | null } | { ok: false; error: string; login?: boolean; closed?: boolean; reload?: boolean };
+
+class WorkProblem extends Error {
+  constructor(message: string, readonly login = false, readonly closed = false, readonly reload = false) { super(message); }
+}
+const LOGIN = "Sesi peserta sudah berakhir. Masuk kembali.";
+const NOT_FOUND = "Pengerjaan tidak ditemukan atau bukan milik sesi ini.";
+
+async function lockAttempt(client: PoolClient, attemptId: string, identityId: string): Promise<AttemptRow | null> {
+  const result = await client.query<AttemptRow>(
+    `SELECT id::text AS id,test_name_snapshot AS "testName",run_label_snapshot AS "runLabel",deadline,
+       question_count AS "questionCount",completed_at AS "completedAt",completion_reason AS "completionReason",
+       deadline<=clock_timestamp() AS expired,clock_timestamp() AS now
+     FROM exam_attempts WHERE id=$1::bigint AND participant_identity_id=$2::bigint FOR UPDATE`, [attemptId, identityId],
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Caller memegang FOR UPDATE atas attempt; hanya jawaban yang sudah commit dihitung. */
+async function completeLockedAttempt(client: PoolClient, attempt: AttemptRow, requested: "submitted" | "time_expired") {
+  if (attempt.completedAt) return;
+  const counts = await client.query<{ total: number; answered: number; correct: number }>(
+    `SELECT count(*)::int AS total,count(aq.answer)::int AS answered,
+       count(*) FILTER (WHERE aq.answer=s.correct_option)::int AS correct
+     FROM exam_attempt_questions aq JOIN exam_question_snapshots s ON s.id=aq.snapshot_id WHERE aq.attempt_id=$1::bigint`, [attempt.id],
+  );
+  const { total, answered, correct } = counts.rows[0];
+  if (total !== attempt.questionCount || correct > answered || answered > total) throw new Error("Jumlah snapshot attempt tidak konsisten.");
+  await client.query(
+    `WITH moment AS (SELECT clock_timestamp() AS now)
+     UPDATE exam_attempts a SET
+       completed_at=GREATEST(a.started_at,LEAST(moment.now,a.deadline)),
+       completion_reason=CASE WHEN moment.now>=a.deadline OR $4='time_expired' THEN 'time_expired' ELSE 'submitted' END,
+       correct_count=$2::integer,answered_count=$3::integer
+     FROM moment WHERE a.id=$1::bigint AND a.completed_at IS NULL`,
+    [attempt.id, correct, answered, requested],
+  );
+}
+
+async function finishIfExpired(client: PoolClient, attempt: AttemptRow) {
+  if (!attempt.completedAt && attempt.expired) {
+    await completeLockedAttempt(client, attempt, "time_expired");
+    return true;
+  }
+  return false;
+}
+
+async function authenticatedAttempt(client: PoolClient, hash: Buffer, attemptId: string) {
+  const candidate = await participantCandidate(client, hash);
+  const participant = candidate && await lockParticipantSession(client, hash, candidate);
+  if (!participant) throw new WorkProblem(LOGIN, true);
+  const attempt = await lockAttempt(client, attemptId, participant.identityId);
+  if (!attempt) throw new WorkProblem(NOT_FOUND);
+  return { participant, attempt };
+}
+
+function checkedOptions(raw: RawQuestion) {
+  if (!validExamOptionOrder(raw.order) || typeof raw.options !== "object" || raw.options === null) throw new Error("Urutan pilihan snapshot tidak valid.");
+  return [...raw.order].map((id, index) => {
+    const item = raw.options[id];
+    if (!item || typeof item.text !== "string" || typeof item.hasImage !== "boolean") throw new Error("Pilihan snapshot tidak lengkap.");
+    return { id, label: EXAM_OPTION_IDS[index], text: item.text, rich: item.rich ?? null, hasImage: item.hasImage };
+  });
+}
+
+/** Tidak pernah mengembalikan kunci jawaban atau hasil nilai ke peserta. */
+export async function loadExamAttempt(attemptId: string, requestedPosition: number): Promise<AttemptView | "login" | "missing"> {
+  const hash = await participantSessionHash(); if (!hash) return "login";
+  const client = await getPostgresPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { participant, attempt } = await authenticatedAttempt(client, hash, attemptId);
+    const justExpired = await finishIfExpired(client, attempt);
+    if (attempt.completedAt || justExpired) {
+      if (!await participantSessionStillActive(client, hash, participant)) throw new WorkProblem(LOGIN, true);
+      await client.query("COMMIT");
+      return { state: "finished", testName: attempt.testName, runLabel: attempt.runLabel,
+        reason: justExpired ? "time_expired" : attempt.completionReason! };
+    }
+    const position = Math.min(Math.max(1, requestedPosition), attempt.questionCount);
+    const navigation = (await client.query<{ position: number; answered: boolean }>(
+      "SELECT position,answer IS NOT NULL AS answered FROM exam_attempt_questions WHERE attempt_id=$1::bigint ORDER BY position", [attempt.id],
+    )).rows;
+    if (navigation.length !== attempt.questionCount) throw new Error("Snapshot attempt tidak lengkap.");
+    const question = (await client.query<RawQuestion>(
+      `SELECT aq.position,aq.answer,aq.answer_revision::text AS revision,aq.option_order AS "order",
+       s.prompt_text AS prompt,s.prompt_rich AS "promptRich",s.has_prompt_image AS "hasPromptImage",s.options
+       FROM exam_attempt_questions aq JOIN exam_question_snapshots s ON s.id=aq.snapshot_id
+       WHERE aq.attempt_id=$1::bigint AND aq.position=$2::integer`, [attempt.id, position],
+    )).rows[0];
+    if (!question) throw new Error("Soal snapshot tidak tersedia.");
+    const options = checkedOptions(question);
+    if (!await participantSessionStillActive(client, hash, participant)) throw new WorkProblem(LOGIN, true);
+    // Jika waktu habis selama loading, jangan kirim soal untuk attempt tertutup.
+    const now = (await client.query<{ now: Date; expired: boolean }>("SELECT clock_timestamp() AS now,deadline<=clock_timestamp() AS expired FROM exam_attempts WHERE id=$1::bigint", [attempt.id])).rows[0];
+    if (now.expired) {
+      await completeLockedAttempt(client, attempt, "time_expired"); await client.query("COMMIT");
+      return { state: "finished", testName: attempt.testName, runLabel: attempt.runLabel, reason: "time_expired" };
+    }
+    await client.query("COMMIT");
+    return { state: "working", attemptId: attempt.id, testName: attempt.testName, runLabel: attempt.runLabel,
+      deadline: attempt.deadline.toISOString(), serverNow: now.now.toISOString(), total: attempt.questionCount, position,
+      answered: navigation.filter((item) => item.answered).length, navigation,
+      question: { prompt: question.prompt, promptRich: question.promptRich, hasPromptImage: question.hasPromptImage,
+        answer: question.answer, revision: question.revision, options } };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (error instanceof WorkProblem) return error.login ? "login" : "missing";
+    throw error;
+  } finally { client.release(); }
+}
+
+/** Revision melindungi tab usang; retry respons hilang tetap idempoten. */
+export async function saveExamAnswer(attemptId: string, position: number, desired: string | null, expectedRevision: string): Promise<WorkResult> {
+  const hash = await participantSessionHash(); if (!hash) return { ok: false, error: LOGIN, login: true };
+  const client = await getPostgresPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { participant, attempt } = await authenticatedAttempt(client, hash, attemptId);
+    if (attempt.completedAt || await finishIfExpired(client, attempt)) {
+      if (!await participantSessionStillActive(client, hash, participant)) throw new WorkProblem(LOGIN, true);
+      await client.query("COMMIT"); return { ok: false, error: "Waktu habis atau tes sudah selesai.", closed: true };
+    }
+    const found = await client.query<{ answer: string | null; revision: string }>(
+      'SELECT answer,answer_revision::text AS revision FROM exam_attempt_questions WHERE attempt_id=$1::bigint AND position=$2::integer FOR UPDATE', [attempt.id, position],
+    );
+    const row = found.rows[0]; if (!row) throw new WorkProblem("Nomor soal tidak ditemukan.", false, false, true);
+    let revision = row.revision;
+    if (revision === expectedRevision) {
+      if (row.answer !== desired) {
+        const changed = await client.query<{ revision: string }>(
+          `UPDATE exam_attempt_questions SET answer=$3,answer_revision=answer_revision+1,answered_at=clock_timestamp()
+           WHERE attempt_id=$1::bigint AND position=$2::integer RETURNING answer_revision::text AS revision`, [attempt.id, position, desired],
+        );
+        revision = changed.rows[0].revision;
+      }
+    } else if (!(BigInt(revision) === BigInt(expectedRevision) + BigInt(1) && row.answer === desired)) {
+      throw new WorkProblem("Jawaban telah berubah pada tab atau perangkat lain. Muat ulang untuk memeriksanya.", false, false, true);
+    }
+    if (!await participantSessionStillActive(client, hash, participant)) throw new WorkProblem(LOGIN, true);
+    const remaining = await client.query("SELECT 1 FROM exam_attempts WHERE id=$1::bigint AND deadline>clock_timestamp() AND completed_at IS NULL", [attempt.id]);
+    if (!remaining.rowCount) throw new WorkProblem("Waktu habis sebelum jawaban dikonfirmasi tersimpan.", false, true);
+    await client.query("COMMIT"); return { ok: true, revision, answer: desired };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (error instanceof WorkProblem) return { ok: false, error: error.message, login: error.login || undefined, closed: error.closed || undefined, reload: error.reload || undefined };
+    return { ok: false, error: "Jawaban belum dapat dipastikan tersimpan. Coba simpan lagi; jangan anggap aman sebelum ada konfirmasi." };
+  } finally { client.release(); }
+}
+
+/** Gambar snapshot hanya untuk attempt dan sesi peserta pemilik yang masih aktif. */
+export async function loadExamAttemptImage(attemptId: string, position: number, slot: string): Promise<{ data: Buffer; mime: string } | null> {
+  const hash = await participantSessionHash(); if (!hash) return null;
+  const client = await getPostgresPool().connect();
+  try {
+    await client.query("BEGIN");
+    const candidate = await participantCandidate(client, hash);
+    const participant = candidate && await lockParticipantSession(client, hash, candidate);
+    if (!participant) { await client.query("ROLLBACK"); return null; }
+    const image = await client.query<{ data: Buffer; mime: string }>(
+      `SELECT img.data,img.mime FROM exam_attempts a
+       JOIN exam_attempt_questions aq ON aq.attempt_id=a.id
+       JOIN exam_question_snapshot_images img ON img.snapshot_id=aq.snapshot_id
+       WHERE a.id=$1::bigint AND a.participant_identity_id=$2::bigint AND a.completed_at IS NULL
+         AND a.deadline>clock_timestamp() AND aq.position=$3::integer AND img.slot=$4 FOR SHARE OF a`,
+      [attemptId, participant.identityId, position, slot],
+    );
+    if (!await participantSessionStillActive(client, hash, participant)) { await client.query("ROLLBACK"); return null; }
+    const active = await client.query("SELECT 1 FROM exam_attempts WHERE id=$1::bigint AND completed_at IS NULL AND deadline>clock_timestamp()", [attemptId]);
+    await client.query("COMMIT");
+    return active.rowCount ? image.rows[0] ?? null : null;
+  } catch (error) { await client.query("ROLLBACK").catch(() => {}); throw error; }
+  finally { client.release(); }
+}
+
+export async function submitExamAttempt(attemptId: string): Promise<WorkResult> {
+  const hash = await participantSessionHash(); if (!hash) return { ok: false, error: LOGIN, login: true };
+  const client = await getPostgresPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { participant, attempt } = await authenticatedAttempt(client, hash, attemptId);
+    if (!attempt.completedAt) await completeLockedAttempt(client, attempt, attempt.expired ? "time_expired" : "submitted");
+    if (!await participantSessionStillActive(client, hash, participant)) throw new WorkProblem(LOGIN, true);
+    await client.query("COMMIT"); return { ok: true };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (error instanceof WorkProblem) return { ok: false, error: error.message, login: error.login || undefined };
+    return { ok: false, error: "Hasil penyelesaian belum dapat dipastikan. Muat ulang untuk memeriksa sebelum mencoba lagi." };
+  } finally { client.release(); }
+}

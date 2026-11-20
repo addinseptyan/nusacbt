@@ -5,7 +5,7 @@ import { digestSixDigitToken } from "../../src/lib/exam-token-crypto.mjs";
 import { digestExamToken } from "../../src/lib/exam-token.mjs";
 import { loginAsAdmin } from "./helpers";
 import { sessionDigest, suffix, testDatabase } from "./question-helpers";
-import { cleanupTokens, confirmIssue, fixtureTokenKey, globalPanel, issueForm, makeTest, openTokenHistory, tokenBaseline, tokenRow, visibleCode } from "./token-helpers";
+import { cleanupTokens, confirmIssue, fixtureTokenKey, globalPanel, issueForm, makeTest, openTokenHistory, showAllTokenDates, tokenBaseline, tokenRow, visibleCode } from "./token-helpers";
 
 const BOUNDARY = "nusacbt-token-test-boundary";
 function multipart(entries: Array<[string, string]>) { return Buffer.from(entries.map(([key, value]) => `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`).join("") + `--${BOUNDARY}--\r\n`); }
@@ -48,6 +48,40 @@ test("aksi token menolak asal asing, anonim, field ganda, durasi lain, pengganti
     const replayAfterRevoke = await page.request.post("/data-tes/token", { headers: { ...headers, origin }, data: multipart(entries), failOnStatusCode: false }); expect(await replayAfterRevoke.text()).toContain("Permintaan ini sudah diselesaikan");
     expect((await client.query("SELECT id FROM exam_access_tokens WHERE scope='global'")).rowCount).toBe(1);
   } finally { key.fill(0); await cleanupTokens(client, before, []); await client.end(); }
+});
+
+test("replay penerbitan khusus tetap dilaporkan sudah selesai ketika tes berubah atau dihapus", async ({ page }) => {
+  test.setTimeout(60_000);
+  const client = testDatabase(); await client.connect(); const before = await tokenBaseline(client); const periods: string[] = [];
+  try {
+    const data = await makeTest(client, suffix()); periods.push(data.periodId);
+    await loginAsAdmin(page); await page.goto("/data-tes/token"); await showAllTokenDates(page);
+    await page.evaluate(() => {
+      const w = window as Window & { capturedTokenFields?: Array<[string, string]> }; const original = window.fetch.bind(window);
+      window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.body instanceof FormData) w.capturedTokenFields = Array.from(init.body.entries()).map(([key, value]) => {
+          if (typeof value !== "string") throw new Error("File tidak diharapkan."); return [key, value];
+        });
+        return original(input, init);
+      }) as typeof fetch;
+    });
+    const form = await issueForm(page, `tes ${data.testId}`);
+    const sent = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/data-tes/token");
+    await confirmIssue(form); const request = await sent;
+    const entries = await page.evaluate(() => (window as Window & { capturedTokenFields?: Array<[string, string]> }).capturedTokenFields ?? []);
+    expect(entries.length).toBeGreaterThan(4);
+    const action = request.headers()["next-action"]; if (!action) throw new Error("Identitas Server Action tidak tertangkap.");
+    const headers = { "content-type": `multipart/form-data; boundary=${BOUNDARY}`, "next-action": action, origin: "http://127.0.0.1:3100" };
+    const post = async (values: Array<[string, string]>) => (await page.request.post("/data-tes/token", { headers, data: multipart(values), failOnStatusCode: false })).text();
+    await client.query("UPDATE exam_tests SET name=name||' berubah' WHERE id=$1", [data.testId]);
+    expect(await post(entries)).toContain("Permintaan ini sudah diselesaikan");
+    expect(await post(change(entries, "operationId", randomUUID()))).toContain("Tes sudah berubah atau dihapus");
+    await client.query("DELETE FROM exam_tests WHERE id=$1", [data.testId]);
+    expect(await post(entries)).toContain("Permintaan ini sudah diselesaikan");
+    expect(await post(change(entries, "operationId", randomUUID()))).toContain("Tes sudah berubah atau dihapus");
+    expect((await client.query("SELECT id FROM exam_access_tokens WHERE scope='test'")).rowCount).toBe(1);
+    expect((await client.query("SELECT operation_id FROM exam_token_issue_operations")).rowCount).toBe(before.operations.length + 1);
+  } finally { await cleanupTokens(client, before, periods); await client.end(); }
 });
 
 test("constraint database menegakkan scope, masa, ciphertext, hash, dan satu slot per cakupan", async () => {

@@ -6,6 +6,7 @@ import type { PoolClient } from "pg";
 import { TOKEN_TEST_ELIGIBLE } from "@/app/data-tes/token/token-schedule-sql";
 import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
+import { EXAM_TOKEN_ADVISORY_LOCK } from "@/lib/exam-token-constants.mjs";
 import { digestSixDigitToken, encryptSixDigitToken, generateSixDigitToken } from "@/lib/exam-token-crypto.mjs";
 import { ExamTokenKeyProblem, lockTokenKeyBinding, readConfiguredTokenKey } from "@/lib/exam-token-key";
 import type { IssueTokenResult, ResolveTokenIssueResult, RevokeTokenResult } from "@/lib/exam-token-types";
@@ -13,15 +14,19 @@ import { EXAM_TOKEN_FORM_VERSION, validTokenOperationId, validateExamTokenCreati
 import { getPostgresPool } from "@/lib/postgres";
 import { validTopicRevision } from "@/lib/topic-validation.mjs";
 
-// Seluruh mutasi token memakai kunci transaksi yang sama. Modul mulai attempt
-// di masa depan harus menyinkronkan pemeriksaan prioritas/expiry dengan kunci
-// ini dalam transaksi yang sama agar penerbitan/pencabutan tidak berlomba.
-const TOKEN_LOCK = 2026111903;
+// Semua mutasi token dan mulai attempt memakai advisory lock yang sama.
+// Jika juga mengunci tes, urutannya adalah baris tes lalu advisory lock.
 class TokenProblem extends Error {
   constructor(message: string, readonly reload = false, readonly uncertain = false) { super(message); }
 }
 function hasSqlState(error: unknown, ...codes: string[]) {
   return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" && codes.includes(error.code);
+}
+
+async function lockUnusedTokenOperation(client: PoolClient, operationId: string) {
+  await client.query("SELECT pg_advisory_xact_lock($1)", [EXAM_TOKEN_ADVISORY_LOCK]);
+  const previous = await client.query("SELECT 1 FROM exam_token_issue_operations WHERE operation_id=$1::uuid", [operationId]);
+  if (previous.rowCount) throw new TokenProblem("Permintaan ini sudah diselesaikan. Periksa hasilnya sebelum melanjutkan.", true, true);
 }
 
 export async function issueExamToken(formData: FormData): Promise<IssueTokenResult> {
@@ -44,21 +49,25 @@ export async function issueExamToken(formData: FormData): Promise<IssueTokenResu
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new TokenProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
-    await client.query("SELECT pg_advisory_xact_lock($1)", [TOKEN_LOCK]);
-    // Permintaan yang sudah menghasilkan token atau diamankan tidak boleh
-    // diputar ulang, bahkan sesudah token sebelumnya dicabut/dihapus.
-    const previous = await client.query("SELECT 1 FROM exam_token_issue_operations WHERE operation_id=$1::uuid", [draft.operationId]);
-    if (previous.rowCount) throw new TokenProblem("Permintaan ini sudah diselesaikan. Periksa hasilnya sebelum melanjutkan.", true, true);
-    await lockTokenKeyBinding(client, key);
     let testName: string | null = null;
     if (draft.scope === "test") {
-      // FOR SHARE menjaga identitas/nama tes dan mencegah perubahan atau
-      // penghapusan hingga token selesai diterbitkan.
+      // Kunci tes sebelum advisory token, sama seperti mulai attempt. Baris
+      // tetap terkunci sehingga identitas dan revisinya tidak berubah.
       const test = await client.query<{ name: string; revision: string; eligible: boolean }>(`SELECT t.name, t.xmin::text AS revision, ${TOKEN_TEST_ELIGIBLE} AS eligible FROM exam_tests t WHERE t.id=$1::bigint FOR SHARE OF t`, [draft.testId]);
-      if (!test.rowCount || test.rows[0].revision !== draft.testRevision) throw new TokenProblem("Tes sudah berubah atau dihapus. Muat ulang daftar sebelum membuat token.", true);
-      if (!test.rows[0].eligible) throw new TokenProblem("Jadwal tes sudah berakhir. Muat ulang daftar sebelum membuat token.", true);
+      if (!test.rowCount || test.rows[0].revision !== draft.testRevision || !test.rows[0].eligible) {
+        // Walau tes sudah berubah/hilang, operasi lama mungkin baru saja
+        // berhasil. Tunggu penyelesaiannya dan cek pagar sebelum menyimpulkan.
+        await lockUnusedTokenOperation(client, draft.operationId);
+        throw new TokenProblem(!test.rowCount || test.rows[0].revision !== draft.testRevision
+          ? "Tes sudah berubah atau dihapus. Muat ulang daftar sebelum membuat token."
+          : "Jadwal tes sudah berakhir. Muat ulang daftar sebelum membuat token.", true);
+      }
       testName = test.rows[0].name;
     }
+    // Pagar diperiksa di bawah lock bahkan ketika tes valid; replay yang
+    // bersamaan harus menunggu hasil transaksi pertama.
+    await lockUnusedTokenOperation(client, draft.operationId);
+    await lockTokenKeyBinding(client, key);
     const current = await client.query<{ id: string; active: boolean }>(
       `SELECT id::text AS id, expires_at > clock_timestamp() AS active FROM exam_access_tokens
        WHERE scope=$1 AND (($1='global' AND exam_test_id IS NULL) OR ($1='test' AND exam_test_id=$2::bigint))
@@ -128,7 +137,7 @@ export async function resolveUncertainTokenIssue(formData: FormData): Promise<Re
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new TokenProblem("Sesi admin sudah berakhir. Masuk kembali untuk memeriksa permintaan.");
-    await client.query("SELECT pg_advisory_xact_lock($1)", [TOKEN_LOCK]);
+    await client.query("SELECT pg_advisory_xact_lock($1)", [EXAM_TOKEN_ADVISORY_LOCK]);
     await client.query("INSERT INTO exam_token_issue_operations(operation_id,result) VALUES($1::uuid,'cancelled') ON CONFLICT (operation_id) DO NOTHING", [operationId]);
     const result = await client.query<{ outcome: "issued" | "cancelled"; tokenId: string | null }>(
       "SELECT result AS outcome, token_id::text AS \"tokenId\" FROM exam_token_issue_operations WHERE operation_id=$1::uuid", [operationId],
@@ -160,7 +169,7 @@ export async function revokeExamToken(formData: FormData): Promise<RevokeTokenRe
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new TokenProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
-    await client.query("SELECT pg_advisory_xact_lock($1)", [TOKEN_LOCK]);
+    await client.query("SELECT pg_advisory_xact_lock($1)", [EXAM_TOKEN_ADVISORY_LOCK]);
     const result = await client.query<{ revision: string; active: boolean; scope: "global" | "test"; testId: string | null; revokedAt: Date | null }>(
       `SELECT xmin::text AS revision, expires_at > clock_timestamp() AS active, scope, exam_test_id::text AS "testId", revoked_at AS "revokedAt"
        FROM exam_access_tokens WHERE id=$1::bigint FOR UPDATE`, [id],

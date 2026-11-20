@@ -27,6 +27,7 @@ export type ParticipantSchedule = {
   id: string; name: string; label: string; kind: "regular" | "makeup" | "remedial"; sessionNumber: number | null;
   startLocal: string; endLocal: string; zone: "WIB" | "WITA" | "WIT";
   durationMinutes: number; status: "Belum dimulai" | "Berlangsung" | "Berakhir";
+  attemptId: string | null; attemptCompleted: boolean;
 };
 export type ParticipantView = {
   studentName: string; username: string; participantNumber: string; className: string; periodName: string;
@@ -217,7 +218,7 @@ export async function participantView(requestedPage: number): Promise<Participan
   // Tidak ada join ke soal, jawaban, token, atau data peserta lain.
   const result = await getPostgresPool().query<ParticipantView>(
     `WITH auth AS (
-       SELECT i.period_id, st.id AS student_id, st.name AS "studentName", i.username, i.participant_number AS "participantNumber",
+       SELECT i.id AS identity_id, i.period_id, st.id AS student_id, st.name AS "studentName", i.username, i.participant_number AS "participantNumber",
          c.level || ' ' || m.name AS "className", ep.name AS "periodName"
        FROM participant_sessions sess
        JOIN participant_identities i ON i.id = sess.participant_identity_id
@@ -234,9 +235,11 @@ export async function participantView(requestedPage: number): Promise<Participan
      ), visible AS (
        -- Pembatasan terjadi pada server, berdasarkan identitas siswa dan
        -- periode dari sesi; parameter browser tidak dapat memilih siswa lain.
-       SELECT r.id,r.exam_test_id,r.label,r.kind,r.session_number,r.starts_at,r.time_zone,r.duration_minutes
+       SELECT r.id,r.exam_test_id,r.label,r.kind,r.session_number,r.starts_at,r.time_zone,r.duration_minutes,
+         att.id AS attempt_id, (att.completed_at IS NOT NULL) AS attempt_completed
        FROM exam_schedule_runs r JOIN exam_schedule_participants p ON p.run_id=r.id
        JOIN auth a ON a.period_id=r.period_id AND a.student_id=p.student_id
+       LEFT JOIN exam_attempts att ON att.run_id=r.id AND att.participant_identity_id=a.identity_id
        WHERE r.published_at IS NOT NULL
      ), counts AS (
        SELECT count(*)::int AS total FROM visible
@@ -248,6 +251,7 @@ export async function participantView(requestedPage: number): Promise<Participan
        pi.total, pi.page, pi.pages,
        COALESCE((SELECT json_agg(d) FROM (
          SELECT v.id::text AS id, e.name, v.label, v.kind, v.session_number AS "sessionNumber",
+           v.attempt_id::text AS "attemptId", v.attempt_completed AS "attemptCompleted",
            to_char(v.starts_at AT TIME ZONE (CASE v.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "startLocal",
            to_char((v.starts_at + v.duration_minutes * interval '1 minute') AT TIME ZONE (CASE v.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "endLocal",
            v.time_zone AS zone, v.duration_minutes AS "durationMinutes",
