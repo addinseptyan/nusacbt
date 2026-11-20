@@ -73,3 +73,11 @@ jobs:
           PGDATABASE: nusacbt_upgrade_016_test
           NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_upgrade_016_test
         run: npm run test:upgrade-016
+      - name: Siapkan database upgrade 017 fiktif
+        run: |
+          node --input-type=module -e "import pg from 'pg'; const c = new pg.Client(); await c.connect(); await c.query(\"CREATE DATABASE nusacbt_upgrade_017_test ENCODING 'UTF8'\"); await c.end();"
+      - name: Uji upgrade dari migrasi 016
+        env:
+          PGDATABASE: nusacbt_upgrade_017_test
+          NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_upgrade_017_test
+        run: npm run test:upgrade-017

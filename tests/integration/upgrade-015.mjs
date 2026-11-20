@@ -153,7 +153,8 @@ try {
   assert.equal(decryptSixDigitToken(token, tokenKey, token), "654321");
   assert.deepEqual(token.digest, digestSixDigitToken("654321", tokenKey));
   assert.equal((await client.query("SELECT prompt_text FROM question_bank")).rows[0].prompt_text, "ما قيمة √٤؟ 🧪");
-  console.log(`Migrasi 014 → terbaru (015–016) dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
+  assert.equal((await client.query("SELECT count(*)::int AS n FROM exam_schedule_runs")).rows[0].n, 0);
+  console.log(`Migrasi 014 → terbaru (015–017) dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
 
   // Aplikasi baru menggunakan database upgrade dan file kunci fiktif terpisah.
   temp = await mkdtemp(join(tmpdir(), "nusacbt-upgrade-015-"));
@@ -182,6 +183,10 @@ try {
     await page.getByLabel("Username peserta").fill(username); await page.getByLabel("Kata sandi", { exact: true }).fill(vector.password);
     await page.getByRole("button", { name: "Masuk sebagai peserta" }).click(); await page.waitForURL(/\/peserta$/);
     assert.equal(await page.getByRole("heading", { name: "Halo, Siswa Lama Uji!" }).isVisible(), true);
+    // Rancangan lama masih ada untuk admin tetapi tidak otomatis dirilis.
+    assert.equal(await page.getByText("Tes Lama Uji", { exact: true }).count(), 0);
+    await adminPage.goto("/data-tes/daftar");
+    assert.equal(await adminPage.getByText("Tes Lama Uji", { exact: true }).isVisible(), true);
     await adminPage.goto("/data-peserta/sandi?periode=19");
     const row = adminPage.getByRole("list", { name: "Daftar sandi peserta" }).getByRole("listitem").filter({ hasText: "Siswa Lama Uji" });
     await row.getByRole("button", { name: /^Lihat sandi / }).click();

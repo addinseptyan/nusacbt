@@ -123,6 +123,7 @@ try {
     await client.query("ROLLBACK TO SAVEPOINT bad_event");
   } finally { await client.query("ROLLBACK"); }
   assert.deepEqual(await snapshot(tables, sequences), before);
-  console.log(`Migrasi 015 → 016 dua kali: ${tables.length} tabel dan ${sequences.length} sequence identik; periode aktif, sesi, audit, sandi lama, kunci, dan pembatas tetap utuh.`);
+  assert.equal((await client.query("SELECT count(*)::int AS n FROM exam_schedule_runs")).rows[0].n, 0);
+  console.log(`Migrasi 015 → terbaru (016–017) dua kali: ${tables.length} tabel dan ${sequences.length} sequence identik; periode aktif, sesi, audit, sandi lama, kunci, dan pembatas tetap utuh.`);
   console.log("Constraint audit menerima unlock_login, menolak event lain; digest SQL/Node identik pada tiga vektor.");
 } finally { key.fill(0); await client.end().catch(() => {}); }

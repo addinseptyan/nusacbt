@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
+import { TOKEN_TEST_ELIGIBLE } from "@/app/data-tes/token/token-schedule-sql";
 import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { digestSixDigitToken, encryptSixDigitToken, generateSixDigitToken } from "@/lib/exam-token-crypto.mjs";
@@ -53,7 +54,7 @@ export async function issueExamToken(formData: FormData): Promise<IssueTokenResu
     if (draft.scope === "test") {
       // FOR SHARE menjaga identitas/nama tes dan mencegah perubahan atau
       // penghapusan hingga token selesai diterbitkan.
-      const test = await client.query<{ name: string; revision: string; eligible: boolean }>("SELECT name, xmin::text AS revision, starts_at + duration_minutes * interval '1 minute' > clock_timestamp() AS eligible FROM exam_tests WHERE id=$1::bigint FOR SHARE", [draft.testId]);
+      const test = await client.query<{ name: string; revision: string; eligible: boolean }>(`SELECT t.name, t.xmin::text AS revision, ${TOKEN_TEST_ELIGIBLE} AS eligible FROM exam_tests t WHERE t.id=$1::bigint FOR SHARE OF t`, [draft.testId]);
       if (!test.rowCount || test.rows[0].revision !== draft.testRevision) throw new TokenProblem("Tes sudah berubah atau dihapus. Muat ulang daftar sebelum membuat token.", true);
       if (!test.rows[0].eligible) throw new TokenProblem("Jadwal tes sudah berakhir. Muat ulang daftar sebelum membuat token.", true);
       testName = test.rows[0].name;
@@ -96,7 +97,7 @@ export async function issueExamToken(formData: FormData): Promise<IssueTokenResu
     const stillValid = await client.query<{ active: boolean }>("SELECT expires_at > clock_timestamp() AS active FROM exam_access_tokens WHERE id=$1::bigint", [result.rows[0].id]);
     if (!stillValid.rows[0]?.active) throw new TokenProblem("Masa token sudah berakhir saat penyimpanan. Muat ulang daftar dan coba lagi.", true);
     if (draft.scope === "test") {
-      const eligible = await client.query<{ yes: boolean }>("SELECT starts_at + duration_minutes * interval '1 minute' > clock_timestamp() AS yes FROM exam_tests WHERE id=$1::bigint", [draft.testId]);
+      const eligible = await client.query<{ yes: boolean }>(`SELECT ${TOKEN_TEST_ELIGIBLE} AS yes FROM exam_tests t WHERE t.id=$1::bigint`, [draft.testId]);
       if (!eligible.rows[0]?.yes) throw new TokenProblem("Jadwal tes sudah berakhir saat penyimpanan. Muat ulang daftar.", true);
     }
     await client.query("COMMIT");

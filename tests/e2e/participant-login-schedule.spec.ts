@@ -1,20 +1,21 @@
 import { expect, test } from "@playwright/test";
 
 import { loginAsAdmin } from "./helpers";
-import { activateLoginPeriod, cleanupLoginFixture, loginParticipant, loginTestDatabase, openParticipantLogin, resetLoginGlobal, seedLoginFixture } from "./participant-login-helpers";
+import { activateLoginPeriod, cleanupLoginFixture, loginParticipant, loginTestDatabase, openParticipantLogin, resetLoginGlobal, seedLoginFixture, seedPublishedSchedules } from "./participant-login-helpers";
 
 test("jadwal dipaginasi di server dan zona ditampilkan tanpa soal atau tes periode lain", async ({ page }) => {
   const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client);
   const f = await seedLoginFixture(client);
   try {
-    await client.query(
+    const added = await client.query<{ id: string }>(
       `INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes)
-       SELECT $1::bigint,'Jadwal tambahan ' || g || ' ' || $2,clock_timestamp() + g * interval '1 hour','WIB',60 FROM generate_series(1,23) g`,
+       SELECT $1::bigint,'Jadwal tambahan ' || g || ' ' || $2,clock_timestamp() + g * interval '1 hour','WIB',60 FROM generate_series(1,23) g RETURNING id::text AS id`,
       [f.periodA, f.suffix],
     );
-    await client.query("INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes) VALUES($1,$2,'2030-01-01 00:00:00+00','WITA',60)", [f.periodA, `Zona WITA ${f.suffix}`]);
+    const witaExam = await client.query<{ id: string }>("INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes) VALUES($1,$2,'2030-01-01 00:00:00+00','WITA',60) RETURNING id::text AS id", [f.periodA, `Zona WITA ${f.suffix}`]);
+    await seedPublishedSchedules(client, [...added.rows.map((r) => r.id), witaExam.rows[0].id], f.studentA, f.placementA);
     await loginParticipant(page, f.username, f.passwordA);
-    await expect(page.getByText("27 tes dalam periode ini")).toBeVisible();
+    await expect(page.getByText("27 jadwal untukmu dalam periode ini")).toBeVisible();
     await expect(page.getByRole("list", { name: "Jadwal tes" }).getByRole("listitem")).toHaveCount(20);
     await expect(page.getByText("Halaman 1 dari 2")).toBeVisible();
     const first = page.getByRole("list", { name: "Jadwal tes" }).getByRole("listitem").first();

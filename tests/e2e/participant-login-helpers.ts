@@ -27,6 +27,22 @@ export async function resetLoginGlobal(client: pg.Client) {
   await client.query("UPDATE participant_login_global_limit SET attempts=0, window_started_at=clock_timestamp() - interval '2 minutes' WHERE id=1");
 }
 
+// Fixture langsung untuk tes login/paginasi lama. Skenario administrasi baru
+// menguji rilis lewat UI, bukan memanggil helper ini.
+export async function seedPublishedSchedules(client: pg.Client, testIds: string[], studentId: string, placementId: string) {
+  const runs = (await client.query<{ id: string; test: string; period: string }>(
+    `INSERT INTO exam_schedule_runs(exam_test_id,period_id,kind,label,starts_at,time_zone,duration_minutes,created_by,published_at,published_by)
+     SELECT e.id,e.period_id,'makeup','Jadwal fiktif',e.starts_at,e.time_zone,e.duration_minutes,a.id,clock_timestamp(),a.id
+     FROM exam_tests e CROSS JOIN (SELECT id FROM admin_users WHERE username=$2) a WHERE e.id=ANY($1::bigint[])
+     RETURNING id::text AS id,exam_test_id::text AS test,period_id::text AS period`, [testIds, process.env.TEST_ADMIN_USERNAME],
+  )).rows;
+  if (runs.length !== testIds.length) throw new Error("Admin atau tes fixture tidak ditemukan.");
+  for (const run of runs) await client.query(
+    `INSERT INTO exam_schedule_participants(run_id,exam_test_id,period_id,kind,student_id,placement_id)
+     VALUES($1,$2,$3,'makeup',$4,$5)`, [run.id, run.test, run.period, studentId, placementId],
+  );
+}
+
 export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture> {
   const suffix = randomBytes(5).toString("hex");
   const username = `p${suffix}`;
@@ -89,6 +105,8 @@ export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture>
        VALUES($1,$2,'Pilihan A','Pilihan B','Pilihan C','Jawaban rahasia','Pilihan E','D') RETURNING id::text AS id`, [topicId, questionSecret],
     )).rows[0].id;
     await client.query("INSERT INTO exam_test_questions(exam_test_id,question_id,position) VALUES($1,$2,1)", [activeTest, questionId]);
+    await seedPublishedSchedules(client, exams.filter((e) => e.name !== hiddenName).map((e) => e.id), studentA, placementA);
+    await seedPublishedSchedules(client, exams.filter((e) => e.name === hiddenName).map((e) => e.id), studentB, placementB);
     const setting = await client.query<{ period: string | null }>('SELECT period_id::text AS period FROM participant_login_settings WHERE id=1 FOR UPDATE');
     if (setting.rowCount !== 1 || setting.rows[0].period !== null) throw new Error("Pengaturan DB uji harus tersedia dan tidak memiliki periode aktif sebelum fixture.");
     await client.query("UPDATE participant_login_settings SET period_id=$1 WHERE id=1", [periodA]);
@@ -113,6 +131,10 @@ export async function cleanupLoginFixture(client: pg.Client, f: LoginFixture, ex
   await client.query("DELETE FROM participant_passwords WHERE participant_identity_id=ANY($1::bigint[])", [[f.identityA, f.identityB]]);
   await client.query("DELETE FROM exam_token_issue_operations WHERE token_id IN (SELECT id FROM exam_access_tokens WHERE exam_test_id IN (SELECT id FROM exam_tests WHERE period_id=ANY($1::bigint[])))", [periods]);
   await client.query("DELETE FROM exam_access_tokens WHERE exam_test_id IN (SELECT id FROM exam_tests WHERE period_id=ANY($1::bigint[]))", [periods]);
+  await client.query("DELETE FROM exam_schedule_runs WHERE period_id=ANY($1::bigint[])", [periods]);
+  await client.query("DELETE FROM exam_session_assignments WHERE period_id=ANY($1::bigint[])", [periods]);
+  await client.query("DELETE FROM exam_session_groups WHERE period_id=ANY($1::bigint[])", [periods]);
+  await client.query("DELETE FROM exam_session_plans WHERE period_id=ANY($1::bigint[])", [periods]);
   await client.query("DELETE FROM exam_tests WHERE period_id=ANY($1::bigint[])", [periods]);
   await client.query("DELETE FROM question_bank WHERE id=$1::bigint", [f.questionId]);
   await client.query("DELETE FROM question_topics WHERE id=$1::bigint", [f.topicId]);

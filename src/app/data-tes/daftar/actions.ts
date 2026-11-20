@@ -33,13 +33,21 @@ async function mutate(mutation: Mutation): Promise<ActionResult> {
       const result = await client.query("DELETE FROM exam_tests WHERE id=$1::bigint AND xmin::text=$2 RETURNING id", [mutation.id, mutation.revision]);
       if (!result.rowCount) throw new TestProblem("Tes sudah berubah atau dihapus. Muat ulang daftar sebelum mencoba lagi.", true);
     } else {
-      if (mutation.id) {
-        // Baris induk dikunci dan diperbarui untuk setiap perubahan, termasuk
-        // urutan/pilihan soal, sehingga revision mendeteksi formulir usang.
-        const result = await client.query<{ revision: string }>("SELECT xmin::text AS revision FROM exam_tests WHERE id=$1::bigint FOR UPDATE", [mutation.id]);
-        if (!result.rowCount || result.rows[0].revision !== mutation.revision) throw new TestProblem("Tes sudah berubah atau dihapus. Muat ulang daftar sebelum mencoba lagi.", true);
-      }
       const { draft } = mutation;
+      if (mutation.id) {
+        // Baris induk dikunci untuk semua perubahan soal dan pelaksanaan.
+        const result = await client.query<{ revision: string; periodId: string }>("SELECT xmin::text AS revision,period_id::text AS \"periodId\" FROM exam_tests WHERE id=$1::bigint FOR UPDATE", [mutation.id]);
+        if (!result.rowCount || result.rows[0].revision !== mutation.revision) throw new TestProblem("Tes sudah berubah atau dihapus. Muat ulang daftar sebelum mencoba lagi.", true);
+        const uses = await client.query<{ total: number; published: boolean; maxCustom: number }>(
+          `SELECT count(*)::int AS total,COALESCE(bool_or(r.published_at IS NOT NULL),false) AS published,
+             COALESCE(max((SELECT count(*)::int FROM exam_schedule_custom_questions q WHERE q.run_id=r.id)),0)::int AS "maxCustom"
+           FROM exam_schedule_runs r WHERE r.exam_test_id=$1::bigint`, [mutation.id],
+        );
+        const usage = uses.rows[0];
+        if (usage.published) throw new TestProblem("Tarik rilis semua pelaksanaan tes sebelum mengubah rancangan.", true);
+        if (usage.total && result.rows[0].periodId !== draft.periodId) throw new TestProblem("Periode tidak dapat diubah ketika tes memiliki pelaksanaan. Hapus pelaksanaan terlebih dahulu.");
+        if (usage.maxCustom > draft.questionIds.length) throw new TestProblem("Jumlah soal rancangan tidak boleh lebih sedikit daripada soal remidi khusus yang sudah dipilih.");
+      }
       const period = await client.query("SELECT id FROM exam_periods WHERE id=$1::bigint FOR KEY SHARE", [draft.periodId]);
       if (!period.rowCount) throw new TestProblem("Periode sudah dihapus. Muat ulang daftar dan pilih periode lain.", true);
       if (draft.questionIds.length) {
@@ -67,6 +75,11 @@ async function mutate(mutation: Mutation): Promise<ActionResult> {
         if (!result.rowCount) throw new TestProblem("Tes sudah berubah atau dihapus. Muat ulang daftar sebelum mencoba lagi.", true);
         id = result.rows[0].id;
         await client.query("DELETE FROM exam_test_questions WHERE exam_test_id=$1::bigint", [id]);
+        // Durasi sesi reguler/susulan selalu mengikuti induk, dan hanya dapat
+        // berubah saat semua pelaksanaannya masih draf.
+        await client.query(`UPDATE exam_schedule_runs SET duration_minutes=$2,
+          updated_at=GREATEST(clock_timestamp(),updated_at+interval '1 microsecond')
+          WHERE exam_test_id=$1::bigint AND kind IN ('regular','makeup') AND duration_minutes<>$2`, [id, draft.durationMinutes]);
       } else {
         const result = await client.query<{ id: string }>(
           `INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes,shuffle_questions,shuffle_options)
@@ -95,6 +108,8 @@ async function mutate(mutation: Mutation): Promise<ActionResult> {
   } finally { client?.release(); }
 
   revalidatePath("/data-tes/daftar");
+  revalidatePath("/data-tes/token");
+  revalidatePath("/data-tes/token/riwayat");
   revalidatePath("/data-modul/soal");
   revalidatePath("/data-peserta/periode");
   return { ok: true, message: mutation.kind === "delete" ? "Rancangan tes berhasil dihapus." : mutation.id ? "Rancangan tes berhasil diubah." : "Rancangan tes berhasil ditambahkan." };

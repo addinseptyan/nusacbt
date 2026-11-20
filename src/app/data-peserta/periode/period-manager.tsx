@@ -137,7 +137,7 @@ function DeletePeriodDialog({ period, onClose }: { period: ExamPeriod | null; on
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-md" showCloseButton={!pending} onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle className="text-lg font-bold">Hapus periode?</DialogTitle>
-          <DialogDescription>Periode <strong className="text-foreground">{period?.name}</strong> akan dihapus permanen. Periode yang sedang aktif untuk login atau memiliki data terkait tidak dapat dihapus. Tindakan ini tidak dapat dibatalkan.</DialogDescription>
+          <DialogDescription>Periode <strong className="text-foreground">{period?.name}</strong> akan dihapus permanen. Kelompok sesi yang kosong ikut dihapus. Periode yang sedang aktif untuk login atau memiliki siswa, pelaksanaan, atau data terkait lainnya tidak dapat dihapus. Tindakan ini tidak dapat dibatalkan.</DialogDescription>
         </DialogHeader>
         {error && <Alert variant="destructive" role="alert"><Info className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
         <DialogFooter className="rounded-b-2xl">

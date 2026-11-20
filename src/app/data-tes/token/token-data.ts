@@ -9,7 +9,8 @@ export type TokenRow = Omit<AccessTokenRecord, "issuedAt" | "expiresAt" | "revok
 };
 export const TOKEN_COLUMNS = `k.id::text AS id, k.xmin::text AS revision, k.scope, k.exam_test_id::text AS "testId",
   k.test_name_snapshot AS "testNameSnapshot", t.name AS "currentTestName", p.name AS "periodName",
-  t.starts_at + t.duration_minutes * interval '1 minute' AS "testEndsAt",
+  COALESCE((SELECT max(r.starts_at + r.duration_minutes * interval '1 minute') FROM exam_schedule_runs r WHERE r.exam_test_id=t.id),
+    t.starts_at + t.duration_minutes * interval '1 minute') AS "testEndsAt",
   k.duration_minutes AS "durationMinutes", k.issued_at AS "issuedAt", k.expires_at AS "expiresAt",
   k.revoked_at AS "revokedAt", k.revoked_reason AS "revokedReason", a.username AS "createdBy", b.username AS "revokedBy",
   k.code_version AS "codeVersion", k.token_hash AS hash, k.code_nonce AS nonce, k.code_ciphertext AS ciphertext, k.code_tag AS tag`;

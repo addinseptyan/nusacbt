@@ -24,7 +24,8 @@ type PasswordRow = { passwordHash: string };
 type AttemptRow = { failedAttempts: number; locked: boolean; lockExpired: boolean };
 
 export type ParticipantSchedule = {
-  id: string; name: string; startLocal: string; endLocal: string; zone: "WIB" | "WITA" | "WIT";
+  id: string; name: string; label: string; kind: "regular" | "makeup" | "remedial"; sessionNumber: number | null;
+  startLocal: string; endLocal: string; zone: "WIB" | "WITA" | "WIT";
   durationMinutes: number; status: "Belum dimulai" | "Berlangsung" | "Berakhir";
 };
 export type ParticipantView = {
@@ -216,7 +217,7 @@ export async function participantView(requestedPage: number): Promise<Participan
   // Tidak ada join ke soal, jawaban, token, atau data peserta lain.
   const result = await getPostgresPool().query<ParticipantView>(
     `WITH auth AS (
-       SELECT i.period_id, st.name AS "studentName", i.username, i.participant_number AS "participantNumber",
+       SELECT i.period_id, st.id AS student_id, st.name AS "studentName", i.username, i.participant_number AS "participantNumber",
          c.level || ' ' || m.name AS "className", ep.name AS "periodName"
        FROM participant_sessions sess
        JOIN participant_identities i ON i.id = sess.participant_identity_id
@@ -230,8 +231,15 @@ export async function participantView(requestedPage: number): Promise<Participan
        WHERE sess.token_hash = $1 AND sess.expires_at > clock_timestamp()
          AND i.username = sess.username_snapshot AND i.updated_at = sess.identity_revision
          AND pw.updated_at = sess.password_revision AND sha256(convert_to(pw.password_hash, 'UTF8')) = sess.password_hash_digest
+     ), visible AS (
+       -- Pembatasan terjadi pada server, berdasarkan identitas siswa dan
+       -- periode dari sesi; parameter browser tidak dapat memilih siswa lain.
+       SELECT r.id,r.exam_test_id,r.label,r.kind,r.session_number,r.starts_at,r.time_zone,r.duration_minutes
+       FROM exam_schedule_runs r JOIN exam_schedule_participants p ON p.run_id=r.id
+       JOIN auth a ON a.period_id=r.period_id AND a.student_id=p.student_id
+       WHERE r.published_at IS NOT NULL
      ), counts AS (
-       SELECT count(*)::int AS total FROM exam_tests e JOIN auth a ON e.period_id = a.period_id
+       SELECT count(*)::int AS total FROM visible
      ), page_info AS (
        SELECT total, GREATEST(1, CEIL(total::numeric / $3::integer)::int) AS pages,
          LEAST($2::integer, GREATEST(1, CEIL(total::numeric / $3::integer)::int)) AS page FROM counts
@@ -239,18 +247,18 @@ export async function participantView(requestedPage: number): Promise<Participan
      SELECT a."studentName", a.username, a."participantNumber", a."className", a."periodName",
        pi.total, pi.page, pi.pages,
        COALESCE((SELECT json_agg(d) FROM (
-         SELECT e.id::text AS id, e.name,
-           to_char(e.starts_at AT TIME ZONE (CASE e.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "startLocal",
-           to_char((e.starts_at + e.duration_minutes * interval '1 minute') AT TIME ZONE (CASE e.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "endLocal",
-           e.time_zone AS zone, e.duration_minutes AS "durationMinutes",
-           CASE WHEN e.starts_at > statement_timestamp() THEN 'Belum dimulai'
-             WHEN e.starts_at + e.duration_minutes * interval '1 minute' > statement_timestamp() THEN 'Berlangsung'
+         SELECT v.id::text AS id, e.name, v.label, v.kind, v.session_number AS "sessionNumber",
+           to_char(v.starts_at AT TIME ZONE (CASE v.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "startLocal",
+           to_char((v.starts_at + v.duration_minutes * interval '1 minute') AT TIME ZONE (CASE v.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "endLocal",
+           v.time_zone AS zone, v.duration_minutes AS "durationMinutes",
+           CASE WHEN v.starts_at > statement_timestamp() THEN 'Belum dimulai'
+             WHEN v.starts_at + v.duration_minutes * interval '1 minute' > statement_timestamp() THEN 'Berlangsung'
              ELSE 'Berakhir' END AS status
-         FROM exam_tests e WHERE e.period_id = a.period_id
-         ORDER BY CASE WHEN e.starts_at <= statement_timestamp() AND e.starts_at + e.duration_minutes * interval '1 minute' > statement_timestamp() THEN 0
-             WHEN e.starts_at > statement_timestamp() THEN 1 ELSE 2 END,
-           CASE WHEN e.starts_at + e.duration_minutes * interval '1 minute' > statement_timestamp() THEN e.starts_at END ASC,
-           CASE WHEN e.starts_at + e.duration_minutes * interval '1 minute' <= statement_timestamp() THEN e.starts_at END DESC, e.id DESC
+         FROM visible v JOIN exam_tests e ON e.id=v.exam_test_id
+         ORDER BY CASE WHEN v.starts_at <= statement_timestamp() AND v.starts_at + v.duration_minutes * interval '1 minute' > statement_timestamp() THEN 0
+             WHEN v.starts_at > statement_timestamp() THEN 1 ELSE 2 END,
+           CASE WHEN v.starts_at + v.duration_minutes * interval '1 minute' > statement_timestamp() THEN v.starts_at END ASC,
+           CASE WHEN v.starts_at + v.duration_minutes * interval '1 minute' <= statement_timestamp() THEN v.starts_at END DESC, v.id DESC
          LIMIT $3::integer OFFSET ((pi.page - 1) * $3::integer)
        ) d), '[]'::json) AS tests
      FROM auth a CROSS JOIN page_info pi`,

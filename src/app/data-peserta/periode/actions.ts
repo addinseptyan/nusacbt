@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockSchedulePeriod } from "@/lib/exam-session-service";
 import { getPostgresPool } from "@/lib/postgres";
 import { validPeriodId, validatePeriodInput } from "@/lib/period-validation.mjs";
 import { validTopicRevision as validRowRevision } from "@/lib/topic-validation.mjs";
@@ -43,21 +45,45 @@ export async function savePeriod(formData: FormData): Promise<ActionResult> {
   return { ok: true, message: id ? "Periode berhasil diubah." : "Periode berhasil ditambahkan." };
 }
 
+class PeriodDeleteProblem extends Error {}
+
 export async function deletePeriod(formData: FormData): Promise<ActionResult> {
   await requireAdmin();
   const id = validPeriodId(formData.get("id"));
-  if (!id) return { ok: false, error: "Identitas periode tidak valid." };
+  if (!id || formData.getAll("id").length !== 1) return { ok: false, error: "Identitas periode tidak valid." };
+  let client: PoolClient | undefined;
   try {
-    const result = await getPostgresPool().query("DELETE FROM exam_periods WHERE id = $1::bigint RETURNING id", [id]);
-    if (!result.rowCount) return { ok: false, error: "Periode tidak ditemukan atau sudah dihapus." };
+    client = await getPostgresPool().connect();
+    await client.query("BEGIN");
+    const admin = await lockActiveAdminSession(client);
+    if (!admin) throw new PeriodDeleteProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    // Satu pagar dengan perubahan kelompok/jadwal. Rencana kosong boleh
+    // dibersihkan hanya bersamaan dengan penghapusan periodenya; kalau ada
+    // referensi lain, seluruh transaksi termasuk pembersihan di-rollback.
+    if (!await lockSchedulePeriod(client, id)) throw new PeriodDeleteProblem("Periode tidak ditemukan atau sudah dihapus.");
+    const used = await client.query(
+      `SELECT 1 FROM exam_session_assignments WHERE period_id=$1::bigint
+       UNION ALL SELECT 1 FROM exam_schedule_runs WHERE period_id=$1::bigint AND kind='regular' LIMIT 1`, [id],
+    );
+    if (used.rowCount) throw new PeriodDeleteProblem("Periode masih digunakan oleh data lain dan tidak dapat dihapus.");
+    await client.query("DELETE FROM exam_session_groups WHERE period_id=$1::bigint", [id]);
+    await client.query("DELETE FROM exam_session_plans WHERE period_id=$1::bigint", [id]);
+    const result = await client.query("DELETE FROM exam_periods WHERE id=$1::bigint RETURNING id", [id]);
+    if (!result.rowCount) throw new PeriodDeleteProblem("Periode tidak ditemukan atau sudah dihapus.");
+    const active = await lockActiveAdminSession(client);
+    if (!active || active.id !== admin.id) throw new PeriodDeleteProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    await client.query("COMMIT");
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    if (error instanceof PeriodDeleteProblem) return { ok: false, error: error.message };
     // RESTRICT memakai 23503 di PostgreSQL 17 dan 23001 mulai PostgreSQL 18.
     if (typeof error === "object" && error !== null && "code" in error && (error.code === "23503" || error.code === "23001")) {
       return { ok: false, error: "Periode masih digunakan oleh data lain dan tidak dapat dihapus." };
     }
     return { ok: false, error: "Hasil penghapusan belum dapat dipastikan. Periksa koneksi, lalu muat ulang daftar sebelum mencoba lagi." };
-  }
+  } finally { client?.release(); }
   revalidatePath("/data-peserta/periode");
+  revalidatePath("/data-tes/daftar/sesi");
   return { ok: true, message: "Periode berhasil dihapus." };
 }
 
