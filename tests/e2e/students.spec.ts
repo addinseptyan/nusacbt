@@ -110,8 +110,8 @@ test("admin dapat menambah, mencari, mengubah, dan menghapus siswa yang belum di
     await editor.getByRole("button", { name: "Simpan siswa" }).click();
     const request = await actionRequest;
     await expect(editor).toBeHidden();
-    await expect(studentRow(page, nisn)).toContainText(name);
-    expect((await client.query("SELECT name, nisn FROM school_students WHERE nisn = $1", [nisn])).rows).toEqual([{ name, nisn }]);
+    await expect(studentRow(page, nisn)).toContainText(name.toUpperCase());
+    expect((await client.query("SELECT name, nisn FROM school_students WHERE nisn = $1", [nisn])).rows).toEqual([{ name: name.toUpperCase(), nisn }]);
 
     const headers = request.headers();
     const body = request.postDataBuffer();
@@ -150,8 +150,8 @@ test("admin dapat menambah, mencari, mengubah, dan menghapus siswa yang belum di
     await editor.getByLabel("NISN").fill(newNumber);
     await editor.getByRole("button", { name: "Simpan siswa" }).click();
     await expect(editor).toBeHidden();
-    await expect(studentRow(page, newNumber)).toContainText(renamed);
-    expect((await client.query("SELECT name, nisn FROM school_students WHERE nisn = $1", [newNumber])).rows).toEqual([{ name: renamed, nisn: newNumber }]);
+    await expect(studentRow(page, newNumber)).toContainText(renamed.toUpperCase());
+    expect((await client.query("SELECT name, nisn FROM school_students WHERE nisn = $1", [newNumber])).rows).toEqual([{ name: renamed.toUpperCase(), nisn: newNumber }]);
 
     await studentRow(page, newNumber).getByRole("button", { name: "Hapus siswa" }).click();
     let confirmation = page.getByRole("dialog", { name: "Hapus siswa?" });
@@ -168,6 +168,30 @@ test("admin dapat menambah, mencari, mengubah, dan menghapus siswa yang belum di
     await cleanData(client, [nisn, newNumber]);
     await client.end();
   }
+});
+
+test("nama lama tidak berubah otomatis, tetapi disimpan kapital ketika diedit", async ({ page }) => {
+  const suffix = randomBytes(5).toString("hex");
+  const nisn = newNisn(); let otherNisn = newNisn();
+  while (otherNisn === nisn) otherNisn = newNisn();
+  const legacy = `Nama Lama ${suffix}`; const untouched = `Nama Lain ${suffix}`;
+  const client = testDatabase(); await client.connect();
+  try {
+    await client.query("INSERT INTO school_students(name,nisn) VALUES($1,$2),($3,$4)", [legacy, nisn, untouched, otherNisn]);
+    await loginAsAdmin(page); await openStudents(page);
+    await page.getByLabel("Cari siswa").fill(nisn);
+    await expect(studentRow(page, nisn)).toContainText(legacy);
+    expect((await client.query("SELECT name FROM school_students WHERE nisn=$1", [nisn])).rows).toEqual([{ name: legacy }]);
+    await studentRow(page, nisn).getByRole("button", { name: "Ubah siswa" }).click();
+    const editor = page.getByRole("dialog", { name: "Ubah siswa" });
+    await expect(editor.getByLabel("Nama siswa")).toHaveValue(legacy);
+    await expect(editor).toContainText("Nama lama hanya berubah jika disimpan ulang");
+    await editor.getByRole("button", { name: "Simpan siswa" }).click();
+    await expect(editor).toBeHidden();
+    await expect(studentRow(page, nisn)).toContainText(legacy.toUpperCase());
+    expect((await client.query("SELECT name FROM school_students WHERE nisn=$1", [nisn])).rows).toEqual([{ name: legacy.toUpperCase() }]);
+    expect((await client.query("SELECT name FROM school_students WHERE nisn=$1", [otherNisn])).rows).toEqual([{ name: untouched }]);
+  } finally { await cleanData(client, [nisn, otherNisn]); await client.end(); }
 });
 
 test("penempatan lintas periode menyimpan riwayat dan melindungi siswa, kelas, serta periode", async ({ page }) => {
@@ -409,7 +433,7 @@ test("perubahan siswa yang lebih baru tidak ditimpa atau dihapus dari formulir l
     await editor.getByLabel("Nama siswa").fill(`Siswa Final ${suffix}`);
     await editor.getByRole("button", { name: "Simpan siswa" }).click();
     await expect(editor).toBeHidden();
-    expect((await client.query("SELECT name FROM school_students WHERE nisn=$1", [nisn])).rows).toEqual([{ name: `Siswa Final ${suffix}` }]);
+    expect((await client.query("SELECT name FROM school_students WHERE nisn=$1", [nisn])).rows).toEqual([{ name: `SISWA FINAL ${suffix.toUpperCase()}` }]);
   } finally {
     await cleanData(client, [nisn]);
     await client.end();
@@ -431,9 +455,9 @@ test("nama siswa ditampilkan sebagai teks, bukan markup atau perintah SQL", asyn
     await editor.getByLabel("NISN").fill(nisn);
     await editor.getByRole("button", { name: "Simpan siswa" }).click();
     await expect(editor).toBeHidden();
-    await expect(studentRow(page, nisn)).toContainText(name);
+    await expect(studentRow(page, nisn)).toContainText(name.toUpperCase());
     await expect(studentRow(page, nisn).locator("img")).toHaveCount(0);
-    expect((await client.query("SELECT name FROM school_students WHERE nisn = $1", [nisn])).rows).toEqual([{ name }]);
+    expect((await client.query("SELECT name FROM school_students WHERE nisn = $1", [nisn])).rows).toEqual([{ name: name.toUpperCase() }]);
   } finally {
     await cleanData(client, [nisn]);
     await client.end();

@@ -4,9 +4,12 @@
  */
 export function validateStudentName(value) {
   if (typeof value !== "string") return { ok: false, error: "Nama siswa wajib diisi." };
-  const name = value.trim();
-  if (!name || Array.from(name).length > 100 || /[\u0000-\u001f\u007f]/.test(name)) {
-    return { ok: false, error: "Nama siswa wajib diisi, maksimal 100 karakter, tanpa karakter kontrol." };
+  const input = value.trim();
+  // Periksa panjang SETELAH kapitalisasi: beberapa karakter Unicode dapat
+  // berkembang menjadi lebih dari satu karakter (misalnya ß menjadi SS).
+  const name = input.toUpperCase();
+  if (!name || !input.isWellFormed() || Array.from(name).length > 100 || /[\u0000-\u001f\u007f]/.test(name)) {
+    return { ok: false, error: "Nama siswa wajib diisi, maksimal 100 karakter setelah kapitalisasi, tanpa karakter kontrol atau Unicode tidak valid." };
   }
   return { ok: true, value: name };
 }

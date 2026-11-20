@@ -46,8 +46,45 @@ test("rencana memakai siswa lama tanpa menimpa, dan tidak mengubah penempatan ya
   assert.deepEqual(withoutPlacement.map((row) => row.status), ["siswa-baru", "penempatan-baru"]);
   const withPlacement = planStudentImport(parsed, classes, [oldStudent], [oldPlacement]);
   assert.deepEqual(withPlacement.map((row) => row.status), ["siswa-baru", "sudah-sesuai"]);
+  assert.equal(withPlacement[0].name, "SISWA BARU");
+  assert.equal(withPlacement[1].name, "Siti Contoh");
   assert.equal(withPlacement[1].student.id, "11");
   assert.equal(withPlacement[1].placement.id, "21");
+});
+
+test("impor mengabaikan perbedaan kapitalisasi tetapi tetap mempertahankan nama lama", async () => {
+  const parsed = await rows([[1, "  sITI cONTOH  ", "0000000007", "X AK"]]);
+  const [plan] = planStudentImport(parsed, classes, [oldStudent], [oldPlacement]);
+  assert.equal(plan.status, "sudah-sesuai");
+  assert.equal(plan.name, "Siti Contoh");
+  assert.equal(plan.student.name, "Siti Contoh");
+  assert.deepEqual(plan.issues, []);
+});
+
+test("pencocokan Unicode dan spasi tepi tidak menulis ulang nama lama", async () => {
+  const student = { ...oldStudent, name: "  Éka Straße  " };
+  const parsed = await rows([[1, "e\u0301KA STRASSE", "0000000007", "X AK"]]);
+  const [plan] = planStudentImport(parsed, classes, [student], [oldPlacement]);
+  assert.equal(plan.status, "sudah-sesuai");
+  assert.equal(plan.name, "  Éka Straße  ");
+  assert.equal(plan.student.name, "  Éka Straße  ");
+  const [conflict] = planStudentImport(await rows([[1, "Éka Berbeda", "0000000007", "X AK"]]), classes, [student], [oldPlacement]);
+  assert.equal(conflict.status, "masalah");
+  assert.match(conflict.issues.join(" "), /Nama berbeda/);
+});
+
+test("nama lama yang berkembang di atas batas kapital tetap cocok tanpa disimpan ulang", async () => {
+  const legacyName = "ß".repeat(51); // valid sebagai nama lama, menjadi 102 karakter setelah kapital
+  const student = { ...oldStudent, name: legacyName };
+  const [plan] = planStudentImport(await rows([[1, "SS".repeat(51), "0000000007", "X AK"]]), classes, [student], [oldPlacement]);
+  assert.equal(plan.status, "sudah-sesuai");
+  assert.equal(plan.name, legacyName);
+  assert.equal(plan.student.name, legacyName);
+  const [newStudent] = planStudentImport(await rows([[1, legacyName, "0000000008", "X AK"]]), classes, [], []);
+  assert.equal(newStudent.status, "masalah");
+  assert.match(newStudent.issues.join(" "), /maksimal 100 karakter setelah kapitalisasi/);
+  const [invalid] = planStudentImport(await rows([[1, `${legacyName}_x0000_`, "0000000007", "X AK"]]), classes, [student], [oldPlacement]);
+  assert.equal(invalid.status, "masalah");
 });
 
 test("nama dan kelas berbeda pada siswa lama menjadi konflik, bukan pembaruan", async () => {

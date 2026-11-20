@@ -22,14 +22,13 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { navigation } from "@/lib/navigation";
+import { navigation, navigationPageContains } from "@/lib/navigation";
 
 export function AppSidebar() {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const containsPage = (href: string) => pathname === href || (href === "/data-tes/token" && pathname === "/data-tes/token/riwayat") ||
-    (href === "/data-peserta/akun" && ["/data-peserta/identitas", "/data-peserta/sandi"].includes(pathname));
+  const containsPage = (href: string) => navigationPageContains(href, pathname);
 
   function closeMobile() {
     if (isMobile) setOpenMobile(false);

@@ -82,7 +82,25 @@ export const navigation: NavigationSection[] = [
   },
 ];
 
-export function findNavigationPage(href: string) {
+type NavigationMatch = NavigationPage & {
+  section: string;
+  parent?: Pick<NavigationPage, "title" | "href">;
+};
+
+const examListParent = { title: "Daftar Tes", href: "/data-tes/daftar" };
+const examListChild = /^\/data-tes\/daftar\/[^/]+$/;
+
+/** Halaman anak tetap menandai item induknya di sidebar. */
+export function navigationPageContains(href: string, pathname: string): boolean {
+  return pathname === href ||
+    (href === examListParent.href && examListChild.test(pathname)) ||
+    (href === "/data-tes/token" && pathname === "/data-tes/token/riwayat") ||
+    (href === "/data-peserta/akun" && ["/data-peserta/identitas", "/data-peserta/sandi"].includes(pathname));
+}
+
+export function findNavigationPage(href: string): NavigationMatch | undefined {
+  if (href === "/data-tes/daftar/sesi") return { title: "Kelompok Sesi", href, description: "Pengaturan kelompok sesi per periode.", section: "Data Tes", parent: examListParent };
+  if (examListChild.test(href)) return { title: "Pelaksanaan Tes", href, description: "Pengaturan jadwal dan peserta tes.", section: "Data Tes", parent: examListParent };
   // Riwayat dapat dibuka dari Token, tanpa menambah item menu terpisah.
   if (href === "/data-tes/token/riwayat") return { title: "Riwayat token", href, description: "Catatan penerbitan dan status token.", section: "Data Tes" };
   // Tautan lama tetap dapat dibuka, tetapi hanya ada satu menu Akun Peserta.

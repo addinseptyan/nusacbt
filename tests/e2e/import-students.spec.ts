@@ -63,9 +63,11 @@ test("impor memperlihatkan rencana, mempertahankan siswa dan riwayat lama, serta
   await client.connect();
   const fixture = await seedSchool(client, suffix);
   try {
+    // Data lama dapat mempunyai spasi tepi atau bertambah panjang saat dikapitalkan.
+    const legacyExpanded = "ß".repeat(51);
     const existing = await client.query<{ id: string; nisn: string }>(
       "INSERT INTO school_students(name,nisn) VALUES ($1,$2),($3,$4) RETURNING id::text AS id, nisn",
-      [`Lama Lintas ${suffix}`, nisns[1], `Lama Sama ${suffix}`, nisns[2]],
+      [`  Lama Lintas ${suffix}  `, nisns[1], legacyExpanded, nisns[2]],
     );
     const existingId = (nisn: string) => existing.rows.find((row) => row.nisn === nisn)!.id;
     await client.query(
@@ -75,19 +77,22 @@ test("impor memperlihatkan rencana, mempertahankan siswa dan riwayat lama, serta
     );
     const before = await client.query("SELECT id::text,name,nisn,updated_at::text FROM school_students WHERE nisn=ANY($1::text[]) ORDER BY nisn", [[nisns[1], nisns[2]]]);
     const workbook = makeImportWorkbook({ shared: true, rows: [
-      { cells: [1, `Baru ${suffix}`, nisns[0], `x ${fixture.major.toLowerCase()}`] },
-      { cells: [2, `Lama Lintas ${suffix}`, nisns[1], `XI ${fixture.major}`] },
-      { cells: [3, `Lama Sama ${suffix}`, nisns[2], `X ${fixture.major}`] },
+      { cells: [1, `Baru Éka ${suffix}`, nisns[0], `x ${fixture.major.toLowerCase()}`] },
+      { cells: [2, `lAMA lINTAS ${suffix}`, nisns[1], `XI ${fixture.major}`] },
+      { cells: [3, "SS".repeat(51), nisns[2], `X ${fixture.major}`] },
     ] });
     await loginAsAdmin(page);
     await prepareImport(page, fixture.periodA, workbook);
     await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText("Siswa baru");
+    await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText(`BARU ÉKA ${suffix.toUpperCase()}`);
+    await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText(`Lama Lintas ${suffix}`);
+    await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText(legacyExpanded);
     await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText("Penempatan baru");
     await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText("Sudah sesuai");
     expect((await client.query("SELECT 1 FROM school_students WHERE nisn=$1", [nisns[0]])).rowCount).toBe(0);
     await confirmSave(page);
     await expect(page.getByRole("status")).toContainText("1 siswa baru dan 2 penempatan baru disimpan; 1 baris sudah sesuai");
-    expect((await client.query("SELECT name,nisn FROM school_students WHERE nisn=$1", [nisns[0]])).rows).toEqual([{ name: `Baru ${suffix}`, nisn: nisns[0] }]);
+    expect((await client.query("SELECT name,nisn FROM school_students WHERE nisn=$1", [nisns[0]])).rows).toEqual([{ name: `BARU ÉKA ${suffix.toUpperCase()}`, nisn: nisns[0] }]);
     const after = await client.query("SELECT id::text,name,nisn,updated_at::text FROM school_students WHERE nisn=ANY($1::text[]) ORDER BY nisn", [[nisns[1], nisns[2]]]);
     expect(after.rows).toEqual(before.rows);
     const placements = await client.query(

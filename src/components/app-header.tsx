@@ -24,7 +24,8 @@ export function AppHeader() {
           <Link href="/" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:inline">Panel admin</Link>
           <ChevronRight className="hidden size-3.5 text-muted-foreground/60 sm:block" />
           {page && <><span className="hidden truncate text-muted-foreground lg:inline">{page.section}</span><ChevronRight className="hidden size-3.5 text-muted-foreground/60 lg:block" /></>}
-          <span className="truncate font-semibold text-foreground">{page?.title ?? "Dashboard"}</span>
+          {page?.parent && <><Link href={page.parent.href} className="hidden truncate text-muted-foreground transition-colors hover:text-foreground md:inline">{page.parent.title}</Link><ChevronRight className="hidden size-3.5 text-muted-foreground/60 md:block" /></>}
+          <span aria-current="page" className="truncate font-semibold text-foreground">{page?.title ?? "Dashboard"}</span>
         </nav>
       </div>
       <div className="flex shrink-0 items-center gap-2.5 sm:gap-4">
