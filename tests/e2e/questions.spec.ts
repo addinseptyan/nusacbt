@@ -35,7 +35,7 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
     await page.getByRole("link", { name: "Manajemen Soal", exact: true }).click();
     await expect(page).toHaveURL(/\/data-modul\/soal$/);
     await expect(page.getByRole("heading", { name: "Manajemen Soal", exact: true })).toBeVisible();
-    await expect(page.getByText(/ekspor Word dan pengerjaan tes belum tersedia/)).toBeVisible();
+    await expect(page.getByText(/ekspor Word belum tersedia/)).toBeVisible();
 
     let form = await editor(page);
     await fillDraft(form, firstTopic, "", ["1", "2", "3", "4", "5"]);

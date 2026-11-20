@@ -48,7 +48,7 @@ export function tokenStatus(token: AccessTokenRecord, now: number): TokenStatus 
   if (token.scope === "test" && !token.testId && !token.revokedAt) return "Tes dihapus";
   if (token.revokedAt || expires <= now) return "Kedaluwarsa";
   // Masa token bisa lebih panjang daripada semua jadwal. Ini hanya status
-  // admin; validasi token dan pengerjaan ujian peserta belum diimplementasikan.
+  // admin; validasi peserta dan batas akhir tetap diperiksa server.
   if (token.scope === "test" && token.testEndsAt && Date.parse(token.testEndsAt) <= now) return "Jadwal berakhir";
   return "Aktif";
 }

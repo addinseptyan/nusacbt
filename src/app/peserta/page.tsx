@@ -70,7 +70,7 @@ export default async function ParticipantPage({ searchParams }: Props) {
             </div>
             <Alert className="mt-5 rounded-xl border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               <Info className="size-4" /><AlertTitle>Informasi jadwal</AlertTitle>
-              <AlertDescription className="text-xs leading-5">Hanya jadwal yang telah dirilis admin untukmu yang ditampilkan. Soal dan tombol mulai belum tersedia.</AlertDescription>
+              <AlertDescription className="text-xs leading-5">Hanya jadwal yang telah dirilis untukmu yang ditampilkan. Token diperlukan saat mulai; peserta yang terlambat mendapat sisa waktu jadwal.</AlertDescription>
             </Alert>
             {view.tests.length === 0 ? (
               <div className="py-12 text-center"><CalendarDays className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-3 text-sm font-semibold">Belum ada jadwal tes</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Jadwal untuk periode ini akan muncul di sini.</p></div>
@@ -87,6 +87,15 @@ export default async function ParticipantPage({ searchParams }: Props) {
                       <span className="inline-flex items-start gap-1.5"><CalendarDays className="mt-0.5 size-3.5 shrink-0" /> Mulai {test.startLocal} {test.zone}</span>
                       <span className="inline-flex items-start gap-1.5"><Clock3 className="mt-0.5 size-3.5 shrink-0" /> {test.durationMinutes} menit · berakhir {test.endLocal} {test.zone}</span>
                     </div>
+                    {test.attemptId ? (
+                      <Button asChild variant={test.status === "Berlangsung" && !test.attemptCompleted ? "default" : "outline"} size="sm" className="mt-4 rounded-xl">
+                        <Link prefetch={false} href={`/peserta/pengerjaan/${test.attemptId}`}>
+                          {test.status === "Berlangsung" && !test.attemptCompleted ? "Lanjutkan tes" : "Lihat status pengerjaan"}
+                        </Link>
+                      </Button>
+                    ) : test.status === "Berlangsung" ? (
+                      <Button asChild size="sm" className="mt-4 rounded-xl"><Link prefetch={false} href={`/peserta/jadwal/${test.id}`}>Mulai tes</Link></Button>
+                    ) : null}
                   </li>
                 ))}
               </ul>

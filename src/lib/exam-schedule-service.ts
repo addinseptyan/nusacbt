@@ -201,6 +201,10 @@ export async function changeExamRunValue(raw: unknown): Promise<ScheduleActionRe
       await client.query("UPDATE exam_schedule_runs SET published_at=clock_timestamp(),published_by=$2::bigint,updated_at=GREATEST(clock_timestamp(),updated_at+interval '1 microsecond') WHERE id=$1::bigint",[run.id,admin.id]);
     } else if (request.operation==="unpublish") {
       if (!run.publishedAt) throw new ScheduleProblem("Pelaksanaan belum dirilis. Muat ulang halaman.",true);
+      // lockRun menserialkan pengecekan ini dengan pembuatan attempt. Jadwal
+      // yang pernah dikerjakan tidak boleh ditarik lalu diubah/diakali.
+      const started=await client.query("SELECT 1 FROM exam_attempts WHERE run_id=$1::bigint LIMIT 1",[run.id]);
+      if (started.rowCount) throw new ScheduleProblem("Pelaksanaan tidak dapat ditarik karena sudah ada peserta yang mulai. Riwayat pengerjaan harus dipertahankan.",true);
       await client.query("UPDATE exam_schedule_runs SET published_at=NULL,published_by=NULL,updated_at=GREATEST(clock_timestamp(),updated_at+interval '1 microsecond') WHERE id=$1::bigint",[run.id]);
     } else {
       if (run.publishedAt) throw new ScheduleProblem("Tarik rilis sebelum menghapus pelaksanaan.");

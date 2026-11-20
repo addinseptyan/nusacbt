@@ -57,7 +57,7 @@ test("admin menyusun, melihat, mengubah, dan menghapus rancangan dengan soal dan
     await page.getByRole("button", { name: "Data Tes", exact: true }).click();
     await page.getByRole("link", { name: "Daftar Tes", exact: true }).click();
     await expect(page).toHaveURL(/\/data-tes\/daftar$/);
-    await expect(page.getByText("Rancangan admin, belum untuk ujian")).toBeVisible();
+    await expect(page.getByText("Rancangan admin, pratinjau data fiktif")).toBeVisible();
     const form = await openForm(page);
     await fillForm(form, periodId, `Ujian ${tag}`);
     await form.getByLabel("Zona waktu").selectOption("WITA");

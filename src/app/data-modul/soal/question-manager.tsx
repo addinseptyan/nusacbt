@@ -143,7 +143,7 @@ function QuestionDetail({ question, onClose }: { question: Question | null; onCl
   return (
     <Dialog open={question !== null} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className={dialogClass}>
-        <DialogHeader><DialogTitle className="text-lg font-bold">Detail soal</DialogTitle><DialogDescription>Kunci jawaban hanya untuk admin. Soal dapat dipilih pada rancangan tes; pengerjaan peserta belum tersedia.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle className="text-lg font-bold">Detail soal</DialogTitle><DialogDescription>Kunci jawaban hanya untuk admin. Saat peserta mulai, soal dan kuncinya disalin ke snapshot pengerjaan.</DialogDescription></DialogHeader>
         {question && <div className="space-y-5 py-1">
           <Badge variant="secondary" className="max-w-full break-words">{question.topicName}</Badge>
           <div><h3 className="text-sm font-bold">Isi soal</h3><div className="mt-2 text-sm"><QuestionRichDisplay document={question.promptRich} fallback={question.prompt} /></div>{question.hasPromptImage && <QuestionImage question={question} slot="prompt" alt="Gambar soal" />}</div>
@@ -202,12 +202,12 @@ export function QuestionManager({ topics, questions }: { topics: QuestionTopicOp
   return (
     <>
       <Alert className="mb-6 max-w-4xl rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
-        <Info className="size-4 text-[#727fc8] dark:text-indigo-300" /><AlertTitle className="text-[12px] font-bold">Bank soal</AlertTitle><AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Satu kategori, lima pilihan A–E, dan satu jawaban benar. <Link href="/data-modul/import-soal" className="font-semibold underline">Impor Word</Link> tersedia untuk format yang didukung; ekspor Word dan pengerjaan tes belum tersedia.</AlertDescription>
+        <Info className="size-4 text-[#727fc8] dark:text-indigo-300" /><AlertTitle className="text-[12px] font-bold">Bank soal</AlertTitle><AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Satu kategori, lima pilihan A–E, dan satu jawaban benar. <Link href="/data-modul/import-soal" className="font-semibold underline">Impor Word</Link> tersedia untuk format yang didukung; ekspor Word belum tersedia.</AlertDescription>
       </Alert>
       {topics.length === 0 && <Alert className="mb-6 max-w-4xl rounded-2xl"><Info className="size-4" /><AlertTitle>Siapkan kategori terlebih dahulu</AlertTitle><AlertDescription>Buka <Link href="/data-modul/topik">Topik / Mata Pelajaran</Link> untuk menambah kategori sebelum membuat soal.</AlertDescription></Alert>}
       <Card className="max-w-5xl gap-0 overflow-hidden rounded-[18px] bg-card py-0 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border p-5 sm:px-6">
-          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2.5"><h2 className="text-[15px] font-bold">Daftar soal</h2><Badge variant="secondary" className="rounded-full text-[10px]">{questions.length} soal</Badge></div><p className="mt-1 text-[12px] text-muted-foreground">Kelola soal pilihan ganda untuk digunakan pada tahap tes mendatang.</p></div>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2.5"><h2 className="text-[15px] font-bold">Daftar soal</h2><Badge variant="secondary" className="rounded-full text-[10px]">{questions.length} soal</Badge></div><p className="mt-1 text-[12px] text-muted-foreground">Kelola soal pilihan ganda untuk rancangan dan pelaksanaan tes.</p></div>
           <Button onClick={() => openEditor(null)} disabled={topics.length === 0} className="h-10 rounded-xl px-4 font-semibold"><Plus className="size-4" /> Tambah soal</Button>
         </div>
         <div className="grid gap-4 border-b border-border px-5 py-4 sm:grid-cols-2 sm:px-6">
