@@ -7,7 +7,7 @@ import { participantSessionDigest } from "@/lib/participant-login-validation.mjs
 
 export type ParticipantCandidate = { identityId: string; studentId: string; periodId: string; placementId: string };
 export type LockedParticipant = ParticipantCandidate & {
-  studentName: string; participantNumber: string; className: string;
+  studentName: string; studentNisn: string; participantNumber: string; className: string; periodName: string;
 };
 
 /** Cookie peserta dibatasi pada /peserta; jangan mengembalikan token mentah. */
@@ -47,9 +47,11 @@ export async function lockParticipantSession(client: PoolClient, hash: Buffer, c
   for (const [sql, id] of rows) if ((await client.query(sql, [id])).rowCount !== 1) return null;
   const result = await client.query<LockedParticipant>(
     `SELECT i.id::text AS "identityId",i.student_id::text AS "studentId",i.period_id::text AS "periodId",
-      pl.id::text AS "placementId",st.name AS "studentName",i.participant_number AS "participantNumber",pl.class_name_snapshot AS "className"
+      pl.id::text AS "placementId",st.name AS "studentName",st.nisn AS "studentNisn",i.participant_number AS "participantNumber",
+      pl.class_name_snapshot AS "className",ep.name AS "periodName"
      FROM participant_sessions sess JOIN participant_identities i ON i.id=sess.participant_identity_id
      JOIN school_students st ON st.id=i.student_id
+     JOIN exam_periods ep ON ep.id=i.period_id
      JOIN participant_login_settings ls ON ls.id=1 AND ls.period_id=i.period_id
      JOIN student_class_placements pl ON pl.id=sess.placement_id AND pl.student_id=i.student_id AND pl.period_id=i.period_id AND pl.ended_at IS NULL
      JOIN participant_passwords pw ON pw.participant_identity_id=i.id
