@@ -16,6 +16,7 @@
     "test:upgrade-019": "node tests/integration/upgrade-019.mjs",
     "test:upgrade-020": "node tests/integration/upgrade-020.mjs",
     "test:upgrade-021": "node tests/integration/upgrade-021.mjs",
+    "test:upgrade-022": "node tests/integration/upgrade-022.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "admin:create": "node scripts/create-admin.mjs",
     "participant:key:create": "node scripts/create-participant-key.mjs",
