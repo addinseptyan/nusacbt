@@ -188,5 +188,5 @@ try {
   assert.deepEqual(await snapshot(tables, sequences), before);
   assert.equal((await client.query("SELECT 1 FROM exam_score_visibility")).rowCount, 0);
   console.log(`Migrasi 019 → terbaru dua kali: ${tables.length} tabel dan ${sequences.length} sequence lama identik; jawaban, nilai, snapshot/gambar, sesi, sandi dan token tetap utuh.`);
-  console.log("Tidak ada kebijakan otomatis: nilai lama tersembunyi; constraint dan cascade diuji dengan rollback.");
+  console.log("Tabel kebijakan 020 masih kosong dan constraint/cascade diuji; 021 mengaktifkan kebijakan kategori secara terpisah.");
 } finally { key.fill(0); tokenKey.fill(0); await client.end().catch(() => {}); }

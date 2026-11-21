@@ -7,6 +7,7 @@ test("daftar nilai dibagikan dipaginasi, responsif, dan tidak mencampur data ter
   test.setTimeout(90_000); await page.setViewportSize({ width: 320, height: 568 });
   const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client); const f = await seedAttemptFixture(client, 0);
   try {
+    await client.query("UPDATE exam_score_category_visibility SET visible_to_participants=true,revision=revision+1 WHERE NOT visible_to_participants");
     await seedAttemptToken(client, f, "global", "788901"); await loginParticipant(page, f.login.username, f.login.passwordA);
     const first = await startWithToken(page, f.runId, "788901");
     // Fixture dengan banyak pelaksanaan selesai: semua FK dan snapshot tetap sah.
@@ -27,7 +28,6 @@ test("daftar nilai dibagikan dipaginasi, responsif, dan tidak mencampur data ter
     await client.query(`INSERT INTO exam_attempt_questions(attempt_id,position,snapshot_id,option_order,answer,answer_revision,answered_at)
       SELECT a.id,q.position,q.snapshot_id,q.option_order,q.answer,q.answer_revision,clock_timestamp()
       FROM exam_attempts a CROSS JOIN exam_attempt_questions q WHERE a.id=ANY($1::bigint[]) AND q.attempt_id=$2`, [attempts, first]);
-    await client.query("INSERT INTO exam_score_visibility(exam_test_id,visible_to_participants) VALUES($1,true)", [f.login.activeTest]);
     await page.goto("/peserta"); await page.getByRole("button", { name: "Nilai dibagikan" }).click();
     const dialog = page.getByRole("dialog", { name: "Nilai yang dibagikan" });
     await expect(dialog.getByRole("list", { name: "Nilai yang dibagikan" }).getByRole("listitem")).toHaveCount(20);
@@ -46,8 +46,8 @@ test("daftar nilai dibagikan dipaginasi, responsif, dan tidak mencampur data ter
       await expect(plain.getByRole("list", { name: "Nilai yang dibagikan" }).getByRole("listitem")).toHaveCount(3);
     } finally { await noJs.close(); }
     await dialog.getByRole("button", { name: "Tutup" }).click();
-    await client.query("UPDATE exam_score_visibility SET visible_to_participants=false,revision=revision+1 WHERE exam_test_id=$1", [f.login.activeTest]);
+    await client.query("UPDATE exam_score_category_visibility SET visible_to_participants=false,revision=revision+1 WHERE kind='makeup'");
     await page.getByRole("button", { name: "Nilai dibagikan" }).click(); await expect(dialog).toContainText("Belum ada nilai yang dibagikan");
     await expect(dialog.getByRole("navigation", { name: "Halaman nilai" })).toHaveCount(0);
-  } finally { await cleanupAttemptFixture(client, f); await client.end(); }
+  } finally { await client.query("UPDATE exam_score_category_visibility SET visible_to_participants=true,revision=revision+1 WHERE NOT visible_to_participants"); await cleanupAttemptFixture(client, f); await client.end(); }
 });

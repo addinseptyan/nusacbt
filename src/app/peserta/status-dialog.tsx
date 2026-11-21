@@ -5,8 +5,9 @@ import Link from "next/link";
 import { ClipboardCheck } from "lucide-react";
 
 import { participantAttemptStatus, type ParticipantStatusResult } from "@/app/peserta/actions";
+import { ScoreReveal } from "@/components/score-reveal";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const subscribe = () => () => {};
 const clientReady = () => true;
@@ -37,13 +38,13 @@ export function ParticipantStatusDialog({ attemptId, testName, runLabel }: { att
         {result?.ok && result.state === "working" && <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-950 dark:bg-amber-950/50 dark:text-amber-100"><p>Tes masih berlangsung.</p><Button asChild size="sm" className="mt-3 rounded-xl"><Link href={`/peserta/pengerjaan/${attemptId}`}>Lanjutkan tes</Link></Button></div>}
         {result?.ok && result.state === "finished" && <div className="space-y-3">
           <p className="rounded-xl bg-emerald-50 p-4 text-sm leading-6 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100">{result.reason === "time_expired" ? "Waktu tes habis. Jawaban tersimpan telah dikumpulkan otomatis." : "Jawaban tersimpan telah dikumpulkan."}</p>
-          {result.score !== null ? <div className="rounded-xl border border-emerald-200 p-4 dark:border-emerald-800"><p className="text-xs font-semibold text-muted-foreground">Nilai pengerjaan</p><p className="mt-1 text-3xl font-bold tabular-nums">{result.score}</p><p className="mt-1 text-xs text-muted-foreground">Nilai satu pengerjaan, bukan nilai akhir gabungan.</p></div>
+          {result.score !== null ? <div className="rounded-xl border border-emerald-200 p-4 dark:border-emerald-800"><p className="text-xs font-semibold text-muted-foreground">Nilai pengerjaan</p><ScoreReveal score={result.score} /><p className="mt-1 text-xs text-muted-foreground">Nilai satu pengerjaan, bukan nilai akhir gabungan.</p></div>
             : <p className="text-sm text-muted-foreground">Nilai belum dibagikan oleh pengawas.</p>}
         </div>}
-        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+        <DialogFooter className="-mx-5 -mb-5 sm:-mx-6 sm:-mb-6">
           {result && !result.ok && !result.login && <Button type="button" variant="outline" onClick={() => void refresh()}>Coba lagi</Button>}
           <Button type="button" variant="outline" onClick={() => changeOpen(false)}>Tutup</Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
     <noscript><Button asChild variant="outline" size="sm" className="mt-2 rounded-xl"><Link href={`/peserta/pengerjaan/${attemptId}`}>Lihat status tanpa JavaScript</Link></Button></noscript>

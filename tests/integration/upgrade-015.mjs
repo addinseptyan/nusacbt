@@ -154,7 +154,7 @@ try {
   assert.deepEqual(token.digest, digestSixDigitToken("654321", tokenKey));
   assert.equal((await client.query("SELECT prompt_text FROM question_bank")).rows[0].prompt_text, "ما قيمة √٤؟ 🧪");
   assert.equal((await client.query("SELECT count(*)::int AS n FROM exam_schedule_runs")).rows[0].n, 0);
-  console.log(`Migrasi 014 → terbaru (015–020) dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
+  console.log(`Migrasi 014 → terbaru (015–021) dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
 
   // Aplikasi baru menggunakan database upgrade dan file kunci fiktif terpisah.
   temp = await mkdtemp(join(tmpdir(), "nusacbt-upgrade-015-"));
@@ -186,7 +186,7 @@ try {
     // Rancangan lama masih ada untuk admin tetapi tidak otomatis dirilis.
     assert.equal(await page.getByText("Tes Lama Uji", { exact: true }).count(), 0);
     await adminPage.goto("/data-tes/daftar");
-    assert.equal(await adminPage.getByText("Tes Lama Uji", { exact: true }).isVisible(), true);
+    assert.equal(await adminPage.getByRole("heading", { name: "Tes Lama Uji", exact: true }).isVisible(), true);
     await adminPage.goto("/data-peserta/sandi?periode=19");
     const row = adminPage.getByRole("list", { name: "Daftar sandi peserta" }).getByRole("listitem").filter({ hasText: "Siswa Lama Uji" });
     await row.getByRole("button", { name: /^Lihat sandi / }).click();

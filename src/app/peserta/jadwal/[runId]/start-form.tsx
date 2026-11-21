@@ -6,7 +6,7 @@ import { ArrowRight, KeyRound } from "lucide-react";
 
 import { beginExamAction } from "@/app/peserta/jadwal/[runId]/actions";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 const subscribe = () => () => {};
@@ -77,10 +77,10 @@ export function StartForm({ runId, testName, runLabel, initialOpen = true }: Pro
           </div>
           <p id={helpId} className="text-xs leading-5 text-muted-foreground">Ketik atau tempel enam angka. Token hanya diperiksa saat mulai.</p>
           {shownError && <div id={errorId} role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{shownError} {state.login && !warning && <Link className="underline" href="/peserta/login?sesi=berakhir">Masuk kembali</Link>}</div>}
-          <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+          <DialogFooter className="-mx-5 -mb-5 sm:-mx-7 sm:-mb-7">
             <Button type="button" variant="outline" className="rounded-xl" disabled={pending} onClick={() => { setOpen(false); setToken(""); setWarning(""); setEdited(true); }}>Batal</Button>
             <Button type="submit" className="rounded-xl" disabled={pending}>{pending ? "Menyiapkan soal…" : "Mulai pengerjaan"}</Button>
-          </div>
+          </DialogFooter>
           {pending && <p role="status" className="text-xs leading-5 text-muted-foreground">Menyiapkan soal. Jika koneksi terputus, muat ulang jadwal untuk memeriksa apakah tes sudah dimulai.</p>}
         </form>
       </DialogContent>

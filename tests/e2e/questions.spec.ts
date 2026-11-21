@@ -347,7 +347,6 @@ test.describe("soal pada layar kecil", () => {
       const question = await createQuestion(client, topics[0], `Panjang${tag}${"P".repeat(1500)}`);
       await loginAsAdmin(page);
       await page.getByRole("button", { name: "Ganti tema" }).click();
-      await page.getByRole("menuitem", { name: "Gelap" }).click();
       await expect(page.locator("html")).toHaveClass(/\bdark\b/);
       await page.getByRole("button", { name: "Buka atau tutup sidebar" }).click();
       const sidebar = page.getByRole("dialog");

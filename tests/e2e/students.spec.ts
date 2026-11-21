@@ -483,7 +483,6 @@ test.describe("data siswa pada layar kecil", () => {
       await client.query("INSERT INTO school_students (name,nisn) VALUES ($1,$2)", [name, nisn]);
       await loginAsAdmin(page);
       await page.getByRole("button", { name: "Ganti tema" }).click();
-      await page.getByRole("menuitem", { name: "Gelap" }).click();
       await expect(page.locator("html")).toHaveClass(/\bdark\b/);
       await openStudents(page);
       await expect(studentRow(page, nisn)).toBeVisible();

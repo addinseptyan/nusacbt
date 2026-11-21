@@ -300,7 +300,7 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
      ), visible AS (
        SELECT a.id,a.test_name_snapshot,a.run_label_snapshot,a.correct_count,a.question_count,a.completed_at
        FROM exam_attempts a JOIN auth ON auth.identity_id=a.participant_identity_id AND auth.period_id=a.period_id
-       JOIN exam_score_visibility v ON v.exam_test_id=a.exam_test_id AND v.visible_to_participants
+       JOIN exam_score_category_visibility v ON v.kind=a.kind AND v.visible_to_participants
        WHERE a.completed_at IS NOT NULL
      ), counts AS (SELECT count(*)::int AS total FROM visible),
      page_info AS (

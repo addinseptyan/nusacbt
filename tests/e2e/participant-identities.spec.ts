@@ -630,7 +630,6 @@ test.describe("identitas pada layar kecil", () => {
       await seedIdentity(client, student.id, fixture.periodAId, `N${"1".repeat(63)}`, `U${"2".repeat(63)}`);
       await loginAsAdmin(page);
       await page.getByRole("button", { name: "Ganti tema" }).click();
-      await page.getByRole("menuitem", { name: "Gelap" }).click();
       await expect(page.locator("html")).toHaveClass(/\bdark\b/);
       await openIdentities(page, fixture.periodAId);
       await expect(identityRow(page, student.nisn)).toBeVisible();

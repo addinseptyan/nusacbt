@@ -164,7 +164,7 @@ test("kelompok dan pelaksanaan dapat diatur pada layar kecil, termasuk kapasitas
     const firstNisn=(await client.query<{nisn:string}>("SELECT nisn FROM school_students WHERE id=$1",[f.studentA])).rows[0].nisn;
     extraId=(await client.query<{id:string}>("INSERT INTO school_students(name,nisn) VALUES($1,$2) RETURNING id::text AS id",[extraName,nisn])).rows[0].id;
     await client.query("INSERT INTO student_class_placements(student_id,period_id,class_id,class_name_snapshot) VALUES($1,$2,$3,$4)",[extraId,f.periodA,f.classId,`X ${f.majorName}`]);
-    await loginAsAdmin(page); await page.getByRole("button",{name:"Ganti tema"}).click(); await page.getByRole("menuitem",{name:"Gelap"}).click();
+    await loginAsAdmin(page); await page.getByRole("button",{name:"Ganti tema"}).click();
     await expect(page.locator("html")).toHaveClass(/\bdark\b/);
     await page.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`);
     await page.getByLabel("Kapasitas sesi 1").fill("2"); await page.getByRole("button",{name:"Tambah sesi"}).click(); await page.getByLabel("Kapasitas sesi 2").fill("1");

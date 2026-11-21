@@ -2,7 +2,6 @@ import { Activity, ChevronLeft, ChevronRight, CircleAlert, Info, RefreshCw } fro
 import Link from "next/link";
 import type { PoolClient } from "pg";
 
-import { ScoreVisibilityControl } from "@/app/data-tes/monitoring/score-visibility-control";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,7 @@ const PAGE_SIZE = 30;
 type Row = { id: string; student: string; number: string; className: string; period: string; testName: string; label: string;
   kind: "regular" | "makeup" | "remedial"; questionCount: number; answered: number; correct: number | null;
   status: "working" | "waiting" | "submitted" | "time_expired"; started: string; deadline: string; zone: string };
-type ScoreOption = { id: string; name: string; period: string; visible: boolean; revision: string };
+type ScoreOption = { id: string; name: string; period: string };
 type Data = { options: ScoreOption[]; rows: Row[]; total: number; page: number; pages: number };
 
 async function loadData(testId: string | null, requestedPage: number): Promise<Data> {
@@ -28,10 +27,8 @@ async function loadData(testId: string | null, requestedPage: number): Promise<D
     client = await getPostgresPool().connect();
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const options = (await client.query<ScoreOption>(
-      `SELECT t.id::text AS id,t.name,p.name AS period,COALESCE(v.visible_to_participants,false) AS visible,
-         COALESCE(v.revision,0)::text AS revision
+      `SELECT t.id::text AS id,t.name,p.name AS period
        FROM exam_tests t JOIN exam_periods p ON p.id=t.period_id
-       LEFT JOIN exam_score_visibility v ON v.exam_test_id=t.id
        ORDER BY p.start_date DESC,t.name,t.id`,
     )).rows;
     const total = (await client.query<{ count: number }>("SELECT count(*)::int AS count FROM exam_attempts WHERE ($1::bigint IS NULL OR exam_test_id=$1::bigint)", [testId])).rows[0].count;
@@ -73,13 +70,11 @@ export default async function MonitoringPage({ searchParams }: { searchParams: P
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><Activity className="size-5" /></span>
       <div><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Hasil / Monitoring Tes</h1><p className="mt-2 text-[13px] leading-6 text-muted-foreground">Status dan nilai dasar setiap pengerjaan peserta.</p></div></div>
       <Button asChild variant="outline" className="rounded-xl"><Link href={url(testId, data.page)} prefetch={false}><RefreshCw className="size-4" /> Muat ulang</Link></Button></div>
-    <Alert className="mb-5 max-w-5xl rounded-2xl"><Info className="size-4" /><AlertTitle>Nilai pengerjaan, bukan nilai akhir</AlertTitle><AlertDescription className="text-xs leading-5">Nilai = 100 × benar ÷ jumlah soal; salah dan kosong nol, tanpa penalti. Tampilan dua desimal. Nilai tersembunyi secara default; pilih satu tes pada filter untuk mengatur tampil atau sembunyi bagi peserta yang sudah selesai. Izin ulang dan metode nilai akhir belum tersedia.</AlertDescription></Alert>
+    <Alert className="mb-5 max-w-5xl rounded-2xl"><Info className="size-4" /><AlertTitle>Nilai pengerjaan, bukan nilai akhir</AlertTitle><AlertDescription className="text-xs leading-5">Nilai = 100 × benar ÷ jumlah soal; salah dan kosong nol, tanpa penalti. Tampilan dua desimal. Nilai tersedia secara default setelah selesai. Atur tampil atau sembunyi per kategori di Pengaturan Pengerjaan. Izin ulang dan metode nilai akhir belum tersedia. <Link href="/data-tes/pengaturan-pengerjaan" className="font-semibold underline">Buka Pengaturan Pengerjaan</Link>.</AlertDescription></Alert>
     <Card className="gap-0 overflow-hidden rounded-[20px] py-0">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b p-5"><div><h2 className="font-bold">Daftar pengerjaan <Badge variant="secondary">{data.total}</Badge></h2><p className="mt-1 text-xs text-muted-foreground">Pantau pengerjaan dan atur pembagian nilai per tes.</p></div>
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b p-5"><div><h2 className="font-bold">Daftar pengerjaan <Badge variant="secondary">{data.total}</Badge></h2><p className="mt-1 text-xs text-muted-foreground">Pantau pengerjaan. Visibilitas peserta diatur per kategori pada Pengaturan Pengerjaan.</p></div>
         <form action="/data-tes/monitoring" className="flex flex-wrap items-end gap-2"><div><label htmlFor="filter-tes" className="mb-1 block text-xs font-semibold">Filter tes</label><select id="filter-tes" name="tes" defaultValue={testId ?? ""} className="h-9 max-w-[18rem] rounded-lg border bg-background px-2 text-sm"><option value="">Semua tes</option>{data.options.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.period}</option>)}</select></div><Button type="submit" variant="outline">Terapkan</Button></form></div>
-      {selectedTest ? <div className="border-b p-5"><ScoreVisibilityControl key={`${selectedTest.id}-${selectedTest.revision}`} {...selectedTest} /></div>
-        : testId ? <p role="alert" className="border-b p-5 text-sm text-destructive">Tes tidak ditemukan. Pilih tes lain.</p>
-          : <p className="border-b px-5 py-3 text-xs text-muted-foreground">Pilih satu tes pada filter untuk mengatur visibilitas nilai peserta.</p>}
+      {testId && !selectedTest && <p role="alert" className="border-b p-5 text-sm text-destructive">Tes tidak ditemukan. Pilih tes lain.</p>}
       {data.rows.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground">Belum ada pengerjaan pada pilihan ini.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-muted/40 text-xs text-muted-foreground"><tr><th scope="col" className="p-4">Peserta</th><th scope="col" className="p-4">Tes / pelaksanaan</th><th scope="col" className="p-4">Waktu server</th><th scope="col" className="p-4">Status</th><th scope="col" className="p-4">Terjawab</th><th scope="col" className="p-4">Benar</th><th scope="col" className="p-4">Nilai pengerjaan</th></tr></thead>
         <tbody>{data.rows.map((row) => { const grade = row.correct === null ? null : gradeExamCounts(row.correct, row.questionCount); return <tr key={row.id} className="border-t align-top"><td className="p-4"><p className="font-semibold">{row.student}</p><p className="mt-1 text-xs text-muted-foreground">{row.number} · {row.className}</p></td><td className="p-4"><p className="font-semibold">{row.testName}</p><p className="mt-1 text-xs text-muted-foreground">{row.period} · {row.kind === "regular" ? "Reguler" : row.kind === "makeup" ? "Susulan" : "Remidi"} · {row.label}</p></td><td className="p-4 text-xs leading-5 text-muted-foreground">Mulai {row.started}<br />Batas {row.deadline} {row.zone}</td><td className="p-4"><Badge variant={row.status === "working" ? "default" : "secondary"}>{row.status === "working" ? "Mengerjakan" : row.status === "waiting" ? "Menunggu penyelesaian" : row.status === "time_expired" ? "Waktu habis" : "Dikumpulkan"}</Badge></td><td className="p-4 tabular-nums">{row.answered} / {row.questionCount}</td><td className="p-4 tabular-nums">{row.correct ?? "—"}</td><td className="p-4 font-bold tabular-nums">{grade?.ok ? grade.display : "—"}</td></tr>; })}</tbody></table></div>}
       {data.pages > 1 && <nav aria-label="Halaman hasil" className="flex flex-wrap items-center justify-between gap-2 border-t p-5 text-xs"><span>Halaman {data.page} dari {data.pages}</span><div className="flex gap-2">{data.page > 1 && <Button asChild size="sm" variant="outline"><Link href={url(testId, data.page - 1)}><ChevronLeft className="size-4" /> Sebelumnya</Link></Button>}{data.page < data.pages && <Button asChild size="sm" variant="outline"><Link href={url(testId, data.page + 1)}>Berikutnya <ChevronRight className="size-4" /></Link></Button>}</div></nav>}

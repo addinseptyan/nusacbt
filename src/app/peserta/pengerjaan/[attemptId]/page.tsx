@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { ExamWork } from "@/app/peserta/pengerjaan/[attemptId]/exam-work";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { ScoreReveal } from "@/components/score-reveal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,11 +27,12 @@ export default async function ExamWorkPage({ params, searchParams }: Props) {
   if (view === "login") redirect("/peserta/login?sesi=berakhir");
   if (view === "missing") notFound();
   if (view.state === "working") return <ExamWork key={`${view.attemptId}:${view.position}:${view.question.revision}:${view.serverNow}`} view={view} />;
-  return <main className="min-h-svh bg-[#f6f8f6] px-4 py-12 dark:bg-[#101713]"><Card className="mx-auto max-w-xl gap-0 rounded-[22px] p-6 sm:p-8">
+  return <main className="min-h-svh bg-[#f6f8f6] px-4 py-12 dark:bg-[#101713]"><div className="mx-auto mb-3 flex max-w-xl justify-end"><ThemeToggle /></div><Card className="relative mx-auto max-w-xl gap-0 overflow-hidden rounded-[22px] p-6 sm:p-8">
+    <div className="completion-sparkles" data-testid="completion-celebration" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} />)}</div>
     <CheckCircle2 className="size-10 text-emerald-700 dark:text-emerald-400" />
     <p className="mt-5 text-xs font-semibold text-muted-foreground">PENGERJAAN SELESAI</p><h1 className="mt-1 break-words text-2xl font-bold">{view.testName}</h1><p className="mt-1 break-words text-sm text-muted-foreground">{view.runLabel}</p>
     <p className="mt-5 text-sm leading-6">{view.reason === "time_expired" ? "Waktu tes telah habis. Jawaban terakhir yang tersimpan di server telah dikumpulkan otomatis." : "Jawaban yang tersimpan di server telah dikumpulkan."}</p>
-    {view.score !== null ? <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/40"><p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">Nilai pengerjaan</p><p className="mt-1 text-3xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">{view.score}</p><p className="mt-1 text-xs text-emerald-800 dark:text-emerald-200">Nilai satu pengerjaan, bukan nilai akhir gabungan.</p></div>
+    {view.score !== null ? <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/40"><p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">Nilai pengerjaan</p><ScoreReveal score={view.score} /><p className="mt-1 text-xs text-emerald-800 dark:text-emerald-200">Nilai satu pengerjaan, bukan nilai akhir gabungan.</p></div>
       : <p className="mt-3 text-sm leading-6 text-muted-foreground">Nilai belum dibagikan oleh pengawas.</p>}
     <Button asChild className="mt-6 w-fit rounded-xl"><Link href="/peserta">Kembali ke jadwal</Link></Button>
   </Card></main>;

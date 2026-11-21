@@ -10,7 +10,7 @@ import { checkExamSubmissionAction, saveExamAnswerAction, saveExamDoubtAction, s
 import { QuestionRichDisplay } from "@/components/question-rich-display";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { AttemptView, WorkResult } from "@/lib/exam-attempt-work";
 
 type WorkingView = Extract<AttemptView, { state: "working" }>;
@@ -22,6 +22,14 @@ type DialogState =
 const subscribe = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
+
+type NavigationItem = WorkingView["navigation"][number];
+function questionStatus(item: NavigationItem) {
+  return item.doubtful ? `ragu-ragu, ${item.answered ? "terjawab" : "belum dijawab"}` : item.answered ? "terjawab" : "belum dijawab";
+}
+function questionColor(item: NavigationItem) {
+  return item.doubtful ? "border-amber-300 bg-amber-100 text-amber-950 dark:border-amber-700 dark:bg-amber-900 dark:text-amber-100" : item.answered ? "border-emerald-300 bg-emerald-100 text-emerald-950 dark:border-emerald-700 dark:bg-emerald-900 dark:text-emerald-100" : "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
+}
 
 function remainingText(seconds: number) {
   const hours = Math.floor(seconds / 3600);
@@ -47,6 +55,7 @@ export function ExamWork({ view }: { view: WorkingView }) {
   const localDeadline = useRef<number | null>(null);
   const inFlight = useRef(false);
   const refreshed = useRef(false);
+  const compactNavigation = useRef<HTMLElement>(null);
   const blocked = mode !== "idle";
   const navigation = view.navigation.map((item) => item.position === view.position
     ? { ...item, answered: confirmed !== null, doubtful: confirmedDoubt } : item);
@@ -61,6 +70,14 @@ export function ExamWork({ view }: { view: WorkingView }) {
     const timer = window.setInterval(tick, 1000); tick();
     return () => window.clearInterval(timer);
   }, [view.deadline, view.serverNow]);
+
+  useEffect(() => {
+    const nav = compactNavigation.current;
+    const active = nav?.querySelector<HTMLElement>('[aria-current="step"]');
+    if (nav && active && nav.clientWidth > 0) {
+      nav.scrollLeft = Math.max(0, active.offsetLeft - nav.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2);
+    }
+  }, [view.position]);
 
   useEffect(() => {
     if (seconds === 0 && mode === "idle" && !refreshed.current) { refreshed.current = true; router.refresh(); }
@@ -178,6 +195,11 @@ export function ExamWork({ view }: { view: WorkingView }) {
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 border-t pt-2 text-xs sm:grid-cols-4 xl:hidden">
         {identity.map((item) => <div key={item.label} className="min-w-0"><dt className="text-[10px] text-muted-foreground">{item.label}</dt><dd className="truncate font-semibold" title={item.value}>{item.value}</dd></div>)}
       </dl>
+      <nav ref={compactNavigation} aria-label="Navigasi nomor soal ringkas" className="mt-2 flex max-w-full gap-1.5 overflow-x-auto overscroll-x-contain pb-1 lg:hidden">
+        {navigation.map((item) => <button key={item.position} type="button" disabled={!hydrated || blocked} aria-current={item.position === view.position ? "step" : undefined}
+          aria-label={`Nomor ${item.position}, ${questionStatus(item)}`} onClick={() => { if (item.position !== view.position) navigate(`${base}?soal=${item.position}`); }}
+          className={`size-9 shrink-0 rounded-lg border text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-600 disabled:opacity-50 ${item.position === view.position ? "ring-2 ring-inset ring-indigo-600 dark:ring-indigo-400" : ""} ${questionColor(item)}`}>{item.position}</button>)}
+      </nav>
     </div></header>
     <div className="mx-auto max-w-[1400px] px-4 pb-28 pt-3 sm:px-6 sm:pt-4">
       <noscript><div role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">JavaScript diperlukan untuk menyimpan jawaban. Aktifkan JavaScript lalu muat ulang halaman; pilihan yang belum dikirim tidak tersimpan.</div></noscript>
@@ -214,7 +236,7 @@ export function ExamWork({ view }: { view: WorkingView }) {
           {mode === "navigating" && <p className="mt-4 text-xs text-muted-foreground">Memuat halaman. Jika tidak berlanjut, <button type="button" className="underline" onClick={reload}>muat ulang</button>.</p>}
           {seconds === 0 && mode !== "unsaved" && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">Memeriksa waktu dan status pada server…</p>}
         </section>
-        <aside className="rounded-[22px] border bg-card p-4">
+        <aside data-testid="exam-number-panel" className="rounded-[22px] border bg-card p-4 lg:sticky lg:top-32 lg:max-h-[calc(100dvh-13rem)] lg:overflow-y-auto xl:top-24 xl:max-h-[calc(100dvh-10rem)]">
           <div className="flex items-start justify-between gap-2"><div><h2 className="text-sm font-bold">Navigasi soal</h2><p className="mt-1 text-xs text-muted-foreground">{confirmedAnswered} dari {view.total} terjawab</p></div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{view.total ? Math.round(100 * confirmedAnswered / view.total) : 0}%</span></div>
           <div role="img" aria-label={`Progres status: ${answeredClear} sudah dijawab tanpa ragu, ${doubtfulCount} ragu-ragu, ${unansweredClear} belum dijawab`} className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
             <span className="bg-emerald-600" style={{ width: `${100 * answeredClear / view.total}%` }} /><span className="bg-amber-400" style={{ width: `${100 * doubtfulCount / view.total}%` }} /><span className="bg-slate-300 dark:bg-slate-600" style={{ width: `${100 * unansweredClear / view.total}%` }} />
@@ -225,11 +247,9 @@ export function ExamWork({ view }: { view: WorkingView }) {
           <p className="mt-2 text-[11px] leading-4 text-muted-foreground">Ragu-ragu termasuk soal yang sudah atau belum dijawab. Garis menunjukkan soal aktif.</p>
           <nav aria-label="Navigasi soal" className="mt-2 max-h-64 overflow-y-auto overscroll-contain p-2" style={{ scrollbarGutter: "stable" }}>
             <div className="grid grid-cols-5 gap-2">{navigation.map((item) => {
-              const status = item.doubtful ? `ragu-ragu, ${item.answered ? "terjawab" : "belum dijawab"}` : item.answered ? "terjawab" : "belum dijawab";
-              const color = item.doubtful ? "border-amber-300 bg-amber-100 text-amber-950 dark:border-amber-700 dark:bg-amber-900 dark:text-amber-100" : item.answered ? "border-emerald-300 bg-emerald-100 text-emerald-950 dark:border-emerald-700 dark:bg-emerald-900 dark:text-emerald-100" : "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
               return <button key={item.position} type="button" disabled={!hydrated || blocked} aria-current={item.position === view.position ? "step" : undefined}
-                aria-label={`Soal ${item.position}, ${status}`} onClick={() => { if (item.position !== view.position) navigate(`${base}?soal=${item.position}`); }}
-                className={`h-9 rounded-lg border text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 ${item.position === view.position ? "ring-2 ring-indigo-600 ring-offset-2 ring-offset-card dark:ring-indigo-400" : ""} ${color}`}>{item.position}</button>;
+                aria-label={`Soal ${item.position}, ${questionStatus(item)}`} onClick={() => { if (item.position !== view.position) navigate(`${base}?soal=${item.position}`); }}
+                className={`h-9 rounded-lg border text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 ${item.position === view.position ? "ring-2 ring-indigo-600 ring-offset-2 ring-offset-card dark:ring-indigo-400" : ""} ${questionColor(item)}`}>{item.position}</button>;
             })}</div>
           </nav>
           <div className="mt-3 border-t pt-3">
@@ -243,11 +263,11 @@ export function ExamWork({ view }: { view: WorkingView }) {
                 {dialog.kind === "ready" && <div className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-950 dark:bg-amber-950/50 dark:text-amber-100"><p><strong>{dialog.answered}</strong> dari {dialog.total} soal terjawab; <strong>{dialog.total - dialog.answered}</strong> belum dijawab dan <strong>{dialog.doubtful}</strong> ditandai ragu-ragu.</p><p className="mt-2 text-xs leading-5">Jumlah terjawab termasuk soal ragu yang memiliki jawaban. Jawaban kosong bernilai nol. Setelah dikumpulkan, pengerjaan tidak dapat diubah.</p></div>}
                 {dialog.kind === "blocked" && <p className="rounded-xl bg-muted/60 p-3 text-sm leading-6">Lanjutkan mengerjakan. Saat waktu habis, jawaban yang tersimpan dikumpulkan otomatis.</p>}
                 {dialog.kind === "error" && <p role="alert" className="rounded-xl bg-destructive/5 p-3 text-sm text-destructive">{dialog.message}</p>}
-                <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+                <DialogFooter>
                   {dialog.kind === "checking" ? <span role="status" className="text-xs text-muted-foreground">Memeriksa…</span> : <Button type="button" variant="outline" disabled={mode === "submitting"} onClick={() => setDialog(null)}>{dialog.kind === "ready" ? "Batal" : "Tutup"}</Button>}
                   {dialog.kind === "ready" && <Button type="button" disabled={mode === "submitting"} onClick={() => void submit()}>{mode === "submitting" ? "Mengumpulkan…" : "Ya, kumpulkan"}</Button>}
                   {dialog.kind === "error" && dialog.login && <Button type="button" onClick={() => router.push("/peserta/login?sesi=berakhir")}>Masuk kembali</Button>}
-                </div>
+                </DialogFooter>
               </DialogContent>}
             </Dialog>
           </div>

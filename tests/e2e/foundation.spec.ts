@@ -25,14 +25,22 @@ test("dashboard menampilkan tujuh menu dan modul dapat dibuka", async ({ page })
 test("mode gelap tersimpan setelah halaman dimuat ulang", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Ganti tema" }).click();
-  await page.getByRole("menuitem", { name: "Gelap" }).click();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
-  await expect(page.getByText("Tema gelap diaktifkan")).toBeVisible();
   await page.reload();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await page.getByRole("button", { name: "Ganti tema" }).click();
-  await page.getByRole("menuitem", { name: "Terang" }).click();
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+});
+
+test("preferensi sistem lama menjadi terang dan tidak lagi mengikuti OS", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/"); await page.evaluate(() => localStorage.setItem("theme", "system")); await page.reload();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("theme"))).toBe("light");
+  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+  await page.getByRole("button", { name: "Ganti tema" }).click();
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+  await expect(page.getByRole("menuitem", { name: "Ikuti sistem" })).toHaveCount(0);
+  await page.emulateMedia({ colorScheme: "light" }); await expect(page.locator("html")).toHaveClass(/\bdark\b/);
 });
 
 test("dialog menjelaskan batas pratinjau dan dapat ditutup", async ({ page }) => {

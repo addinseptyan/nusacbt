@@ -352,7 +352,6 @@ test.describe("kelas dan jurusan pada layar kecil", () => {
       await client.query("INSERT INTO school_classes (level, major_id) VALUES ('XII', $1)", [inserted.rows[0].id]);
       await loginAsAdmin(page);
       await page.getByRole("button", { name: "Ganti tema" }).click();
-      await page.getByRole("menuitem", { name: "Gelap" }).click();
       await expect(page.locator("html")).toHaveClass(/\bdark\b/);
       await page.getByRole("button", { name: "Buka atau tutup sidebar" }).click();
       const sidebar = page.getByRole("dialog");

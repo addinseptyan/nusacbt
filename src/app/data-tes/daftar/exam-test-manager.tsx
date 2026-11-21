@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ClipboardList, Eye, Info, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { ExamTimeline, type TimelineClock, type TimelineItem } from "@/app/data-tes/daftar/exam-timeline";
 import { deleteExamTest, saveExamTest } from "@/app/data-tes/daftar/actions";
 import { QuestionRichDisplay } from "@/components/question-rich-display";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -157,7 +158,7 @@ function DeleteTestDialog({ test, onClose }: { test: ExamTest; onClose: () => vo
   </DialogContent></Dialog>;
 }
 
-export function ExamTestManager({ periods, tests, topics, questions }: { periods: ExamPeriodOption[]; tests: ExamTest[]; topics: QuestionTopicOption[]; questions: Question[] }) {
+export function ExamTestManager({ periods, tests, topics, questions, timeline, clock }: { periods: ExamPeriodOption[]; tests: ExamTest[]; topics: QuestionTopicOption[]; questions: Question[]; timeline: TimelineItem[]; clock: TimelineClock }) {
   const [query, setQuery] = useState(""); const [periodId, setPeriodId] = useState(""); const [page, setPage] = useState(0);
   const [editorOpen, setEditorOpen] = useState(false); const [editing, setEditing] = useState<ExamTest | null>(null); const [deleting, setDeleting] = useState<ExamTest | null>(null);
   const normalized = query.trim().toLowerCase();
@@ -167,6 +168,7 @@ export function ExamTestManager({ periods, tests, topics, questions }: { periods
   return <TooltipProvider delayDuration={350}>
     <Alert className="mb-6 max-w-4xl rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200"><Info className="size-4" /><AlertTitle className="text-[12px] font-bold">Rancangan admin, pratinjau data fiktif</AlertTitle><AlertDescription className="text-[12px] leading-5">Peserta hanya melihat pelaksanaan yang dirilis untuknya. Atur kelompok sesi per periode, lalu buka pelaksanaan pada tiap tes. Jadwal lama tidak terlihat sampai diatur dan dirilis. Token, pengerjaan, dan nilai dasar tersedia untuk pengujian; izin mengulang dan nilai akhir belum tersedia.</AlertDescription></Alert>
     {!periods.length && <Alert className="mb-5 rounded-2xl"><Info className="size-4" /><AlertTitle>Periode diperlukan</AlertTitle><AlertDescription>Buat periode terlebih dahulu di <Link href="/data-peserta/periode" className="font-semibold text-primary underline">Periode Ujian</Link>.</AlertDescription></Alert>}
+    <ExamTimeline items={timeline} clock={clock} onEditBase={(id) => { const test = tests.find((item) => item.id === id); if (test) openEditor(test); }} />
     <Card className="gap-0 overflow-hidden rounded-[18px] bg-card py-0 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border p-5 sm:px-6"><div><div className="flex items-center gap-2.5"><h2 className="text-[15px] font-bold">Rancangan tes</h2><Badge variant="secondary" className="rounded-full text-[10px]">{tests.length} tes</Badge></div><p className="mt-1 text-[12px] text-muted-foreground">Kelola jadwal dan susunan soal. Semua tes masih berupa rancangan.</p></div><div className="flex flex-wrap gap-2"><Tooltip><TooltipTrigger asChild><Button asChild variant="outline" className="h-10 rounded-xl px-4 font-semibold"><Link href="/data-tes/daftar/sesi">Atur kelompok sesi</Link></Button></TooltipTrigger><TooltipContent sideOffset={6}>Bagi siswa ke kelompok tetap per periode.</TooltipContent></Tooltip><Button onClick={() => openEditor(null)} disabled={!periods.length} className="h-10 rounded-xl px-4 font-semibold"><Plus className="size-4" /> Tambah tes</Button></div></div>
       <div className="grid gap-3 border-b border-border p-5 sm:grid-cols-2 sm:px-6"><div className="relative"><Search className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" /><Input aria-label="Cari tes" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Cari nama atau ID tes" className="h-10 pl-9" /></div><select aria-label="Filter periode tes" value={periodId} onChange={(event) => { setPeriodId(event.target.value); setPage(0); }} className={selectClass}><option value="">Semua periode</option>{periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}</select></div>
