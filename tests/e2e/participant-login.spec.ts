@@ -30,11 +30,12 @@ test("peserta masuk per periode dan hanya melihat identitas serta jadwal periode
     await expect(page.getByRole("heading", { name: "Identitas peserta" })).toBeVisible();
     await expect(page.getByText(f.periodAName, { exact: true })).toBeVisible();
     await expect(page.getByText(f.activeName, { exact: true })).toBeVisible();
-    await expect(page.getByText(f.futureName, { exact: true })).toBeVisible();
-    await expect(page.getByText(f.pastName, { exact: true })).toBeVisible();
+    await expect(page.getByText(f.futureName, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(f.pastName, { exact: true })).toHaveCount(0);
     await expect(page.getByText(f.hiddenName, { exact: true })).toHaveCount(0);
     await expect(page.getByText(f.studentBName, { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /Mulai tes/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Mulai tes", exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Masukkan token ujian" })).toHaveCount(0);
     const html = await page.content();
     expect(html).not.toContain(f.passwordA); expect(html).not.toContain(f.questionSecret); expect(html).not.toContain("Jawaban rahasia"); expect(html).not.toContain(code);
     const cookie = (await page.context().cookies()).find((item) => item.name === "nusacbt_participant_session");

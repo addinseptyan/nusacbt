@@ -4,7 +4,9 @@ import { randomBytes, randomInt } from "node:crypto";
 import { cookies } from "next/headers";
 import type { PoolClient } from "pg";
 
+import { gradeExamCounts } from "@/lib/exam-grading.mjs";
 import { participantAttemptBucket, participantSessionDigest } from "@/lib/participant-login-validation.mjs";
+import { PARTICIPANT_SCHEDULE_DAY_FILTER, PARTICIPANT_SCHEDULE_DAY_JOIN } from "@/lib/participant-schedule-day.mjs";
 import { verifyPassword } from "@/lib/password.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 
@@ -240,7 +242,9 @@ export async function participantView(requestedPage: number): Promise<Participan
        FROM exam_schedule_runs r JOIN exam_schedule_participants p ON p.run_id=r.id
        JOIN auth a ON a.period_id=r.period_id AND a.student_id=p.student_id
        LEFT JOIN exam_attempts att ON att.run_id=r.id AND att.participant_identity_id=a.identity_id
-       WHERE r.published_at IS NOT NULL
+       ${PARTICIPANT_SCHEDULE_DAY_JOIN}
+       -- Filter sebelum count dan LIMIT: hari ini per zona, serta kemarin jika masih berlangsung.
+       WHERE r.published_at IS NOT NULL AND ${PARTICIPANT_SCHEDULE_DAY_FILTER}
      ), counts AS (
        SELECT count(*)::int AS total FROM visible
      ), page_info AS (
@@ -269,4 +273,52 @@ export async function participantView(requestedPage: number): Promise<Participan
     [hash, requestedPage, PAGE_SIZE],
   );
   return result.rows[0] ?? null;
+}
+
+export type ParticipantSharedScores = {
+  total: number; page: number; pages: number;
+  scores: { id: string; testName: string; runLabel: string; score: string }[];
+};
+
+/** Hanya nilai selesai yang sedang dibuka admin, milik sesi dan periode aktif. */
+export async function participantSharedScores(requestedPage: number): Promise<ParticipantSharedScores | null> {
+  const hash = participantSessionDigest((await cookies()).get(COOKIE_NAME)?.value);
+  if (!hash) return null;
+  type Raw = { total: number; page: number; pages: number;
+    scores: { id: string; testName: string; runLabel: string; correct: number; questionCount: number }[] };
+  const result = await getPostgresPool().query<Raw>(
+    `WITH auth AS (
+       SELECT i.id AS identity_id, i.period_id
+       FROM participant_sessions sess JOIN participant_identities i ON i.id=sess.participant_identity_id
+       JOIN participant_login_settings ls ON ls.id=1 AND ls.period_id=i.period_id
+       JOIN student_class_placements pl ON pl.id=sess.placement_id AND pl.student_id=i.student_id
+         AND pl.period_id=i.period_id AND pl.ended_at IS NULL
+       JOIN participant_passwords pw ON pw.participant_identity_id=i.id
+       WHERE sess.token_hash=$1 AND sess.expires_at>clock_timestamp()
+         AND i.username=sess.username_snapshot AND i.updated_at=sess.identity_revision
+         AND pw.updated_at=sess.password_revision AND sha256(convert_to(pw.password_hash,'UTF8'))=sess.password_hash_digest
+     ), visible AS (
+       SELECT a.id,a.test_name_snapshot,a.run_label_snapshot,a.correct_count,a.question_count,a.completed_at
+       FROM exam_attempts a JOIN auth ON auth.identity_id=a.participant_identity_id AND auth.period_id=a.period_id
+       JOIN exam_score_visibility v ON v.exam_test_id=a.exam_test_id AND v.visible_to_participants
+       WHERE a.completed_at IS NOT NULL
+     ), counts AS (SELECT count(*)::int AS total FROM visible),
+     page_info AS (
+       SELECT total,GREATEST(1,CEIL(total::numeric/$3::integer)::int) AS pages,
+         LEAST($2::integer,GREATEST(1,CEIL(total::numeric/$3::integer)::int)) AS page FROM counts
+     )
+     SELECT pi.total,pi.page,pi.pages,COALESCE((SELECT json_agg(d) FROM (
+       SELECT v.id::text AS id,v.test_name_snapshot AS "testName",v.run_label_snapshot AS "runLabel",
+         v.correct_count AS correct,v.question_count AS "questionCount"
+       FROM visible v ORDER BY v.completed_at DESC,v.id DESC LIMIT $3::integer OFFSET ((pi.page-1)*$3::integer)
+     ) d),'[]'::json) AS scores
+     FROM auth CROSS JOIN page_info pi`, [hash, requestedPage, PAGE_SIZE],
+  );
+  const row = result.rows[0]; if (!row) return null;
+  return { total: row.total, page: row.page, pages: row.pages, scores: row.scores.map((item) => {
+    const grade = gradeExamCounts(item.correct, item.questionCount);
+    if (!grade.ok) throw new Error("Data nilai pengerjaan tidak konsisten.");
+    // Jumlah benar, kunci dan data tersembunyi tidak dikirim ke browser.
+    return { id: item.id, testName: item.testName, runLabel: item.runLabel, score: grade.display };
+  }) };
 }

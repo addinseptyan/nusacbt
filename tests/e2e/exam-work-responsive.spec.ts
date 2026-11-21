@@ -15,9 +15,12 @@ test("tampilan ponsel 320px menjaga timer sticky, dialog dan navigasi tetap terb
     await page.screenshot({ path: testInfo.outputPath("mobile-token.png") });
     await token.getByRole("button", { name: "Mulai pengerjaan" }).click(); await expect(page.getByRole("heading", { name: /^Soal 1/ })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-    const header = page.getByTestId("exam-sticky-header"); await expect(header.getByLabel(/Perkiraan sisa waktu/)).toBeVisible();
+    const header = page.getByTestId("exam-sticky-header"); await expect(header.getByLabel(/Waktu tersisa/)).toBeVisible(); await expect(header).not.toContainText("Perkiraan sisa");
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await expect.poll(async () => Math.round((await header.boundingBox())?.y ?? -1)).toBe(0);
+    const bottom = page.getByTestId("exam-bottom-nav"); await expect(bottom).toBeInViewport();
+    expect(await bottom.evaluate((node) => getComputedStyle(node).position)).toBe("fixed");
+    await expect.poll(async () => Math.abs((await bottom.boundingBox())!.y + (await bottom.boundingBox())!.height - 568)).toBeLessThanOrEqual(1);
     await expect(header).toContainText(f.login.periodAName); await expect(header).toContainText("NISN");
     await expect(page.getByRole("navigation", { name: "Navigasi soal" })).toBeVisible();
     await page.getByRole("button", { name: "Selesaikan tes" }).click();
@@ -25,6 +28,29 @@ test("tampilan ponsel 320px menjaga timer sticky, dialog dan navigasi tetap terb
     await expect(dialog.getByRole("button", { name: "Tutup" })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("mobile-dialog.png") }); await dialog.getByRole("button", { name: "Tutup" }).click();
     await page.screenshot({ path: testInfo.outputPath("mobile-pengerjaan.png"), fullPage: true });
+  } finally { await cleanupAttemptFixture(client, f); await client.end(); }
+});
+
+test("soal pendek muat pada 1366×768 dan navigasi bawah tetap saat konten panjang", async ({ page }, testInfo) => {
+  test.setTimeout(90_000); await page.setViewportSize({ width: 1366, height: 768 });
+  const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client); const f = await seedAttemptFixture(client, 19);
+  try {
+    await seedAttemptToken(client, f, "global", "123098"); await loginParticipant(page, f.login.username, f.login.passwordA);
+    await startWithToken(page, f.runId, "123098");
+    await expect(page.getByRole("heading", { name: /^Soal 1/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Selesaikan tes" })).toBeInViewport();
+    await expect(page.getByTestId("exam-bottom-nav").getByRole("button", { name: "Berikutnya" })).toBeInViewport();
+    const measurements = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight, clientHeight: document.documentElement.clientHeight }));
+    expect(measurements.width).toBeLessThanOrEqual(1366);
+    expect(measurements.height).toBeLessThanOrEqual(measurements.clientHeight + 1);
+    await page.screenshot({ path: testInfo.outputPath("desktop-1366x768.png") });
+    // Konten panjang memang boleh memerlukan scroll; tombol harus tetap terjangkau.
+    await page.locator("#question-heading").evaluate((heading) => { const spacer = document.createElement("p"); spacer.textContent = "Konten panjang simulasi"; spacer.style.height = "1000px"; heading.parentElement?.after(spacer); });
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const bottom = page.getByTestId("exam-bottom-nav"); await expect(bottom).toBeInViewport();
+    await expect.poll(async () => Math.abs((await bottom.boundingBox())!.y + (await bottom.boundingBox())!.height - 768)).toBeLessThanOrEqual(1);
+    await bottom.getByRole("button", { name: "Berikutnya" }).click();
+    await expect(page.getByRole("heading", { name: /^Soal 2/ })).toBeVisible();
   } finally { await cleanupAttemptFixture(client, f); await client.end(); }
 });
 

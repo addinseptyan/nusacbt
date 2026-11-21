@@ -16,8 +16,10 @@ test("token khusus, snapshot gambar/kunci, resume, penilaian dan perlindungan ri
     const testId = await seedAttemptToken(client, f, "test", "987654");
     await loginParticipant(page, f.login.username, f.login.passwordA);
     const schedule = page.getByRole("listitem").filter({ hasText: f.login.activeName });
-    await expect(schedule.getByRole("link", { name: "Mulai tes" })).toBeVisible();
-    await schedule.getByRole("link", { name: "Mulai tes" }).click();
+    await expect(schedule.getByRole("button", { name: "Mulai tes" })).toBeVisible();
+    await schedule.getByRole("button", { name: "Mulai tes" }).click();
+    await expect(page).toHaveURL(/\/peserta$/);
+    await expect(page.getByRole("dialog", { name: "Masukkan token ujian" })).toBeVisible();
     await page.getByLabel("Token tes").fill("001234"); await page.getByRole("button", { name: "Mulai pengerjaan" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Token tidak cocok" })).toBeVisible();
     expect((await client.query("SELECT 1 FROM exam_attempts WHERE run_id=$1", [f.runId])).rowCount).toBe(0);

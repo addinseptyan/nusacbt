@@ -162,6 +162,6 @@ try {
     await client.query("ROLLBACK TO SAVEPOINT invalid_group");
   } finally { await client.query("ROLLBACK"); }
   assert.deepEqual(await snapshot(tables, sequences), before);
-  console.log(`Migrasi 016 → terbaru (017–019) dua kali: ${tables.length} tabel dan ${sequences.length} sequence lama identik; tes, soal, token, sesi, sandi dan audit tetap utuh.`);
+  console.log(`Migrasi 016 → terbaru (017–020) dua kali: ${tables.length} tabel dan ${sequences.length} sequence lama identik; tes, soal, token, sesi, sandi dan audit tetap utuh.`);
   console.log("Data baru kosong; tes lama tidak memiliki jadwal dirilis. Constraint siswa/sesi dan rilis diuji melalui rollback.");
 } finally { key.fill(0); tokenKey.fill(0); await client.end().catch(() => {}); }

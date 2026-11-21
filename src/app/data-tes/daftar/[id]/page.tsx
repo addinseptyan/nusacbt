@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarClock, CircleAlert } from "lucide-react";
+import { CalendarClock, ChartNoAxesCombined, CircleAlert } from "lucide-react";
 import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
@@ -11,6 +11,7 @@ import type { ExamTest } from "@/lib/exam-test-types";
 import { getPostgresPool } from "@/lib/postgres";
 import type { Question, QuestionLetter } from "@/lib/question-types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { ExamRunManager } from "./run-manager";
 
 export const metadata = { title: "Pelaksanaan Tes — NusaCBT", robots: { index: false, follow: false } };
@@ -83,6 +84,6 @@ export default async function ExamRunPage({ params }: { params: Promise<{ id: st
     return <Failure message="Pastikan database berjalan dan migrasi terbaru telah diterapkan." />;
   } finally { client?.release(); }
   if (!test || !plan) return <Failure message="Tes tidak ditemukan atau telah dihapus." />;
-  return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9"><div className="mb-6 flex items-start gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><CalendarClock className="size-5" /></span><div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 break-words text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Pelaksanaan Tes</h1><p className="mt-2 break-words text-[13px] leading-6 text-muted-foreground">{test.name} · {test.periodName}</p></div></div><ExamRunManager key={`${test.id}-${test.revision}`} test={test} plan={plan} runs={runs} questions={questions} /></div>;
+  return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9"><div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><CalendarClock className="size-5" /></span><div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 break-words text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Pelaksanaan Tes</h1><p className="mt-2 break-words text-[13px] leading-6 text-muted-foreground">{test.name} · {test.periodName}</p></div></div><Button asChild variant="outline" className="rounded-xl"><Link href={`/data-tes/monitoring?tes=${test.id}`}><ChartNoAxesCombined className="size-4" /> Hasil &amp; visibilitas nilai</Link></Button></div><ExamRunManager key={`${test.id}-${test.revision}`} test={test} plan={plan} runs={runs} questions={questions} /></div>;
 }
 function Failure({message}:{message:string}) { return <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9"><h1 className="text-[29px] font-bold">Pelaksanaan Tes</h1><Alert variant="destructive" role="alert" className="mt-6 max-w-2xl"><CircleAlert className="size-4" /><AlertTitle>Pelaksanaan belum dapat dimuat</AlertTitle><AlertDescription>{message} <Link href="/data-tes/daftar" className="underline">Kembali ke Daftar Tes</Link>.</AlertDescription></Alert></div>; }

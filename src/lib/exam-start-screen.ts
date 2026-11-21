@@ -1,5 +1,6 @@
 import "server-only";
 
+import { PARTICIPANT_SCHEDULE_DAY_FILTER, PARTICIPANT_SCHEDULE_DAY_JOIN } from "@/lib/participant-schedule-day.mjs";
 import { participantSessionHash } from "@/lib/participant-session-lock";
 import { getPostgresPool } from "@/lib/postgres";
 
@@ -31,7 +32,8 @@ export async function loadExamStartScreen(runId: string): Promise<Screen | null>
        FROM exam_schedule_runs r JOIN exam_schedule_participants p ON p.run_id=r.id AND p.student_id=a.student_id
        JOIN exam_tests t ON t.id=r.exam_test_id
        LEFT JOIN exam_attempts att ON att.run_id=r.id AND att.participant_identity_id=a.identity_id
-       WHERE r.id=$2::bigint AND r.period_id=a.period_id AND r.published_at IS NOT NULL
+       ${PARTICIPANT_SCHEDULE_DAY_JOIN}
+       WHERE r.id=$2::bigint AND r.period_id=a.period_id AND r.published_at IS NOT NULL AND ${PARTICIPANT_SCHEDULE_DAY_FILTER}
      ) schedule ON true`, [hash, runId],
   );
   return result.rows[0] ?? null;

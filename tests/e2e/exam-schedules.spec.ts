@@ -124,10 +124,18 @@ test("kelompok campuran tetap, rilis selektif, susulan/remidi, perubahan kelas, 
     await expect(form.getByText("2 dipilih / 3 tempat")).toBeVisible(); await saveRun(form);
     await a.reload(); await b.reload(); await expect(a.getByText(testName,{exact:true})).toHaveCount(0); await expect(b.getByText(testName,{exact:true})).toHaveCount(0);
     await publish(page,"Sesi 1"); await a.reload(); await b.reload(); await excluded.reload();
-    await expect(a.getByText(testName,{exact:true})).toBeVisible(); await expect(a.getByText("Reguler · Sesi 1",{exact:true})).toBeVisible();
+    // Rilis tahun lain tidak muncul pada jadwal harian. Pindahkan hanya
+    // fixture ke hari ini untuk tetap menguji pemilihan peserta dan sesi.
+    await expect(a.getByText(testName,{exact:true})).toHaveCount(0);
+    await client.query(`UPDATE exam_schedule_runs SET starts_at=(date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Jakarta') + interval '7 hours') AT TIME ZONE 'Asia/Jakarta' WHERE exam_test_id=$1 AND label='Sesi 1'`,[exam]);
+    await a.reload(); await expect(a.getByText(testName,{exact:true})).toBeVisible(); await expect(a.getByText("Reguler · Sesi 1",{exact:true})).toBeVisible();
     await expect(b.getByText(testName,{exact:true})).toHaveCount(0); await expect(excluded.getByText(testName,{exact:true})).toHaveCount(0);
-    await publish(page,"Sesi 2"); await b.reload(); await expect(b.getByText("Reguler · Sesi 2",{exact:true})).toBeVisible();
+    await publish(page,"Sesi 2");
+    await client.query(`UPDATE exam_schedule_runs SET starts_at=(date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Jakarta') + interval '9 hours') AT TIME ZONE 'Asia/Jakarta' WHERE exam_test_id=$1 AND label='Sesi 2'`,[exam]);
+    await b.reload(); await expect(b.getByText("Reguler · Sesi 2",{exact:true})).toBeVisible();
     await expect(a.getByText("Reguler · Sesi 2",{exact:true})).toHaveCount(0);
+    // Kembalikan waktu fixture semula untuk uji bentrok dan token lintas hari.
+    await client.query(`UPDATE exam_schedule_runs SET starts_at=(CASE label WHEN 'Sesi 1' THEN timestamp '2040-07-01 07:00' ELSE timestamp '2040-07-01 09:00' END) AT TIME ZONE 'Asia/Jakarta' WHERE exam_test_id=$1 AND label IN ('Sesi 1','Sesi 2')`,[exam]);
 
     // Tidak boleh ada reguler kedua untuk nomor sesi yang sama.
     form=await newRun(page,"regular","Duplikat sesi","2040-07-01T11:00"); await form.getByRole("button",{name:"Pilih semua yang tersedia"}).click();
@@ -159,10 +167,20 @@ test("kelompok campuran tetap, rilis selektif, susulan/remidi, perubahan kelas, 
       LEFT JOIN exam_schedule_custom_questions q ON q.run_id=r.id WHERE r.exam_test_id=$1 AND r.kind='remedial' GROUP BY r.id ORDER BY r.label`,[exam])).rows;
     expect(kinds).toHaveLength(2); expect(kinds.map((x)=>[x.mode,x.n]).sort()).toEqual([["custom",1],["inherit",0]]);
     await a.reload(); await b.reload(); await excluded.reload();
+    await expect(a.getByText("Susulan · Susulan A",{exact:true})).toHaveCount(0);
+    await client.query(`UPDATE exam_schedule_runs SET starts_at=(date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Jakarta') +
+      CASE label WHEN 'Susulan A' THEN interval '12 hours' WHEN 'Susulan RPL' THEN interval '14 hours'
+        WHEN 'Remidi khusus' THEN interval '16 hours' ELSE interval '18 hours' END) AT TIME ZONE 'Asia/Jakarta'
+      WHERE exam_test_id=$1 AND label IN ('Susulan A','Susulan RPL','Remidi khusus','Remidi default')`,[exam]);
+    await a.reload(); await b.reload();
     await expect(a.getByText("Susulan · Susulan A",{exact:true})).toBeVisible(); await expect(a.getByText("Remidi · Remidi khusus",{exact:true})).toBeVisible();
     await expect(b.getByText("Susulan · Susulan RPL",{exact:true})).toBeVisible(); await expect(b.getByText("Remidi · Remidi default",{exact:true})).toBeVisible();
     await expect(excluded.getByText(testName,{exact:true})).toHaveCount(0);
     for(const secret of [f.questionSecret,`Rahasia reguler kedua ${f.suffix}`,`Rahasia remidi lain ${f.suffix}`,r1.name,removed.name]) expect(await a.content()).not.toContain(secret);
+    await client.query(`UPDATE exam_schedule_runs SET starts_at=(CASE label WHEN 'Susulan A' THEN timestamp '2040-07-02 07:00'
+      WHEN 'Susulan RPL' THEN timestamp '2040-07-02 09:00' WHEN 'Remidi khusus' THEN timestamp '2040-07-03 07:00'
+      ELSE timestamp '2040-07-03 09:00' END) AT TIME ZONE 'Asia/Jakarta'
+      WHERE exam_test_id=$1 AND label IN ('Susulan A','Susulan RPL','Remidi khusus','Remidi default')`,[exam]);
 
     // Kelompok yang sudah dirilis tidak dapat dipindah diam-diam.
     await page.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`); await page.getByRole("button",{name:"Acak pembagian"}).click();

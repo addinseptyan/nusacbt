@@ -2,8 +2,11 @@ import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Graduati
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { StartForm } from "@/app/peserta/jadwal/[runId]/start-form";
 import { participantLogoutAction } from "@/app/peserta/login/actions";
 import { RefreshScheduleButton } from "@/app/peserta/refresh-schedule-button";
+import { SharedScoresDialog } from "@/app/peserta/shared-scores-dialog";
+import { ParticipantStatusDialog } from "@/app/peserta/status-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +35,8 @@ export default async function ParticipantPage({ searchParams }: Props) {
             <span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-emerald-700 text-white"><GraduationCap className="size-5" /></span>
             <div><p className="text-base leading-tight font-bold tracking-tight">NusaCBT</p><p className="text-[11px] text-muted-foreground">Ruang peserta</p></div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <SharedScoresDialog />
             <ThemeToggle />
             <form action={participantLogoutAction}><Button type="submit" variant="outline" className="h-9 rounded-xl px-3 text-xs font-semibold"><LogOut className="size-4" /> Keluar</Button></form>
           </div>
@@ -65,15 +69,15 @@ export default async function ParticipantPage({ searchParams }: Props) {
 
           <Card className="min-w-0 gap-0 rounded-[22px] border-border p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"><CalendarDays className="size-5" /></span><div><h2 className="text-base font-bold">Jadwal tes</h2><p className="text-xs leading-5 text-muted-foreground">{view.total} jadwal untukmu dalam periode ini</p></div></div>
+              <div className="flex min-w-0 items-center gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"><CalendarDays className="size-5" /></span><div><h2 className="text-base font-bold">Jadwal tes</h2><p className="text-xs leading-5 text-muted-foreground">{view.total} jadwal hari ini atau berlanjut dari kemarin</p></div></div>
               <RefreshScheduleButton page={view.page} />
             </div>
             <Alert className="mt-5 rounded-xl border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               <Info className="size-4" /><AlertTitle>Informasi jadwal</AlertTitle>
-              <AlertDescription className="text-xs leading-5">Hanya jadwal yang telah dirilis untukmu yang ditampilkan. Token diperlukan saat mulai; peserta yang terlambat mendapat sisa waktu jadwal.</AlertDescription>
+              <AlertDescription className="text-xs leading-5">Jadwal yang dirilis untuk hari ini ditampilkan menurut zona masing-masing tes. Tes yang dimulai kemarin tetap terlihat selama masih berlangsung. Token diperlukan saat mulai.</AlertDescription>
             </Alert>
             {view.tests.length === 0 ? (
-              <div className="py-12 text-center"><CalendarDays className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-3 text-sm font-semibold">Belum ada jadwal tes</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Jadwal untuk periode ini akan muncul di sini.</p></div>
+              <div className="py-12 text-center"><CalendarDays className="mx-auto size-8 text-muted-foreground/60" /><p className="mt-3 text-sm font-semibold">Belum ada jadwal tes hari ini</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Jadwal hari ini dan tes dari kemarin yang masih berlangsung akan muncul di sini.</p></div>
             ) : (
               <ul aria-label="Jadwal tes" className="mt-5 space-y-3">
                 {view.tests.map((test) => (
@@ -87,15 +91,10 @@ export default async function ParticipantPage({ searchParams }: Props) {
                       <span className="inline-flex items-start gap-1.5"><CalendarDays className="mt-0.5 size-3.5 shrink-0" /> Mulai {test.startLocal} {test.zone}</span>
                       <span className="inline-flex items-start gap-1.5"><Clock3 className="mt-0.5 size-3.5 shrink-0" /> {test.durationMinutes} menit · berakhir {test.endLocal} {test.zone}</span>
                     </div>
-                    {test.attemptId ? (
-                      <Button asChild variant={test.status === "Berlangsung" && !test.attemptCompleted ? "default" : "outline"} size="sm" className="mt-4 rounded-xl">
-                        <Link prefetch={false} href={`/peserta/pengerjaan/${test.attemptId}`}>
-                          {test.status === "Berlangsung" && !test.attemptCompleted ? "Lanjutkan tes" : "Lihat status pengerjaan"}
-                        </Link>
-                      </Button>
-                    ) : test.status === "Berlangsung" ? (
-                      <Button asChild size="sm" className="mt-4 rounded-xl"><Link prefetch={false} href={`/peserta/jadwal/${test.id}`}>Mulai tes</Link></Button>
-                    ) : null}
+                    {test.attemptId ? test.status === "Berlangsung" && !test.attemptCompleted ? (
+                      <Button asChild size="sm" className="mt-4 rounded-xl"><Link prefetch={false} href={`/peserta/pengerjaan/${test.attemptId}`}>Lanjutkan tes</Link></Button>
+                    ) : <ParticipantStatusDialog attemptId={test.attemptId} testName={test.name} runLabel={test.label} />
+                      : test.status === "Berlangsung" ? <StartForm runId={test.id} testName={test.name} runLabel={test.label} initialOpen={false} /> : null}
                   </li>
                 ))}
               </ul>
