@@ -4,15 +4,21 @@
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, GraduationCap } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, Flag, GraduationCap } from "lucide-react";
 
-import { saveExamAnswerAction, submitExamAction } from "@/app/peserta/pengerjaan/[attemptId]/actions";
+import { checkExamSubmissionAction, saveExamAnswerAction, saveExamDoubtAction, submitExamAction } from "@/app/peserta/pengerjaan/[attemptId]/actions";
 import { QuestionRichDisplay } from "@/components/question-rich-display";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { AttemptView, WorkResult } from "@/lib/exam-attempt-work";
 
 type WorkingView = Extract<AttemptView, { state: "working" }>;
+type DialogState =
+  | { kind: "checking" }
+  | { kind: "blocked"; windowMinutes: number }
+  | { kind: "ready"; windowMinutes: number; answered: number; doubtful: number; total: number }
+  | { kind: "error"; message: string; login?: boolean };
 const subscribe = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
@@ -30,15 +36,24 @@ export function ExamWork({ view }: { view: WorkingView }) {
   const [selected, setSelected] = useState<string | null>(view.question.answer);
   const [confirmed, setConfirmed] = useState<string | null>(view.question.answer);
   const [revision, setRevision] = useState(view.question.revision);
-  const [mode, setMode] = useState<"idle" | "saving" | "unsaved" | "submitting" | "submit-unknown" | "navigating">("idle");
+  const [selectedDoubt, setSelectedDoubt] = useState(view.question.doubtful);
+  const [confirmedDoubt, setConfirmedDoubt] = useState(view.question.doubtful);
+  const [doubtRevision, setDoubtRevision] = useState(view.question.doubtRevision);
+  const [pendingKind, setPendingKind] = useState<"answer" | "doubt">("answer");
+  const [mode, setMode] = useState<"idle" | "saving" | "unsaved" | "checking" | "submitting" | "submit-unknown" | "navigating">("idle");
   const [failure, setFailure] = useState<Extract<WorkResult, { ok: false }> | null>(null);
-  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
   const [seconds, setSeconds] = useState(() => Math.max(0, Math.ceil((Date.parse(view.deadline) - Date.parse(view.serverNow)) / 1000)));
   const localDeadline = useRef<number | null>(null);
   const inFlight = useRef(false);
   const refreshed = useRef(false);
   const blocked = mode !== "idle";
-  const confirmedAnswered = view.answered + Number(confirmed !== null) - Number(view.question.answer !== null);
+  const navigation = view.navigation.map((item) => item.position === view.position
+    ? { ...item, answered: confirmed !== null, doubtful: confirmedDoubt } : item);
+  const confirmedAnswered = navigation.filter((item) => item.answered).length;
+  const doubtfulCount = navigation.filter((item) => item.doubtful).length;
+  const answeredClear = navigation.filter((item) => item.answered && !item.doubtful).length;
+  const unansweredClear = view.total - doubtfulCount - answeredClear;
 
   useEffect(() => {
     if (localDeadline.current === null) localDeadline.current = Date.now() + Math.max(0, Date.parse(view.deadline) - Date.parse(view.serverNow));
@@ -66,7 +81,7 @@ export function ExamWork({ view }: { view: WorkingView }) {
 
   async function save(desired: string | null) {
     if (inFlight.current) return;
-    inFlight.current = true; setSelected(desired); setFailure(null); setMode("saving"); setConfirmSubmit(false);
+    inFlight.current = true; setPendingKind("answer"); setSelected(desired); setFailure(null); setMode("saving");
     const form = new FormData();
     form.set("attemptId", view.attemptId); form.set("position", String(view.position));
     form.set("answer", desired ?? ""); form.set("revision", revision);
@@ -84,42 +99,89 @@ export function ExamWork({ view }: { view: WorkingView }) {
     } finally { inFlight.current = false; }
   }
 
-  async function submit() {
+  async function saveDoubt(desired: boolean) {
+    if (inFlight.current) return;
+    inFlight.current = true; setPendingKind("doubt"); setSelectedDoubt(desired); setFailure(null); setMode("saving");
+    const form = new FormData();
+    form.set("attemptId", view.attemptId); form.set("position", String(view.position));
+    form.set("doubtful", String(desired)); form.set("revision", doubtRevision);
+    try {
+      const result = await saveExamDoubtAction(form);
+      if (result.ok && typeof result.revision === "string") {
+        setDoubtRevision(result.revision); setConfirmedDoubt(desired); setMode("idle");
+      } else {
+        setFailure(result.ok ? { ok: false, error: "Konfirmasi tanda ragu tidak lengkap. Muat ulang untuk memeriksa.", reload: true } : result);
+        setMode("unsaved");
+      }
+    } catch {
+      setFailure({ ok: false, error: "Koneksi terputus atau konfirmasi belum diterima. Tanda ragu ini belum dapat dianggap aman; coba simpan lagi." });
+      setMode("unsaved");
+    } finally { inFlight.current = false; }
+  }
+
+  async function checkSubmission() {
     if (inFlight.current || blocked) return;
+    inFlight.current = true; setFailure(null); setDialog({ kind: "checking" }); setMode("checking");
+    const form = new FormData(); form.set("attemptId", view.attemptId);
+    try {
+      const result = await checkExamSubmissionAction(form);
+      if (!result.ok && result.closed) { setDialog(null); setMode("navigating"); router.refresh(); }
+      else if (!result.ok) { setDialog({ kind: "error", message: result.error, login: result.login }); setMode("idle"); }
+      else if (!result.allowed) { setDialog({ kind: "blocked", windowMinutes: result.windowMinutes }); setMode("idle"); }
+      else { setDialog({ kind: "ready", windowMinutes: result.windowMinutes, answered: result.answered, doubtful: result.doubtful, total: result.total }); setMode("idle"); }
+    } catch {
+      setDialog({ kind: "error", message: "Batas pengumpulan belum dapat diperiksa. Periksa koneksi dan coba lagi." }); setMode("idle");
+    } finally { inFlight.current = false; }
+  }
+
+  async function submit() {
+    if (inFlight.current || blocked || dialog?.kind !== "ready") return;
     inFlight.current = true; setFailure(null); setMode("submitting");
     const form = new FormData(); form.set("attemptId", view.attemptId);
     try {
       const result = await submitExamAction(form);
-      if (result.ok) { setMode("idle"); router.refresh(); }
-      else { setFailure(result); setMode("submit-unknown"); }
+      if (result.ok) { setDialog(null); setMode("navigating"); router.refresh(); }
+      else if (result.tooEarly && result.windowMinutes) { setDialog({ kind: "blocked", windowMinutes: result.windowMinutes }); setMode("idle"); }
+      else { setDialog(null); setFailure(result); setMode("submit-unknown"); }
     } catch {
-      setFailure({ ok: false, error: "Hasil penyelesaian belum dapat dipastikan. Muat ulang untuk memeriksa status." });
+      setDialog(null); setFailure({ ok: false, error: "Hasil penyelesaian belum dapat dipastikan. Muat ulang untuk memeriksa status." });
       setMode("submit-unknown");
     } finally { inFlight.current = false; }
   }
 
   function reload() {
-    if ((mode === "unsaved" || mode === "saving") && !window.confirm("Jawaban terakhir belum terkonfirmasi. Muat ulang untuk memeriksa jawaban di server?")) return;
+    if ((mode === "unsaved" || mode === "saving") && !window.confirm("Perubahan terakhir belum terkonfirmasi. Muat ulang untuk memeriksa data di server?")) return;
     window.location.reload();
   }
 
   const base = `/peserta/pengerjaan/${view.attemptId}`;
   const image = (slot: string) => `${base}/gambar/${view.position}/${slot}`;
+  const legend = [
+    { label: "Sudah dijawab", count: answeredClear, color: "border-emerald-300 bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900" },
+    { label: "Ragu-ragu", count: doubtfulCount, color: "border-amber-300 bg-amber-100 dark:border-amber-700 dark:bg-amber-900" },
+    { label: "Belum dijawab", count: unansweredClear, color: "border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-800" },
+    { label: "Soal aktif", count: null, color: "border-background bg-background ring-2 ring-indigo-600 ring-offset-1 ring-offset-card dark:ring-indigo-400" },
+  ];
   return <main className="min-h-svh bg-[#f6f8f6] dark:bg-[#101713]">
-    <header className="border-b bg-card"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-      <div className="flex min-w-0 items-center gap-2.5"><span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-emerald-700 text-white"><GraduationCap className="size-5" /></span>
-        <div className="min-w-0"><p className="truncate text-sm font-bold">{view.testName}</p><p className="truncate text-xs text-muted-foreground">{view.runLabel}</p></div></div>
-      <div className="flex items-center gap-2"><div className={`rounded-xl px-3 py-2 text-center ${seconds <= 300 ? "bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-100" : "bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"}`}>
-        <p className="flex items-center justify-center gap-1 text-[10px] font-semibold uppercase"><Clock3 className="size-3" /> Perkiraan sisa</p><p className="font-mono text-lg leading-5 font-bold tabular-nums" aria-label={`Perkiraan sisa waktu ${remainingText(seconds)}`}>{remainingText(seconds)}</p></div><ThemeToggle /></div>
+    <header className="sticky top-0 z-40 border-b bg-card/95 shadow-sm backdrop-blur" data-testid="exam-sticky-header"><div className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5"><span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-emerald-700 text-white"><GraduationCap className="size-5" /></span>
+          <div className="min-w-0"><p className="truncate text-sm font-bold" title={view.testName}>{view.testName}</p><p className="truncate text-xs text-muted-foreground" title={view.runLabel}>{view.runLabel}</p></div></div>
+        <div className="flex shrink-0 items-center gap-2"><div className={`rounded-xl px-3 py-2 text-center ${seconds <= 300 ? "bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-100" : "bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"}`}>
+          <p className="flex items-center justify-center gap-1 text-[10px] font-semibold uppercase"><Clock3 className="size-3" /> Perkiraan sisa</p><p className="font-mono text-lg leading-5 font-bold tabular-nums" aria-label={`Perkiraan sisa waktu ${remainingText(seconds)}`}>{remainingText(seconds)}</p></div><ThemeToggle /></div>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t pt-2.5 text-xs sm:grid-cols-4">
+        {[{ label: "Nama", value: view.participant.name }, { label: "NISN", value: view.participant.nisn }, { label: "Kelas", value: view.participant.className }, { label: "Periode ujian", value: view.participant.period }].map((item) => <div key={item.label} className="min-w-0"><dt className="text-[10px] text-muted-foreground">{item.label}</dt><dd className="truncate font-semibold" title={item.value}>{item.value}</dd></div>)}
+      </dl>
     </div></header>
     <div className="mx-auto max-w-6xl px-4 pb-12 pt-5 sm:px-6 sm:pt-7">
       <noscript><div role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">JavaScript diperlukan untuk menyimpan jawaban. Aktifkan JavaScript lalu muat ulang halaman; pilihan yang belum dikirim tidak tersimpan.</div></noscript>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground"><p>Waktu mengikuti server. Saat habis, jawaban tersimpan akan dikumpulkan otomatis.</p><p>{confirmedAnswered} dari {view.total} soal terjawab</p></div>
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
         <section className="min-w-0 rounded-[22px] border bg-card p-4 sm:p-6" aria-labelledby="question-heading">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4"><h1 id="question-heading" className="text-lg font-bold">Soal {view.position} <span className="text-sm font-normal text-muted-foreground">/ {view.total}</span></h1>
             <span role="status" aria-live="polite" className={`text-xs font-semibold ${mode === "unsaved" || mode === "submit-unknown" ? "text-destructive" : "text-emerald-700 dark:text-emerald-300"}`}>
-              {mode === "saving" ? "Menyimpan jawaban…" : mode === "unsaved" ? "Belum dikonfirmasi tersimpan" : mode === "submitting" ? "Menyelesaikan tes…" : mode === "submit-unknown" ? "Status perlu diperiksa" : mode === "navigating" ? "Memuat halaman…" : confirmed ? "Tersimpan di server" : "Belum dijawab"}
+              {mode === "saving" ? pendingKind === "doubt" ? "Menyimpan tanda ragu…" : "Menyimpan jawaban…" : mode === "unsaved" ? "Belum dikonfirmasi tersimpan" : mode === "checking" ? "Memeriksa pengumpulan…" : mode === "submitting" ? "Menyelesaikan tes…" : mode === "submit-unknown" ? "Status perlu diperiksa" : mode === "navigating" ? "Memuat halaman…" : confirmed ? "Tersimpan di server" : confirmedDoubt ? "Tanda ragu tersimpan" : "Belum dijawab"}
             </span></div>
           <div className="mt-5 text-[15px] leading-7"><QuestionRichDisplay document={view.question.promptRich} fallback={view.question.prompt} />
             {view.question.hasPromptImage && <img src={image("prompt")} alt="Gambar soal" className="mt-3 h-auto max-h-[480px] max-w-full rounded-lg object-contain" />}</div>
@@ -131,12 +193,18 @@ export function ExamWork({ view }: { view: WorkingView }) {
                 {option.hasImage && <img src={image(option.id)} alt={`Gambar pilihan ${option.label}`} className="mt-2 h-auto max-h-[320px] max-w-full rounded-lg object-contain" />}</span>
             </label>)}
           </fieldset>
-          <div className="mt-4 flex flex-wrap gap-2"><Button type="button" variant="ghost" size="sm" disabled={!hydrated || blocked || !confirmed || seconds === 0} onClick={() => void save(null)}>Kosongkan jawaban</Button></div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-950 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100">
+              <input type="checkbox" checked={selectedDoubt} disabled={!hydrated || blocked || seconds === 0} onChange={(event) => void saveDoubt(event.currentTarget.checked)} className="size-4 accent-amber-700" /> <Flag className="size-4" /> Ragu-ragu
+            </label>
+            <Button type="button" variant="ghost" size="sm" disabled={!hydrated || blocked || !confirmed || seconds === 0} onClick={() => void save(null)}>Kosongkan jawaban</Button>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">Tanda ragu tidak menghapus jawaban dan dapat dipakai pada soal yang belum dijawab.</p>
           {failure && <div role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm leading-6 text-destructive"><p>{failure.error}</p>
-            {mode === "unsaved" && <p className="mt-1 font-semibold">Pilihan terakhir belum terkonfirmasi; jangan dianggap aman.</p>}
-            <div className="mt-3 flex flex-wrap gap-2">{mode === "unsaved" && !failure.reload && !failure.closed && !failure.login && seconds > 0 && <Button type="button" size="sm" onClick={() => void save(selected)}>Coba simpan lagi</Button>}
+            {mode === "unsaved" && <p className="mt-1 font-semibold">{pendingKind === "doubt" ? "Tanda ragu" : "Pilihan terakhir"} belum terkonfirmasi; jangan dianggap aman.</p>}
+            <div className="mt-3 flex flex-wrap gap-2">{mode === "unsaved" && !failure.reload && !failure.closed && !failure.login && seconds > 0 && <Button type="button" size="sm" onClick={() => { if (pendingKind === "doubt") void saveDoubt(selectedDoubt); else void save(selected); }}>Coba simpan lagi</Button>}
               <Button type="button" size="sm" variant="outline" onClick={reload}>Muat ulang untuk memeriksa</Button>
-              {failure.login && <Button type="button" size="sm" variant="outline" onClick={() => { if (window.confirm("Jawaban terakhir belum terkonfirmasi. Masuk kembali untuk memeriksa jawaban tersimpan?")) router.push("/peserta/login?sesi=berakhir"); }}>Masuk kembali</Button>}</div>
+              {failure.login && <Button type="button" size="sm" variant="outline" onClick={() => { if (window.confirm("Perubahan terakhir belum terkonfirmasi. Masuk kembali untuk memeriksa data tersimpan?")) router.push("/peserta/login?sesi=berakhir"); }}>Masuk kembali</Button>}</div>
           </div>}
           {mode === "navigating" && <p className="mt-4 text-xs text-muted-foreground">Memuat halaman. Jika tidak berlanjut, <button type="button" className="underline" onClick={reload}>muat ulang</button>.</p>}
           {seconds === 0 && mode !== "unsaved" && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">Perkiraan waktu habis. Memeriksa status pada server…</p>}
@@ -146,19 +214,41 @@ export function ExamWork({ view }: { view: WorkingView }) {
           </div>
         </section>
         <aside className="rounded-[22px] border bg-card p-4 sm:p-5">
-          <h2 className="text-sm font-bold">Navigasi soal</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Hijau menandai jawaban yang dikonfirmasi server.</p>
-          <nav aria-label="Navigasi soal" className="mt-4 grid max-h-72 grid-cols-5 gap-1.5 overflow-y-auto">
-            {view.navigation.map((item) => {
-              const answered = item.position === view.position ? confirmed !== null : item.answered;
+          <div className="flex items-start justify-between gap-2"><div><h2 className="text-sm font-bold">Navigasi soal</h2><p className="mt-1 text-xs text-muted-foreground">{confirmedAnswered} dari {view.total} terjawab</p></div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{view.total ? Math.round(100 * confirmedAnswered / view.total) : 0}%</span></div>
+          <div role="img" aria-label={`Progres status: ${answeredClear} sudah dijawab tanpa ragu, ${doubtfulCount} ragu-ragu, ${unansweredClear} belum dijawab`} className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <span className="bg-emerald-600" style={{ width: `${100 * answeredClear / view.total}%` }} /><span className="bg-amber-400" style={{ width: `${100 * doubtfulCount / view.total}%` }} /><span className="bg-slate-300 dark:bg-slate-600" style={{ width: `${100 * unansweredClear / view.total}%` }} />
+          </div>
+          <ul aria-label="Keterangan status soal" className="mt-4 grid grid-cols-2 gap-x-2 gap-y-3 text-[11px] leading-4">
+            {legend.map((item) => <li key={item.label} className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className={`size-3.5 shrink-0 rounded border ${item.color}`} /><span>{item.label}{item.count !== null ? ` (${item.count})` : ""}</span></li>)}
+          </ul>
+          <p className="mt-3 text-[11px] leading-5 text-muted-foreground">Ragu-ragu termasuk soal yang sudah atau belum dijawab. Garis menunjukkan soal aktif.</p>
+          <nav aria-label="Navigasi soal" className="mt-2 max-h-80 overflow-y-auto overscroll-contain p-2" style={{ scrollbarGutter: "stable" }}>
+            <div className="grid grid-cols-5 gap-2">{navigation.map((item) => {
+              const status = item.doubtful ? `ragu-ragu, ${item.answered ? "terjawab" : "belum dijawab"}` : item.answered ? "terjawab" : "belum dijawab";
+              const color = item.doubtful ? "border-amber-300 bg-amber-100 text-amber-950 dark:border-amber-700 dark:bg-amber-900 dark:text-amber-100" : item.answered ? "border-emerald-300 bg-emerald-100 text-emerald-950 dark:border-emerald-700 dark:bg-emerald-900 dark:text-emerald-100" : "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
               return <button key={item.position} type="button" disabled={!hydrated || blocked} aria-current={item.position === view.position ? "step" : undefined}
-                aria-label={`Soal ${item.position}, ${answered ? "terjawab" : "belum dijawab"}`} onClick={() => { if (item.position !== view.position) navigate(`${base}?soal=${item.position}`); }}
-                className={`h-9 rounded-lg border text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 ${item.position === view.position ? "ring-2 ring-emerald-700 ring-offset-1" : ""} ${answered ? "border-emerald-200 bg-emerald-100 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-900 dark:text-emerald-100" : "bg-background"}`}>{item.position}</button>;
-            })}
+                aria-label={`Soal ${item.position}, ${status}`} onClick={() => { if (item.position !== view.position) navigate(`${base}?soal=${item.position}`); }}
+                className={`h-9 rounded-lg border text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 ${item.position === view.position ? "ring-2 ring-indigo-600 ring-offset-2 ring-offset-card dark:ring-indigo-400" : ""} ${color}`}>{item.position}</button>;
+            })}</div>
           </nav>
-          <div className="mt-5 border-t pt-4">
-            {!confirmSubmit ? <Button type="button" variant="outline" className="w-full rounded-xl" disabled={!hydrated || blocked} onClick={() => setConfirmSubmit(true)}><CheckCircle2 className="size-4" /> Selesaikan tes</Button>
-              : <div className="space-y-3 rounded-xl bg-amber-50 p-3 text-sm dark:bg-amber-950/50"><p className="font-semibold">Kumpulkan sekarang?</p><p className="text-xs leading-5">{confirmedAnswered} dari {view.total} soal sudah terjawab. Jawaban kosong bernilai nol. Setelah selesai, pengerjaan ini tidak dapat diubah.</p><div className="flex flex-wrap gap-2"><Button type="button" size="sm" disabled={blocked} onClick={() => void submit()}>Ya, kumpulkan</Button><Button type="button" size="sm" variant="outline" disabled={blocked} onClick={() => setConfirmSubmit(false)}>Batal</Button></div></div>}
-            <Button type="button" variant="ghost" size="sm" className="mt-2 w-full" disabled={!hydrated || blocked} onClick={() => navigate("/peserta")}>Kembali ke jadwal</Button>
+          <div className="mt-4 border-t pt-4">
+            <Dialog open={dialog !== null} onOpenChange={(open) => { if (!open && !inFlight.current) setDialog(null); }}>
+              <DialogTrigger asChild><Button type="button" variant="outline" className="w-full rounded-xl" disabled={!hydrated || blocked} onClick={() => void checkSubmission()}><CheckCircle2 className="size-4" /> Selesaikan tes</Button></DialogTrigger>
+              {dialog && <DialogContent showCloseButton={false} className="rounded-2xl sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-lg font-bold">{dialog.kind === "checking" ? "Memeriksa pengumpulan" : dialog.kind === "blocked" ? "Belum dapat dikumpulkan" : dialog.kind === "error" ? "Pemeriksaan belum berhasil" : "Kumpulkan tes sekarang?"}</DialogTitle>
+                  <DialogDescription>{dialog.kind === "checking" ? "Memeriksa sisa waktu dan pengaturan terbaru pada server…" : dialog.kind === "blocked" ? `Pengumpulan manual hanya tersedia pada ${dialog.windowMinutes} menit terakhir sebelum waktu tes habis.` : dialog.kind === "error" ? "Tes belum dikumpulkan melalui pemeriksaan ini." : `Pengumpulan manual tersedia pada ${dialog.windowMinutes} menit terakhir.`}</DialogDescription>
+                </DialogHeader>
+                {dialog.kind === "ready" && <div className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-950 dark:bg-amber-950/50 dark:text-amber-100"><p><strong>{dialog.answered}</strong> dari {dialog.total} soal terjawab; <strong>{dialog.total - dialog.answered}</strong> belum dijawab dan <strong>{dialog.doubtful}</strong> ditandai ragu-ragu.</p><p className="mt-2 text-xs leading-5">Jumlah terjawab termasuk soal ragu yang memiliki jawaban. Jawaban kosong bernilai nol. Setelah dikumpulkan, pengerjaan tidak dapat diubah.</p></div>}
+                {dialog.kind === "blocked" && <p className="rounded-xl bg-muted/60 p-3 text-sm leading-6">Lanjutkan mengerjakan. Saat waktu habis, jawaban yang tersimpan dikumpulkan otomatis.</p>}
+                {dialog.kind === "error" && <p role="alert" className="rounded-xl bg-destructive/5 p-3 text-sm text-destructive">{dialog.message}</p>}
+                <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+                  {dialog.kind === "checking" ? <span role="status" className="text-xs text-muted-foreground">Memeriksa…</span> : <Button type="button" variant="outline" disabled={mode === "submitting"} onClick={() => setDialog(null)}>{dialog.kind === "ready" ? "Batal" : "Tutup"}</Button>}
+                  {dialog.kind === "ready" && <Button type="button" disabled={mode === "submitting"} onClick={() => void submit()}>{mode === "submitting" ? "Mengumpulkan…" : "Ya, kumpulkan"}</Button>}
+                  {dialog.kind === "error" && dialog.login && <Button type="button" onClick={() => router.push("/peserta/login?sesi=berakhir")}>Masuk kembali</Button>}
+                </div>
+              </DialogContent>}
+            </Dialog>
           </div>
         </aside>
       </div>

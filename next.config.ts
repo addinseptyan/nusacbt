@@ -24,6 +24,9 @@ const nextConfig: NextConfig = {
     return [
       { source: "/peserta", headers: privateHeaders },
       { source: "/peserta/:path*", headers: privateHeaders },
+      // Form mulai tanpa JavaScript membutuhkan Origin same-origin pada POST.
+      // Rujukan tetap tidak dikirim ke origin lain dan halaman tetap no-store.
+      { source: "/peserta/jadwal/:path*", headers: [{ key: "Referrer-Policy", value: "same-origin" }] },
       { source: "/data-peserta/identitas", headers: privateHeaders },
       { source: "/data-peserta/sandi", headers: privateHeaders },
       { source: "/data-peserta/akun", headers: privateHeaders },
@@ -33,6 +36,7 @@ const nextConfig: NextConfig = {
       { source: "/data-tes/daftar/:path*", headers: privateHeaders },
       { source: "/data-tes/monitoring", headers: privateHeaders },
       { source: "/data-tes/monitoring/:path*", headers: privateHeaders },
+      { source: "/data-tes/pengaturan-pengerjaan", headers: privateHeaders },
       { source: "/data-tes/token", headers: privateHeaders },
       { source: "/data-tes/token/riwayat", headers: privateHeaders },
     ];

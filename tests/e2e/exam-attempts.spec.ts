@@ -61,7 +61,9 @@ test("token khusus, snapshot gambar/kunci, resume, penilaian dan perlindungan ri
 
     // Token tidak lagi diperlukan untuk resume, sekalipun dicabut dan peserta login ulang.
     await client.query("UPDATE exam_access_tokens SET revoked_at=clock_timestamp(),revoked_reason='manual' WHERE id=ANY($1::bigint[])", [[globalId, testId]]);
-    await page.getByRole("button", { name: "Kembali ke jadwal" }).click();
+    await expect(page.getByRole("button", { name: "Kembali ke jadwal" })).toHaveCount(0);
+    // Simulasikan tab ditinggalkan lewat navigasi browser; tombol tidak lagi ada di layar ujian.
+    await page.goto("/peserta");
     await page.getByRole("button", { name: "Keluar" }).click();
     await loginParticipant(page, f.login.username, f.login.passwordA);
     await page.getByRole("listitem").filter({ hasText: f.login.activeName }).getByRole("link", { name: "Lanjutkan tes" }).click();
@@ -83,6 +85,9 @@ test("token khusus, snapshot gambar/kunci, resume, penilaian dan perlindungan ri
     expect((await client.query<{ published: boolean }>("SELECT published_at IS NOT NULL AS published FROM exam_schedule_runs WHERE id=$1", [f.runId])).rows[0].published).toBe(true);
 
     await page.bringToFront();
+    // Fixture khusus: pindahkan deadline attempt ke dalam lima menit terakhir.
+    await client.query("UPDATE exam_attempts SET deadline=clock_timestamp()+interval '4 minutes' WHERE id=$1", [attempt]);
+    await page.reload();
     await page.getByRole("button", { name: "Selesaikan tes" }).click(); await page.getByRole("button", { name: "Ya, kumpulkan" }).click();
     await expect(page.getByText("PENGERJAAN SELESAI")).toBeVisible();
     const result = (await client.query<{ reason: string; correct: number; answered: number; total: number }>(

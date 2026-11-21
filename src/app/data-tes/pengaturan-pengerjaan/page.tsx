@@ -1,0 +1,31 @@
+import { CircleAlert, Clock3, Info } from "lucide-react";
+
+import { SettingForm } from "@/app/data-tes/pengaturan-pengerjaan/setting-form";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
+import { requireAdmin } from "@/lib/admin-auth";
+import { getPostgresPool } from "@/lib/postgres";
+
+export const metadata = { title: "Pengaturan Pengerjaan — NusaCBT", robots: { index: false, follow: false } };
+export const dynamic = "force-dynamic";
+
+export default async function WorkSettingsPage() {
+  await requireAdmin();
+  let data: { minutes: number; revision: string };
+  try {
+    const result = await getPostgresPool().query<{ minutes: number; revision: string }>(
+      'SELECT submission_window_minutes AS minutes,revision::text AS revision FROM exam_work_settings WHERE id=1',
+    );
+    if (result.rowCount !== 1) throw new Error("Pengaturan belum tersedia.");
+    data = result.rows[0];
+  } catch {
+    return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Pengaturan Pengerjaan</h1><Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Pengaturan belum dapat dimuat</AlertTitle><AlertDescription>Periksa PostgreSQL dan migrasi terbaru, lalu muat ulang.</AlertDescription></Alert></div>;
+  }
+  return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9">
+    <div className="mb-6 flex items-start gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><Clock3 className="size-5" /></span><div><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Pengaturan Pengerjaan</h1><p className="mt-2 text-[13px] leading-6 text-muted-foreground">Atur kapan peserta dapat mengumpulkan tes secara manual.</p></div></div>
+    <Card className="max-w-2xl gap-0 rounded-[22px] p-5 sm:p-7"><h2 className="text-base font-bold">Pengumpulan tes</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Peserta dapat menekan tombol selesai kapan saja, tetapi baru dapat mengumpulkan pada sejumlah menit terakhir sebelum batas jadwal. Waktu habis tetap dikumpulkan otomatis.</p>
+      <Alert className="my-5 rounded-xl"><Info className="size-4" /><AlertTitle>Berlaku untuk semua tes</AlertTitle><AlertDescription className="text-xs leading-5">Perubahan langsung berlaku juga bagi pengerjaan yang sedang berlangsung. Jika batas lebih besar daripada sisa durasi, peserta dapat mengumpulkan segera. Keputusan mengikuti jam server, bukan jam perangkat siswa.</AlertDescription></Alert>
+      <SettingForm key={data.revision} minutes={data.minutes} revision={data.revision} />
+    </Card>
+  </div>;
+}
