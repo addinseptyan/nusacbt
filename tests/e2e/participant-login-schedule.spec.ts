@@ -132,7 +132,7 @@ test("login dan jadwal responsif serta mode gelap tidak menampilkan navigasi adm
   try {
     await page.setViewportSize({ width: 320, height: 850 }); await page.goto("/peserta/login");
     const loginWidth = await page.evaluate(() => document.documentElement.scrollWidth); expect(loginWidth).toBeLessThanOrEqual(320);
-    await page.getByRole("button", { name: "Ganti tema" }).click(); await page.getByRole("menuitem", { name: "Gelap" }).click();
+    await page.getByRole("button", { name: "Ganti tema" }).click();
     await expect(page.locator("html")).toHaveClass(/dark/);
     await loginParticipant(page, f.username, f.passwordA);
     const mobileWidth = await page.evaluate(() => document.documentElement.scrollWidth); expect(mobileWidth).toBeLessThanOrEqual(320);

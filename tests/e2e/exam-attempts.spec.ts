@@ -96,7 +96,9 @@ test("token khusus, snapshot gambar/kunci, resume, penilaian dan perlindungan ri
       'SELECT completion_reason AS reason,correct_count AS correct,answered_count AS answered,question_count AS total FROM exam_attempts WHERE id=$1', [attempt],
     )).rows[0];
     expect(result).toEqual({ reason: "submitted", correct: 1, answered: 2, total: 3 });
-    expect(await page.content()).not.toContain("33,33"); expect(await page.content()).not.toContain("correct_count");
+    await expect(page.getByTestId("score-value")).toHaveText("33,33"); await expect(page.getByTestId("score-value")).toBeHidden();
+    await page.getByText("Perlihatkan nilai", { exact: true }).click(); await expect(page.getByTestId("score-value")).toBeVisible();
+    expect(await page.content()).not.toContain("correct_count");
     await page.goto("/data-tes/monitoring"); await expect(page).toHaveURL(/\/login$/);
     await admin.goto(`/data-tes/monitoring?tes=${f.login.activeTest}`);
     const row = admin.getByRole("row").filter({ hasText: f.login.studentAName });
@@ -130,7 +132,9 @@ test("jawaban offline tidak dianggap aman; retry dikonfirmasi, lalu otomatis din
     expect(result).toEqual({ answer: "A", correct: 0, answered: 1 });
     await page.context().setOffline(false); const reopened = await page.context().newPage();
     await reopened.goto(`/peserta/pengerjaan/${attempt}`); await expect(reopened.getByText("PENGERJAAN SELESAI")).toBeVisible();
-    await expect(reopened.getByText(/dikumpulkan otomatis/)).toBeVisible(); expect(await reopened.content()).not.toContain("0,00");
+    await expect(reopened.getByText(/dikumpulkan otomatis/)).toBeVisible();
+    await expect(reopened.getByTestId("score-value")).toBeHidden();
+    await reopened.getByText("Perlihatkan nilai", { exact: true }).click(); await expect(reopened.getByTestId("score-value")).toHaveText("0,00");
   } finally { await page.context().setOffline(false); await cleanupAttemptFixture(client, f); await client.end(); }
 });
 

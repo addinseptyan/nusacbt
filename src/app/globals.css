@@ -164,3 +164,23 @@
 /* Kursor OTP tetap terlihat pada input satu baris yang dapat diedit dengan keyboard. */
 @keyframes token-caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 @media (prefers-reduced-motion: no-preference) { .token-caret { animation: token-caret-blink 1s step-end infinite; } }
+
+/* Perayaan singkat hanya dekoratif; hormati pilihan gerak minimal pengguna. */
+.completion-sparkles { position: absolute; top: 1.4rem; right: 1.4rem; width: 10rem; height: 7rem; pointer-events: none; }
+.completion-sparkles i { position: absolute; width: .5rem; height: .9rem; border-radius: .18rem; opacity: .8; background: #f59e0b; transform: rotate(25deg); }
+.completion-sparkles i:nth-child(2n) { background: #10b981; width: .6rem; height: .6rem; border-radius: 50%; }
+.completion-sparkles i:nth-child(3n) { background: #818cf8; }
+.completion-sparkles i:nth-child(1) { left: 5%; top: 5%; }
+.completion-sparkles i:nth-child(2) { left: 27%; top: 26%; }
+.completion-sparkles i:nth-child(3) { left: 53%; top: 4%; }
+.completion-sparkles i:nth-child(4) { left: 82%; top: 19%; }
+.completion-sparkles i:nth-child(5) { left: 68%; top: 45%; }
+.completion-sparkles i:nth-child(6) { left: 12%; top: 58%; }
+.completion-sparkles i:nth-child(7) { left: 42%; top: 68%; }
+.completion-sparkles i:nth-child(8) { left: 90%; top: 76%; }
+.completion-sparkles i:nth-child(9) { left: 74%; top: 3%; }
+@keyframes completion-pop { 0% { opacity: 0; transform: translateY(-1rem) scale(.3) rotate(-40deg); } 55% { opacity: .9; transform: translateY(.2rem) scale(1.2) rotate(35deg); } 100% { opacity: .45; transform: translateY(.8rem) scale(1) rotate(65deg); } }
+@media (prefers-reduced-motion: no-preference) { .completion-sparkles i { animation: completion-pop 1.1s ease-out both; } .completion-sparkles i:nth-child(2n) { animation-delay: .15s; } .completion-sparkles i:nth-child(3n) { animation-delay: .3s; } }
+
+/* Saat tab/keyboard menavigasi form panjang, sisakan ruang untuk footer modal. */
+[data-slot="dialog-content"] { scroll-padding-bottom: 6rem; }

@@ -52,7 +52,7 @@ export const navigation: NavigationSection[] = [
     icon: ClipboardList,
     pages: [
       { title: "Daftar Tes", href: "/data-tes/daftar", description: "Buat dan kelola jadwal serta pengaturan tes." },
-      { title: "Pengaturan Pengerjaan", href: "/data-tes/pengaturan-pengerjaan", description: "Atur batas pengumpulan manual untuk semua tes." },
+      { title: "Pengaturan Pengerjaan", href: "/data-tes/pengaturan-pengerjaan", description: "Atur pengumpulan manual dan visibilitas nilai per kategori." },
       { title: "Hasil / Monitoring Tes", href: "/data-tes/monitoring", description: "Pantau pengerjaan peserta dan simpan riwayat hasil tes." },
       { title: "Token", href: "/data-tes/token", description: "Kelola token untuk satu tes atau seluruh tes dengan masa aktif tertentu." },
     ],

@@ -180,7 +180,6 @@ test.describe("periode pada layar kecil", () => {
       await client.query("INSERT INTO exam_periods (name, start_date) VALUES ($1, DATE '2026-07-01')", [name]);
       await loginAsAdmin(page);
       await page.getByRole("button", { name: "Ganti tema" }).click();
-      await page.getByRole("menuitem", { name: "Gelap" }).click();
       await expect(page.locator("html")).toHaveClass(/\bdark\b/);
       await page.getByRole("button", { name: "Buka atau tutup sidebar" }).click();
       const sidebar = page.getByRole("dialog");

@@ -277,7 +277,7 @@ test.describe("pengaturan periode login di layar kecil", () => {
     const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client);
     const f = await seedLoginFixture(client);
     try {
-      await loginAsAdmin(page); await page.getByRole("button", { name: "Ganti tema" }).click(); await page.getByRole("menuitem", { name: "Gelap" }).click();
+      await loginAsAdmin(page); await page.getByRole("button", { name: "Ganti tema" }).click();
       await page.goto("/data-peserta/periode"); await expect(page.locator("html")).toHaveClass(/dark/);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
       await page.setViewportSize({ width: 320, height: 320 });

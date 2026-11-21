@@ -1,6 +1,7 @@
 import { CircleAlert, ClipboardList } from "lucide-react";
 import type { PoolClient } from "pg";
 
+import type { TimelineClock, TimelineItem } from "@/app/data-tes/daftar/exam-timeline";
 import { ExamTestManager } from "@/app/data-tes/daftar/exam-test-manager";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -20,7 +21,7 @@ type QuestionRow = {
 
 export default async function ExamTestsPage() {
   await requireAdmin();
-  let periods: ExamPeriodOption[]; let tests: ExamTest[]; let topics: QuestionTopicOption[]; let questions: Question[];
+  let periods: ExamPeriodOption[]; let tests: ExamTest[]; let topics: QuestionTopicOption[]; let questions: Question[]; let timeline: TimelineItem[]; let clock: TimelineClock;
   let client: PoolClient | undefined;
   try {
     client = await getPostgresPool().connect();
@@ -40,6 +41,26 @@ export default async function ExamTestsPage() {
          COALESCE((SELECT array_agg(eq.question_id::text ORDER BY eq.position) FROM exam_test_questions eq WHERE eq.exam_test_id=e.id), ARRAY[]::text[]) AS "questionIds"
        FROM exam_tests e JOIN exam_periods p ON p.id=e.period_id ORDER BY e.starts_at DESC, e.id DESC`,
     );
+    // Gunakan pelaksanaan asli; jadwal dasar hanya bila tes belum memiliki
+    // pelaksanaan sama sekali. Semua tanggal dikirim sebagai instant UTC.
+    const timelineResult = await client.query<TimelineItem>(
+      `SELECT t.id::text AS "testId",r.id::text AS "runId",t.name AS "testName",p.name AS "periodName",
+         r.kind,r.label,(r.published_at IS NOT NULL) AS published,
+         to_char(r.starts_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startUtc",
+         r.time_zone AS "timeZone",r.duration_minutes AS "durationMinutes"
+       FROM exam_schedule_runs r JOIN exam_tests t ON t.id=r.exam_test_id JOIN exam_periods p ON p.id=t.period_id
+       UNION ALL
+       SELECT t.id::text,NULL::text,t.name,p.name,NULL::text,NULL::text,false,
+         to_char(t.starts_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),t.time_zone,t.duration_minutes
+       FROM exam_tests t JOIN exam_periods p ON p.id=t.period_id
+       WHERE NOT EXISTS (SELECT 1 FROM exam_schedule_runs r WHERE r.exam_test_id=t.id)`,
+    );
+    const clockResult = await client.query<TimelineClock>(
+      `SELECT to_char(statement_timestamp() AT TIME ZONE 'Asia/Jakarta','YYYY-MM-DD') AS "WIB",
+         to_char(statement_timestamp() AT TIME ZONE 'Asia/Makassar','YYYY-MM-DD') AS "WITA",
+         to_char(statement_timestamp() AT TIME ZONE 'Asia/Jayapura','YYYY-MM-DD') AS "WIT",
+         to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`,
+    );
     const topicResult = await client.query<QuestionTopicOption>("SELECT id::text AS id, name FROM question_topics ORDER BY lower(name), name, id");
     const questionResult = await client.query<QuestionRow>(
       `SELECT q.id::text AS id, q.xmin::text AS revision, q.topic_id::text AS "topicId", t.name AS "topicName",
@@ -51,7 +72,7 @@ export default async function ExamTestsPage() {
        FROM question_bank q JOIN question_topics t ON t.id=q.topic_id ORDER BY q.id`,
     );
     await client.query("COMMIT");
-    periods = periodResult.rows; tests = testResult.rows; topics = topicResult.rows;
+    periods = periodResult.rows; tests = testResult.rows; topics = topicResult.rows; timeline = timelineResult.rows; clock = clockResult.rows[0];
     questions = questionResult.rows.map((row) => ({
       id: row.id, revision: row.revision, topicId: row.topicId, topicName: row.topicName, prompt: row.prompt, promptRich: row.promptRich,
       hasPromptImage: row.hasPromptImage, correctOption: row.correctOption,
@@ -78,7 +99,7 @@ export default async function ExamTestsPage() {
         <span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><ClipboardList className="size-5" /></span>
         <div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Daftar Tes</h1><p className="mt-2 text-[13px] leading-6 text-muted-foreground">Siapkan rancangan, jadwal, soal, dan pengaturan acak untuk setiap tes.</p></div>
       </div>
-      <ExamTestManager periods={periods} tests={tests} topics={topics} questions={questions} />
+      <ExamTestManager periods={periods} tests={tests} topics={topics} questions={questions} timeline={timeline} clock={clock} />
     </div>
   );
 }

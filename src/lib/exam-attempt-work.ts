@@ -7,7 +7,7 @@ import { lockParticipantSession, participantCandidate, participantSessionHash, p
 import { getPostgresPool } from "@/lib/postgres";
 
 type AttemptRow = {
-  id: string; examTestId: string; testName: string; runLabel: string; deadline: Date; questionCount: number;
+  id: string; kind: "regular" | "makeup" | "remedial"; testName: string; runLabel: string; deadline: Date; questionCount: number;
   completedAt: Date | null; completionReason: "submitted" | "time_expired" | null; expired: boolean; now: Date;
 };
 type OptionContent = { text: string; rich: unknown | null; hasImage: boolean };
@@ -36,7 +36,7 @@ const NOT_FOUND = "Pengerjaan tidak ditemukan atau bukan milik sesi ini.";
 
 async function lockAttempt(client: PoolClient, attemptId: string, identityId: string): Promise<AttemptRow | null> {
   const result = await client.query<AttemptRow>(
-    `SELECT id::text AS id,exam_test_id::text AS "examTestId",test_name_snapshot AS "testName",run_label_snapshot AS "runLabel",deadline,
+    `SELECT id::text AS id,kind,test_name_snapshot AS "testName",run_label_snapshot AS "runLabel",deadline,
        question_count AS "questionCount",completed_at AS "completedAt",completion_reason AS "completionReason",
        deadline<=clock_timestamp() AS expired,clock_timestamp() AS now
      FROM exam_attempts WHERE id=$1::bigint AND participant_identity_id=$2::bigint FOR UPDATE`, [attemptId, identityId],
@@ -91,10 +91,10 @@ function checkedOptions(raw: RawQuestion) {
   });
 }
 
-/** Pengaturan dikunci sampai commit. Tidak ada baris berarti nilai tersembunyi. */
+/** Kebijakan kategori dikunci hingga commit; baris hilang ditangani secara tertutup. */
 async function finishedAttemptView(client: PoolClient, attempt: AttemptRow, reason: "submitted" | "time_expired"): Promise<Extract<AttemptView, { state: "finished" }>> {
   const policy = await client.query<{ visible: boolean }>(
-    "SELECT visible_to_participants AS visible FROM exam_score_visibility WHERE exam_test_id=$1::bigint FOR SHARE", [attempt.examTestId],
+    "SELECT visible_to_participants AS visible FROM exam_score_category_visibility WHERE kind=$1 FOR SHARE", [attempt.kind],
   );
   let score: string | null = null;
   if (policy.rows[0]?.visible) {

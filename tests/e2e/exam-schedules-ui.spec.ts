@@ -22,7 +22,7 @@ test("tooltip, breadcrumb, dan sidebar mengenali kelompok serta pelaksanaan", as
     await loginAsAdmin(page);
     await page.goto("/data-tes/daftar");
     const groupLink = page.getByRole("link", { name: "Atur kelompok sesi" });
-    await groupLink.focus();
+    await groupLink.scrollIntoViewIfNeeded(); await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))); await groupLink.focus();
     await expect(page.locator('[data-slot="tooltip-content"]').filter({ hasText: "Bagi siswa ke kelompok tetap per periode" })).toBeVisible();
     await expect(groupLink).toHaveAttribute("aria-describedby", /.+/);
     await groupLink.click();
@@ -33,7 +33,7 @@ test("tooltip, breadcrumb, dan sidebar mengenali kelompok serta pelaksanaan", as
     await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Daftar Tes" }).click();
     await page.getByLabel("Cari tes").fill(f.activeName);
     const runLink = page.getByRole("link", { name: `Pelaksanaan tes ${f.activeTest}` });
-    await runLink.focus();
+    await runLink.scrollIntoViewIfNeeded(); await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))); await runLink.focus();
     await expect(page.locator('[data-slot="tooltip-content"]').filter({ hasText: "Atur jadwal, peserta, dan rilis tes ini" })).toBeVisible();
     await expect(runLink).toHaveAttribute("aria-describedby", /.+/);
     await runLink.click();
@@ -87,7 +87,6 @@ test("badge draf dan dirilis berbeda, menghormati reduced motion, dan mengikuti 
     await expect(ping).toHaveCSS("animation-name", "ping");
     await expect(ping).toHaveCSS("animation-iteration-count", "3");
     await page.getByRole("button", { name: "Ganti tema" }).click();
-    await page.getByRole("menuitem", { name: "Gelap" }).click();
     expect(await draft.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(await published.evaluate((el) => getComputedStyle(el).backgroundColor));
 
     await draftRow.getByRole("button", { name: `Rilis ${label}` }).click();

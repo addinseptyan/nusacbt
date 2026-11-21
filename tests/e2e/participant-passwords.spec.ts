@@ -508,7 +508,6 @@ test.describe("sandi peserta pada layar kecil", () => {
       await client.query("UPDATE exam_periods SET name=$1 WHERE id=$2", [`P${"E".repeat(90)}`, fixture.periodAId]);
       await loginAsAdmin(page);
       await page.getByRole("button", { name: "Ganti tema" }).click();
-      await page.getByRole("menuitem", { name: "Gelap" }).click();
       await expect(page.locator("html")).toHaveClass(/\bdark\b/);
       await openPasswords(page, fixture.periodAId);
       await expect(passwordRow(page, student)).toBeVisible();

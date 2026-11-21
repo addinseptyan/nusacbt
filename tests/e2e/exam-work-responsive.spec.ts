@@ -69,12 +69,44 @@ test("auto-submit menilai jawaban terakhir meski soal bertanda ragu", async ({ p
     await page.getByRole("button", { name: "Soal 2, belum dijawab" }).click(); await expect(page.getByRole("heading", { name: /^Soal 2/ })).toBeVisible();
     await page.getByRole("checkbox", { name: "Ragu-ragu" }).check();
     await expect.poll(async () => (await client.query<{ n: number }>("SELECT count(*)::int AS n FROM exam_attempt_questions WHERE attempt_id=$1 AND is_doubtful", [attempt])).rows[0].n).toBe(2);
+    const context = page.context();
     await client.query("UPDATE exam_attempts SET deadline=clock_timestamp()+interval '2 seconds' WHERE id=$1", [attempt]); await page.close();
     await expect.poll(async () => (await client.query<{ reason: string | null }>("SELECT completion_reason AS reason FROM exam_attempts WHERE id=$1", [attempt])).rows[0].reason, { timeout: 15_000 }).toBe("time_expired");
+    const finished = await context.newPage(); await finished.goto(`/peserta/pengerjaan/${attempt}`);
+    await expect(finished.getByText(/Waktu tes telah habis/)).toBeVisible();
+    await expect(finished.getByTestId("completion-celebration")).toBeVisible();
     const result = (await client.query<{ correct: number; answered: number; doubtful: number }>(
       `SELECT a.correct_count AS correct,a.answered_count AS answered,(SELECT count(*)::int FROM exam_attempt_questions q WHERE q.attempt_id=a.id AND q.is_doubtful) AS doubtful
        FROM exam_attempts a WHERE a.id=$1`, [attempt],
     )).rows[0];
     expect(result).toEqual({ correct: 1, answered: 1, doubtful: 2 });
+  } finally { await cleanupAttemptFixture(client, f); await client.end(); }
+});
+
+test("nomor soal selalu terjangkau pada soal panjang di desktop dan ponsel", async ({ page }) => {
+  test.setTimeout(90_000);
+  const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client); const f = await seedAttemptFixture(client, 19);
+  try {
+    await seedAttemptToken(client, f, "global", "432109"); await loginParticipant(page, f.login.username, f.login.passwordA);
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await startWithToken(page, f.runId, "432109");
+    await page.locator("#question-heading").evaluate((heading) => { const spacer = document.createElement("p"); spacer.textContent = "Soal panjang simulasi"; spacer.style.height = "1400px"; heading.parentElement?.after(spacer); });
+    await page.evaluate(() => window.scrollTo(0, 700));
+    const panel = page.getByTestId("exam-number-panel"); const header = page.getByTestId("exam-sticky-header"); const bottom = page.getByTestId("exam-bottom-nav");
+    expect(await panel.evaluate((el) => getComputedStyle(el).position)).toBe("sticky");
+    await expect(panel.getByRole("button", { name: "Soal 2, belum dijawab" })).toBeInViewport();
+    const panelBox = await panel.boundingBox(), headerBox = await header.boundingBox(), bottomBox = await bottom.boundingBox();
+    expect(panelBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height - 1);
+    expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(bottomBox!.y + 2);
+    await panel.getByRole("button", { name: "Soal 2, belum dijawab" }).click(); await expect(page.getByRole("heading", { name: /^Soal 2/ })).toBeVisible();
+
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.locator("#question-heading").evaluate((heading) => { const spacer = document.createElement("p"); spacer.textContent = "Soal panjang simulasi"; spacer.style.height = "1400px"; heading.parentElement?.after(spacer); });
+    await page.evaluate(() => window.scrollTo(0, 700));
+    const compact = page.getByRole("navigation", { name: "Navigasi nomor soal ringkas" });
+    await expect(compact).toBeInViewport(); await expect(compact.getByRole("button", { name: "Nomor 3, belum dijawab" })).toBeInViewport();
+    await compact.getByRole("button", { name: "Nomor 3, belum dijawab" }).click(); await expect(page.getByRole("heading", { name: /^Soal 3/ })).toBeVisible();
+    const theme = page.getByRole("button", { name: "Ganti tema" }); await theme.click(); await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+    await theme.click(); await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
   } finally { await cleanupAttemptFixture(client, f); await client.end(); }
 });
