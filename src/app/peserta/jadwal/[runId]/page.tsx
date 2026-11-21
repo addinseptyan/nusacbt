@@ -35,7 +35,7 @@ export default async function StartExamPage({ params }: { params: Promise<{ runI
         </div>
         {screen.status === "active" ? <>
           <Alert className="mt-5"><AlertTitle>Sebelum mulai</AlertTitle><AlertDescription>Pastikan koneksi tersedia. Jawaban aman hanya setelah ada konfirmasi tersimpan di server. Ketika waktu habis, hanya jawaban yang tersimpan yang dinilai.</AlertDescription></Alert>
-          <StartForm runId={screen.runId} />
+          <StartForm runId={screen.runId} testName={screen.name ?? undefined} runLabel={screen.label ?? undefined} />
         </> : <Alert className="mt-5"><AlertTitle>{screen.status === "future" ? "Tes belum dimulai" : "Waktu tes sudah berakhir"}</AlertTitle><AlertDescription>Hubungi pengawas jika jadwal perlu diperiksa.</AlertDescription></Alert>}
       </Card>
     </div>
