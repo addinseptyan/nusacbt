@@ -29,7 +29,7 @@ export type ParticipantSchedule = {
   id: string; name: string; label: string; kind: "regular" | "makeup" | "remedial"; sessionNumber: number | null;
   startLocal: string; endLocal: string; zone: "WIB" | "WITA" | "WIT";
   durationMinutes: number; status: "Belum dimulai" | "Berlangsung" | "Berakhir";
-  attemptId: string | null; attemptCompleted: boolean;
+  attemptId: string | null; attemptCompleted: boolean; retakePermissionId: string | null;
 };
 export type ParticipantView = {
   studentName: string; username: string; participantNumber: string; className: string; periodName: string;
@@ -238,10 +238,20 @@ export async function participantView(requestedPage: number): Promise<Participan
        -- Pembatasan terjadi pada server, berdasarkan identitas siswa dan
        -- periode dari sesi; parameter browser tidak dapat memilih siswa lain.
        SELECT r.id,r.exam_test_id,r.label,r.kind,r.session_number,r.starts_at,r.time_zone,r.duration_minutes,
-         att.id AS attempt_id, (att.completed_at IS NOT NULL) AS attempt_completed
+         att.id AS attempt_id, (att.completed_at IS NOT NULL) AS attempt_completed,
+         CASE WHEN att.completed_at IS NOT NULL AND att.deadline>clock_timestamp()
+           AND r.starts_at<=clock_timestamp() AND r.starts_at+r.duration_minutes*interval '1 minute'>clock_timestamp()
+           THEN retry.id ELSE NULL END AS retake_id
        FROM exam_schedule_runs r JOIN exam_schedule_participants p ON p.run_id=r.id
        JOIN auth a ON a.period_id=r.period_id AND a.student_id=p.student_id
-       LEFT JOIN exam_attempts att ON att.run_id=r.id AND att.participant_identity_id=a.identity_id
+       LEFT JOIN LATERAL (
+         SELECT id,completed_at,deadline FROM exam_attempts
+         WHERE run_id=r.id AND participant_identity_id=a.identity_id ORDER BY id DESC LIMIT 1
+       ) att ON true
+       LEFT JOIN LATERAL (
+         SELECT id FROM exam_retake_permissions WHERE previous_attempt_id=att.id AND run_id=r.id
+           AND participant_identity_id=a.identity_id AND revoked_at IS NULL AND consumed_at IS NULL LIMIT 1
+       ) retry ON true
        ${PARTICIPANT_SCHEDULE_DAY_JOIN}
        -- Filter sebelum count dan LIMIT: hari ini per zona, serta kemarin jika masih berlangsung.
        WHERE r.published_at IS NOT NULL AND ${PARTICIPANT_SCHEDULE_DAY_FILTER}
@@ -255,7 +265,7 @@ export async function participantView(requestedPage: number): Promise<Participan
        pi.total, pi.page, pi.pages,
        COALESCE((SELECT json_agg(d) FROM (
          SELECT v.id::text AS id, e.name, v.label, v.kind, v.session_number AS "sessionNumber",
-           v.attempt_id::text AS "attemptId", v.attempt_completed AS "attemptCompleted",
+           v.attempt_id::text AS "attemptId", v.attempt_completed AS "attemptCompleted", v.retake_id::text AS "retakePermissionId",
            to_char(v.starts_at AT TIME ZONE (CASE v.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "startLocal",
            to_char((v.starts_at + v.duration_minutes * interval '1 minute') AT TIME ZONE (CASE v.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "endLocal",
            v.time_zone AS zone, v.duration_minutes AS "durationMinutes",
@@ -277,7 +287,7 @@ export async function participantView(requestedPage: number): Promise<Participan
 
 export type ParticipantSharedScores = {
   total: number; page: number; pages: number;
-  scores: { id: string; testName: string; runLabel: string; score: string }[];
+  scores: { id: string; testName: string; runLabel: string; attemptNumber: number; score: string }[];
 };
 
 /** Hanya nilai selesai yang sedang dibuka admin, milik sesi dan periode aktif. */
@@ -285,7 +295,7 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
   const hash = participantSessionDigest((await cookies()).get(COOKIE_NAME)?.value);
   if (!hash) return null;
   type Raw = { total: number; page: number; pages: number;
-    scores: { id: string; testName: string; runLabel: string; correct: number; questionCount: number }[] };
+    scores: { id: string; testName: string; runLabel: string; attemptNumber: number; correct: number; questionCount: number }[] };
   const result = await getPostgresPool().query<Raw>(
     `WITH auth AS (
        SELECT i.id AS identity_id, i.period_id
@@ -298,7 +308,9 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
          AND i.username=sess.username_snapshot AND i.updated_at=sess.identity_revision
          AND pw.updated_at=sess.password_revision AND sha256(convert_to(pw.password_hash,'UTF8'))=sess.password_hash_digest
      ), visible AS (
-       SELECT a.id,a.test_name_snapshot,a.run_label_snapshot,a.correct_count,a.question_count,a.completed_at
+       SELECT a.id,a.test_name_snapshot,a.run_label_snapshot,a.correct_count,a.question_count,a.completed_at,
+         (SELECT count(*)::int FROM exam_attempts h WHERE h.run_id=a.run_id
+           AND h.participant_identity_id=a.participant_identity_id AND h.id<=a.id) AS attempt_number
        FROM exam_attempts a JOIN auth ON auth.identity_id=a.participant_identity_id AND auth.period_id=a.period_id
        JOIN exam_score_category_visibility v ON v.kind=a.kind AND v.visible_to_participants
        WHERE a.completed_at IS NOT NULL
@@ -309,7 +321,7 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
      )
      SELECT pi.total,pi.page,pi.pages,COALESCE((SELECT json_agg(d) FROM (
        SELECT v.id::text AS id,v.test_name_snapshot AS "testName",v.run_label_snapshot AS "runLabel",
-         v.correct_count AS correct,v.question_count AS "questionCount"
+         v.correct_count AS correct,v.question_count AS "questionCount",v.attempt_number AS "attemptNumber"
        FROM visible v ORDER BY v.completed_at DESC,v.id DESC LIMIT $3::integer OFFSET ((pi.page-1)*$3::integer)
      ) d),'[]'::json) AS scores
      FROM auth CROSS JOIN page_info pi`, [hash, requestedPage, PAGE_SIZE],
@@ -319,6 +331,6 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
     const grade = gradeExamCounts(item.correct, item.questionCount);
     if (!grade.ok) throw new Error("Data nilai pengerjaan tidak konsisten.");
     // Jumlah benar, kunci dan data tersembunyi tidak dikirim ke browser.
-    return { id: item.id, testName: item.testName, runLabel: item.runLabel, score: grade.display };
+    return { id: item.id, testName: item.testName, runLabel: item.runLabel, attemptNumber: item.attemptNumber, score: grade.display };
   }) };
 }

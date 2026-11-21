@@ -18,7 +18,7 @@ export default async function StartExamPage({ params }: { params: Promise<{ runI
   const screen = await loadExamStartScreen(id);
   if (!screen) redirect("/peserta/login?sesi=berakhir");
   if (!screen.runId) notFound();
-  if (screen.attemptId) redirect(`/peserta/pengerjaan/${screen.attemptId}`);
+  if (screen.attemptId && !screen.retakePermissionId) redirect(`/peserta/pengerjaan/${screen.attemptId}`);
   return <main className="min-h-svh bg-[#f6f8f6] px-4 py-6 dark:bg-[#101713]">
     <div className="mx-auto max-w-3xl">
       <div className="mb-6 flex items-center justify-between gap-3">
@@ -34,8 +34,8 @@ export default async function StartExamPage({ params }: { params: Promise<{ runI
           <Clock3 className="mt-1 size-4 shrink-0" /><div><p>Jadwal: {screen.startLocal}–{screen.endLocal} {screen.zone}</p><p>Durasi {screen.duration} menit. Waktu berakhir tetap sesuai jadwal, bukan dihitung ulang saat mulai.</p></div>
         </div>
         {screen.status === "active" ? <>
-          <Alert className="mt-5"><AlertTitle>Sebelum mulai</AlertTitle><AlertDescription>Pastikan koneksi tersedia. Jawaban aman hanya setelah ada konfirmasi tersimpan di server. Ketika waktu habis, hanya jawaban yang tersimpan yang dinilai.</AlertDescription></Alert>
-          <StartForm runId={screen.runId} testName={screen.name ?? undefined} runLabel={screen.label ?? undefined} />
+          <Alert className="mt-5"><AlertTitle>{screen.retakePermissionId ? "Izin mengulang tersedia" : "Sebelum mulai"}</AlertTitle><AlertDescription>{screen.retakePermissionId ? "Satu izin untuk satu pengulangan. Pengerjaan sebelumnya tetap tersimpan; soal dan urutan sama, jawaban baru dimulai kosong. Batas akhir tidak berubah. " : ""}Pastikan koneksi tersedia. Jawaban aman hanya setelah ada konfirmasi tersimpan di server. Ketika waktu habis, hanya jawaban yang tersimpan yang dinilai.</AlertDescription></Alert>
+          <StartForm runId={screen.runId} testName={screen.name ?? undefined} runLabel={screen.label ?? undefined} retakePermissionId={screen.retakePermissionId} />
         </> : <Alert className="mt-5"><AlertTitle>{screen.status === "future" ? "Tes belum dimulai" : "Waktu tes sudah berakhir"}</AlertTitle><AlertDescription>Hubungi pengawas jika jadwal perlu diperiksa.</AlertDescription></Alert>}
       </Card>
     </div>

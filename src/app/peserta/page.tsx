@@ -93,7 +93,11 @@ export default async function ParticipantPage({ searchParams }: Props) {
                     </div>
                     {test.attemptId ? test.status === "Berlangsung" && !test.attemptCompleted ? (
                       <Button asChild size="sm" className="mt-4 rounded-xl"><Link prefetch={false} href={`/peserta/pengerjaan/${test.attemptId}`}>Lanjutkan tes</Link></Button>
-                    ) : <ParticipantStatusDialog attemptId={test.attemptId} testName={test.name} runLabel={test.label} />
+                    ) : <>
+                      {test.retakePermissionId && <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"><strong>Izin mengulang tersedia.</strong> Satu kali, dengan batas akhir yang sama. Jawaban baru dimulai kosong.</p>}
+                      <div className="flex flex-wrap items-start gap-x-2"><ParticipantStatusDialog attemptId={test.attemptId} testName={test.name} runLabel={test.label} />
+                        {test.retakePermissionId && <StartForm runId={test.id} testName={test.name} runLabel={test.label} initialOpen={false} retakePermissionId={test.retakePermissionId} />}</div>
+                    </>
                       : test.status === "Berlangsung" ? <StartForm runId={test.id} testName={test.name} runLabel={test.label} initialOpen={false} /> : null}
                   </li>
                 ))}

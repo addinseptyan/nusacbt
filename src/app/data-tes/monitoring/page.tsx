@@ -2,6 +2,9 @@ import { Activity, ChevronLeft, ChevronRight, CircleAlert, Info, RefreshCw } fro
 import Link from "next/link";
 import type { PoolClient } from "pg";
 
+import { RetakeControl } from "@/app/data-tes/monitoring/retake-control";
+import { RetakeRecovery } from "@/app/data-tes/monitoring/retake-recovery";
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +20,10 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 30;
 type Row = { id: string; student: string; number: string; className: string; period: string; testName: string; label: string;
   kind: "regular" | "makeup" | "remedial"; questionCount: number; answered: number; correct: number | null;
-  status: "working" | "waiting" | "submitted" | "time_expired"; started: string; deadline: string; zone: string };
+  status: "working" | "waiting" | "submitted" | "time_expired"; started: string; deadline: string; zone: string;
+  attemptNumber: number; latest: boolean; completed: boolean; withinWindow: boolean; permissionId: string | null;
+  permissionStatus: "pending" | "consumed" | "revoked" | "expired" | null; grantedAt: string | null; grantedBy: string | null;
+  actionAt: string | null; revokedBy: string | null };
 type ScoreOption = { id: string; name: string; period: string };
 type Data = { options: ScoreOption[]; rows: Row[]; total: number; page: number; pages: number };
 
@@ -41,9 +47,24 @@ async function loadData(testId: string | null, requestedPage: number): Promise<D
           WHEN a.deadline<=clock_timestamp() THEN 'waiting' ELSE 'working' END AS status,
         to_char(a.started_at AT TIME ZONE (CASE a.time_zone_snapshot WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END),'DD/MM/YYYY HH24:MI:SS') AS started,
         to_char(a.deadline AT TIME ZONE (CASE a.time_zone_snapshot WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END),'DD/MM/YYYY HH24:MI:SS') AS deadline,
-        a.time_zone_snapshot AS zone
-       FROM exam_attempts a JOIN exam_periods p ON p.id=a.period_id
+        a.time_zone_snapshot AS zone,
+        (SELECT count(*)::int FROM exam_attempts h WHERE h.run_id=a.run_id AND h.participant_identity_id=a.participant_identity_id AND h.id<=a.id) AS "attemptNumber",
+        NOT EXISTS (SELECT 1 FROM exam_attempts h WHERE h.run_id=a.run_id AND h.participant_identity_id=a.participant_identity_id AND h.id>a.id) AS latest,
+        a.completed_at IS NOT NULL AS completed,
+        (r.published_at IS NOT NULL AND r.starts_at<=clock_timestamp() AND r.starts_at+r.duration_minutes*interval '1 minute'>clock_timestamp() AND a.deadline>clock_timestamp()) AS "withinWindow",
+        permission.id::text AS "permissionId",
+        CASE WHEN permission.id IS NULL THEN NULL WHEN permission.revoked_at IS NOT NULL THEN 'revoked'
+          WHEN permission.consumed_at IS NOT NULL THEN 'consumed'
+          WHEN r.published_at IS NOT NULL AND r.starts_at<=clock_timestamp() AND r.starts_at+r.duration_minutes*interval '1 minute'>clock_timestamp() AND a.deadline>clock_timestamp() THEN 'pending'
+          ELSE 'expired' END AS "permissionStatus",
+        to_char(permission.granted_at AT TIME ZONE (CASE a.time_zone_snapshot WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END),'DD/MM/YYYY HH24:MI:SS') AS "grantedAt",
+        to_char(COALESCE(permission.revoked_at,permission.consumed_at) AT TIME ZONE (CASE a.time_zone_snapshot WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END),'DD/MM/YYYY HH24:MI:SS') AS "actionAt",
+        granted.username AS "grantedBy",revoker.username AS "revokedBy"
+       FROM exam_attempts a JOIN exam_periods p ON p.id=a.period_id JOIN exam_schedule_runs r ON r.id=a.run_id
        LEFT JOIN LATERAL (SELECT count(*)::int AS answered FROM exam_attempt_questions aq WHERE aq.attempt_id=a.id AND aq.answer IS NOT NULL) answers ON a.completed_at IS NULL
+       LEFT JOIN LATERAL (SELECT * FROM exam_retake_permissions rp WHERE rp.previous_attempt_id=a.id ORDER BY rp.id DESC LIMIT 1) permission ON true
+       LEFT JOIN admin_users granted ON granted.id=permission.granted_by
+       LEFT JOIN admin_users revoker ON revoker.id=permission.revoked_by
        WHERE ($1::bigint IS NULL OR a.exam_test_id=$1::bigint)
        ORDER BY a.started_at DESC,a.id DESC LIMIT $2::integer OFFSET $3::integer`, [testId, PAGE_SIZE, (page - 1) * PAGE_SIZE],
     )).rows;
@@ -70,13 +91,20 @@ export default async function MonitoringPage({ searchParams }: { searchParams: P
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><Activity className="size-5" /></span>
       <div><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Hasil / Monitoring Tes</h1><p className="mt-2 text-[13px] leading-6 text-muted-foreground">Status dan nilai dasar setiap pengerjaan peserta.</p></div></div>
       <Button asChild variant="outline" className="rounded-xl"><Link href={url(testId, data.page)} prefetch={false}><RefreshCw className="size-4" /> Muat ulang</Link></Button></div>
-    <Alert className="mb-5 max-w-5xl rounded-2xl"><Info className="size-4" /><AlertTitle>Nilai pengerjaan, bukan nilai akhir</AlertTitle><AlertDescription className="text-xs leading-5">Nilai = 100 × benar ÷ jumlah soal; salah dan kosong nol, tanpa penalti. Tampilan dua desimal. Nilai tersedia secara default setelah selesai. Atur tampil atau sembunyi per kategori di Pengaturan Pengerjaan. Izin ulang dan metode nilai akhir belum tersedia. <Link href="/data-tes/pengaturan-pengerjaan" className="font-semibold underline">Buka Pengaturan Pengerjaan</Link>.</AlertDescription></Alert>
+    <RetakeRecovery />
+    <Alert className="mb-5 max-w-5xl rounded-2xl"><Info className="size-4" /><AlertTitle>Nilai pengerjaan, bukan nilai akhir</AlertTitle><AlertDescription className="text-xs leading-5">Nilai = 100 × benar ÷ jumlah soal; salah dan kosong nol, tanpa penalti. Tampilan dua desimal. Nilai tersedia secara default setelah selesai. Atur tampil atau sembunyi per kategori di Pengaturan Pengerjaan. Izin ulang berlaku satu kali, hanya setelah selesai, dan tidak menambah waktu. Metode nilai akhir belum tersedia. <Link href="/data-tes/pengaturan-pengerjaan" className="font-semibold underline">Buka Pengaturan Pengerjaan</Link>.</AlertDescription></Alert>
     <Card className="gap-0 overflow-hidden rounded-[20px] py-0">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b p-5"><div><h2 className="font-bold">Daftar pengerjaan <Badge variant="secondary">{data.total}</Badge></h2><p className="mt-1 text-xs text-muted-foreground">Pantau pengerjaan. Visibilitas peserta diatur per kategori pada Pengaturan Pengerjaan.</p></div>
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b p-5"><div><h2 className="font-bold">Daftar pengerjaan <Badge variant="secondary">{data.total}</Badge></h2><p className="mt-1 text-xs text-muted-foreground">Pantau setiap pengerjaan. Izin hanya diberikan pada pengerjaan terakhir yang selesai dan saat jadwal masih berlangsung. Pengumpulan manual tetap mengikuti batas global (awal 5 menit terakhir); atur sebelum tes bila perlu.</p></div>
         <form action="/data-tes/monitoring" className="flex flex-wrap items-end gap-2"><div><label htmlFor="filter-tes" className="mb-1 block text-xs font-semibold">Filter tes</label><select id="filter-tes" name="tes" defaultValue={testId ?? ""} className="h-9 max-w-[18rem] rounded-lg border bg-background px-2 text-sm"><option value="">Semua tes</option>{data.options.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.period}</option>)}</select></div><Button type="submit" variant="outline">Terapkan</Button></form></div>
       {testId && !selectedTest && <p role="alert" className="border-b p-5 text-sm text-destructive">Tes tidak ditemukan. Pilih tes lain.</p>}
-      {data.rows.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground">Belum ada pengerjaan pada pilihan ini.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-muted/40 text-xs text-muted-foreground"><tr><th scope="col" className="p-4">Peserta</th><th scope="col" className="p-4">Tes / pelaksanaan</th><th scope="col" className="p-4">Waktu server</th><th scope="col" className="p-4">Status</th><th scope="col" className="p-4">Terjawab</th><th scope="col" className="p-4">Benar</th><th scope="col" className="p-4">Nilai pengerjaan</th></tr></thead>
-        <tbody>{data.rows.map((row) => { const grade = row.correct === null ? null : gradeExamCounts(row.correct, row.questionCount); return <tr key={row.id} className="border-t align-top"><td className="p-4"><p className="font-semibold">{row.student}</p><p className="mt-1 text-xs text-muted-foreground">{row.number} · {row.className}</p></td><td className="p-4"><p className="font-semibold">{row.testName}</p><p className="mt-1 text-xs text-muted-foreground">{row.period} · {row.kind === "regular" ? "Reguler" : row.kind === "makeup" ? "Susulan" : "Remidi"} · {row.label}</p></td><td className="p-4 text-xs leading-5 text-muted-foreground">Mulai {row.started}<br />Batas {row.deadline} {row.zone}</td><td className="p-4"><Badge variant={row.status === "working" ? "default" : "secondary"}>{row.status === "working" ? "Mengerjakan" : row.status === "waiting" ? "Menunggu penyelesaian" : row.status === "time_expired" ? "Waktu habis" : "Dikumpulkan"}</Badge></td><td className="p-4 tabular-nums">{row.answered} / {row.questionCount}</td><td className="p-4 tabular-nums">{row.correct ?? "—"}</td><td className="p-4 font-bold tabular-nums">{grade?.ok ? grade.display : "—"}</td></tr>; })}</tbody></table></div>}
+      {data.rows.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground">Belum ada pengerjaan pada pilihan ini.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-left text-sm"><thead className="bg-muted/40 text-xs text-muted-foreground"><tr><th scope="col" className="p-4">Peserta</th><th scope="col" className="p-4">Tes / pelaksanaan</th><th scope="col" className="p-4">Waktu server</th><th scope="col" className="p-4">Status</th><th scope="col" className="p-4">Terjawab</th><th scope="col" className="p-4">Benar</th><th scope="col" className="p-4">Nilai pengerjaan</th><th scope="col" className="p-4">Izin mengulang</th></tr></thead>
+        <tbody>{data.rows.map((row) => { const grade = row.correct === null ? null : gradeExamCounts(row.correct, row.questionCount); return <tr key={row.id} className="border-t align-top"><td className="p-4"><p className="font-semibold">{row.student}</p><p className="mt-1 text-xs text-muted-foreground">{row.number} · {row.className}</p></td><td className="p-4"><p className="font-semibold">{row.testName}</p><p className="mt-1 text-xs text-muted-foreground">{row.period} · {row.kind === "regular" ? "Reguler" : row.kind === "makeup" ? "Susulan" : "Remidi"} · {row.label}<br />Pengerjaan ke-{row.attemptNumber}</p></td><td className="p-4 text-xs leading-5 text-muted-foreground">Mulai {row.started}<br />Batas {row.deadline} {row.zone}</td><td className="p-4"><Badge variant={row.status === "working" ? "default" : "secondary"}>{row.status === "working" ? "Mengerjakan" : row.status === "waiting" ? "Menunggu penyelesaian" : row.status === "time_expired" ? "Waktu habis" : "Dikumpulkan"}</Badge></td><td className="p-4 tabular-nums">{row.answered} / {row.questionCount}</td><td className="p-4 tabular-nums">{row.correct ?? "—"}</td><td className="p-4 font-bold tabular-nums">{grade?.ok ? grade.display : "—"}</td><td className="min-w-[190px] p-4">
+          {row.permissionStatus ? <><Badge variant={row.permissionStatus === "pending" ? "default" : "secondary"}>{row.permissionStatus === "pending" ? "Izin tersedia" : row.permissionStatus === "consumed" ? "Izin digunakan" : row.permissionStatus === "revoked" ? "Izin dicabut" : "Izin kedaluwarsa"}</Badge><p className="mt-1 text-xs leading-5 text-muted-foreground">Izin #{row.permissionId} · diberikan {row.grantedBy ?? "admin dihapus"}<br />{row.grantedAt} {row.zone}{row.actionAt && <><br />{row.permissionStatus === "revoked" ? `Dicabut ${row.revokedBy ?? "admin dihapus"}` : "Digunakan"} · {row.actionAt} {row.zone}</>}</p></> : <span className="text-xs text-muted-foreground">Belum ada izin</span>}
+          {row.latest && row.completed && row.withinWindow && (row.permissionStatus === null || row.permissionStatus === "revoked" || row.permissionStatus === "pending") && <RetakeControl
+            attemptId={row.id} expectedPermissionId={row.permissionId} mode={row.permissionStatus === "pending" ? "revoke" : "grant"}
+            student={row.student} number={row.number} className={row.className} period={row.period} testName={row.testName} label={row.label}
+            attemptNumber={row.attemptNumber} deadline={row.deadline} zone={row.zone} />}
+        </td></tr>; })}</tbody></table></div>}
       {data.pages > 1 && <nav aria-label="Halaman hasil" className="flex flex-wrap items-center justify-between gap-2 border-t p-5 text-xs"><span>Halaman {data.page} dari {data.pages}</span><div className="flex gap-2">{data.page > 1 && <Button asChild size="sm" variant="outline"><Link href={url(testId, data.page - 1)}><ChevronLeft className="size-4" /> Sebelumnya</Link></Button>}{data.page < data.pages && <Button asChild size="sm" variant="outline"><Link href={url(testId, data.page + 1)}>Berikutnya <ChevronRight className="size-4" /></Link></Button>}</div></nav>}
     </Card>
   </div>;

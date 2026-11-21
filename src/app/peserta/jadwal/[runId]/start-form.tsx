@@ -13,8 +13,8 @@ const subscribe = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
 
-type Props = { runId: string; testName?: string; runLabel?: string; initialOpen?: boolean };
-export function StartForm({ runId, testName, runLabel, initialOpen = true }: Props) {
+type Props = { runId: string; testName?: string; runLabel?: string; initialOpen?: boolean; retakePermissionId?: string | null };
+export function StartForm({ runId, testName, runLabel, initialOpen = true, retakePermissionId = null }: Props) {
   const [state, action, pending] = useActionState(beginExamAction, { error: "" });
   const [open, setOpen] = useState(initialOpen);
   const [token, setToken] = useState(""); const [caret, setCaret] = useState(0); const [focused, setFocused] = useState(false);
@@ -36,7 +36,7 @@ export function StartForm({ runId, testName, runLabel, initialOpen = true }: Pro
   return <div className={initialOpen ? "mt-6" : "mt-4"}>
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild><Button type="button" size={initialOpen ? "default" : "sm"} className="rounded-xl" disabled={!hydrated || pending}>
-        {initialOpen ? "Masukkan token" : "Mulai tes"} <ArrowRight className="size-4" /></Button></DialogTrigger>
+        {initialOpen ? "Masukkan token" : retakePermissionId ? "Mulai ulang tes" : "Mulai tes"} <ArrowRight className="size-4" /></Button></DialogTrigger>
       <DialogContent showCloseButton={false} className="max-h-[min(92dvh,42rem)] gap-4 overflow-y-auto rounded-[24px] p-4 shadow-2xl sm:max-w-[440px] sm:p-6"
         onOpenAutoFocus={(event) => { event.preventDefault(); input.current?.focus(); }}
         onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}>
@@ -46,7 +46,7 @@ export function StartForm({ runId, testName, runLabel, initialOpen = true }: Pro
             <div className="min-w-0 flex-1"><p className="text-[10px] font-bold tracking-[0.12em] text-emerald-700 uppercase dark:text-emerald-300">Akses pengerjaan</p><DialogTitle className="mt-0.5 text-base leading-5 font-bold">Masukkan token ujian</DialogTitle></div>
             <Button type="button" variant="ghost" size="icon-sm" className="rounded-lg text-muted-foreground" aria-label="Tutup" disabled={pending} onClick={() => changeOpen(false)}><X className="size-4" aria-hidden="true" /></Button>
           </div>
-          <DialogDescription className="mt-2 text-[13px] leading-5">Masukkan enam angka dari pengawas untuk membuka tes.</DialogDescription>
+          <DialogDescription className="mt-2 text-[13px] leading-5">{retakePermissionId ? "Izin ini berlaku satu kali. Masukkan token untuk memulai ulang; batas akhir tetap sama dan jawaban dimulai kosong." : "Masukkan enam angka dari pengawas untuk membuka tes."}</DialogDescription>
         </DialogHeader>
         {testName && <div className="flex min-w-0 items-start gap-2.5 rounded-2xl border bg-muted/35 p-2.5">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-background text-emerald-700 dark:text-emerald-300"><ClipboardList className="size-4" aria-hidden="true" /></span>
@@ -57,6 +57,7 @@ export function StartForm({ runId, testName, runLabel, initialOpen = true }: Pro
           else { setWarning(""); setEdited(false); }
         }}>
           <input type="hidden" name="runId" value={runId} />
+          {retakePermissionId && <input type="hidden" name="retakeId" value={retakePermissionId} />}
           <div className="flex items-center justify-between gap-3"><label htmlFor={id} className="text-sm font-semibold">Token tes</label><span aria-hidden="true" className="text-xs font-medium text-muted-foreground">{token.length} / 6 angka</span></div>
           <div className="relative w-full rounded-xl focus-within:outline-2 focus-within:outline-offset-4 focus-within:outline-emerald-600 dark:focus-within:outline-emerald-400">
             <div aria-hidden="true" data-testid="token-slots" className="grid grid-cols-6 gap-1.5 sm:gap-2">
@@ -90,12 +91,12 @@ export function StartForm({ runId, testName, runLabel, initialOpen = true }: Pro
           <DialogFooter className="-mx-4 -mb-4 flex-col sm:bottom-[-1.5rem] sm:-mx-6 sm:-mb-6 sm:flex-col">
             {pending && <p role="status" className="text-xs leading-5 text-muted-foreground">Menyiapkan soal. Jika koneksi terputus, muat ulang jadwal untuk memeriksa apakah tes sudah dimulai.</p>}
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="h-11 rounded-xl" disabled={pending} onClick={() => changeOpen(false)}>Batal</Button>
-              <Button type="submit" className="h-11 rounded-xl" disabled={pending}>{pending ? "Menyiapkan soal…" : "Mulai pengerjaan"} {!pending && <ArrowRight className="size-4" aria-hidden="true" />}</Button></div>
+              <Button type="submit" className="h-11 rounded-xl" disabled={pending}>{pending ? "Menyiapkan soal…" : retakePermissionId ? "Mulai pengulangan" : "Mulai pengerjaan"} {!pending && <ArrowRight className="size-4" aria-hidden="true" />}</Button></div>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-    {initialOpen ? <noscript><form action={action} className="mt-4 space-y-3"><input type="hidden" name="runId" value={runId} /><label htmlFor={`${id}-fallback`} className="block text-sm font-semibold">Token tes</label><Input id={`${id}-fallback`} name="token" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} required autoComplete="one-time-code" className="max-w-xs" /><p className="text-xs text-muted-foreground">Masukkan enam angka dari pengawas.</p>{state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}<Button type="submit">Mulai pengerjaan</Button></form></noscript>
-      : <noscript><Button asChild size="sm" variant="outline" className="mt-2 rounded-xl"><Link href={`/peserta/jadwal/${runId}`}>Mulai tes tanpa JavaScript</Link></Button></noscript>}
+    {initialOpen ? <noscript><form action={action} className="mt-4 space-y-3"><input type="hidden" name="runId" value={runId} />{retakePermissionId && <input type="hidden" name="retakeId" value={retakePermissionId} />}<label htmlFor={`${id}-fallback`} className="block text-sm font-semibold">Token tes</label><Input id={`${id}-fallback`} name="token" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} required autoComplete="one-time-code" className="max-w-xs" /><p className="text-xs text-muted-foreground">Masukkan enam angka dari pengawas.</p>{state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}<Button type="submit">{retakePermissionId ? "Mulai pengulangan" : "Mulai pengerjaan"}</Button></form></noscript>
+      : <noscript><Button asChild size="sm" variant="outline" className="mt-2 rounded-xl"><Link href={`/peserta/jadwal/${runId}`}>{retakePermissionId ? "Mulai ulang tanpa JavaScript" : "Mulai tes tanpa JavaScript"}</Link></Button></noscript>}
   </div>;
 }
