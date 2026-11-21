@@ -162,44 +162,49 @@ export function ExamWork({ view }: { view: WorkingView }) {
     { label: "Belum dijawab", count: unansweredClear, color: "border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-800" },
     { label: "Soal aktif", count: null, color: "border-background bg-background ring-2 ring-indigo-600 ring-offset-1 ring-offset-card dark:ring-indigo-400" },
   ];
+  const identity = [{ label: "Nama", value: view.participant.name }, { label: "NISN", value: view.participant.nisn },
+    { label: "Kelas", value: view.participant.className }, { label: "Periode ujian", value: view.participant.period }];
   return <main className="min-h-svh bg-[#f6f8f6] dark:bg-[#101713]">
-    <header className="sticky top-0 z-40 border-b bg-card/95 shadow-sm backdrop-blur" data-testid="exam-sticky-header"><div className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5"><span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-emerald-700 text-white"><GraduationCap className="size-5" /></span>
-          <div className="min-w-0"><p className="truncate text-sm font-bold" title={view.testName}>{view.testName}</p><p className="truncate text-xs text-muted-foreground" title={view.runLabel}>{view.runLabel}</p></div></div>
-        <div className="flex shrink-0 items-center gap-2"><div className={`rounded-xl px-3 py-2 text-center ${seconds <= 300 ? "bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-100" : "bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"}`}>
-          <p className="flex items-center justify-center gap-1 text-[10px] font-semibold uppercase"><Clock3 className="size-3" /> Perkiraan sisa</p><p className="font-mono text-lg leading-5 font-bold tabular-nums" aria-label={`Perkiraan sisa waktu ${remainingText(seconds)}`}>{remainingText(seconds)}</p></div><ThemeToggle /></div>
+    <header className="sticky top-0 z-40 border-b bg-card/95 shadow-sm backdrop-blur" data-testid="exam-sticky-header"><div className="mx-auto max-w-[1400px] px-4 py-2.5 sm:px-6">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 xl:max-w-[260px]"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-sm"><GraduationCap className="size-5" /></span>
+          <div className="min-w-0"><p className="whitespace-nowrap text-[10px] font-bold tracking-[0.12em] text-emerald-700 uppercase dark:text-emerald-300">NusaCBT<span className="hidden sm:inline"> · Ujian</span></p><p className="truncate text-sm font-bold" title={`${view.testName} · ${view.runLabel}`}>{view.testName}</p></div></div>
+        <dl className="hidden min-w-0 flex-1 grid-cols-4 gap-3 border-l pl-4 text-xs xl:grid">
+          {identity.map((item) => <div key={item.label} className="min-w-0"><dt className="text-[10px] text-muted-foreground">{item.label}</dt><dd className="truncate font-semibold" title={item.value}>{item.value}</dd></div>)}
+        </dl>
+        <div className="flex shrink-0 items-center gap-2"><div title="Waktu mengikuti jam server" className={`flex items-center gap-2 rounded-xl px-3 py-1.5 ${seconds <= 300 ? "bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-100" : "bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"}`}>
+          <Clock3 className="size-4 shrink-0" aria-hidden="true" /><div><p className="text-[10px] font-bold uppercase">Waktu</p><p className="font-mono text-base leading-5 font-bold tabular-nums" aria-label={`Waktu tersisa ${remainingText(seconds)}`}>{remainingText(seconds)}</p></div></div><ThemeToggle /></div>
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t pt-2.5 text-xs sm:grid-cols-4">
-        {[{ label: "Nama", value: view.participant.name }, { label: "NISN", value: view.participant.nisn }, { label: "Kelas", value: view.participant.className }, { label: "Periode ujian", value: view.participant.period }].map((item) => <div key={item.label} className="min-w-0"><dt className="text-[10px] text-muted-foreground">{item.label}</dt><dd className="truncate font-semibold" title={item.value}>{item.value}</dd></div>)}
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 border-t pt-2 text-xs sm:grid-cols-4 xl:hidden">
+        {identity.map((item) => <div key={item.label} className="min-w-0"><dt className="text-[10px] text-muted-foreground">{item.label}</dt><dd className="truncate font-semibold" title={item.value}>{item.value}</dd></div>)}
       </dl>
     </div></header>
-    <div className="mx-auto max-w-6xl px-4 pb-12 pt-5 sm:px-6 sm:pt-7">
+    <div className="mx-auto max-w-[1400px] px-4 pb-28 pt-3 sm:px-6 sm:pt-4">
       <noscript><div role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">JavaScript diperlukan untuk menyimpan jawaban. Aktifkan JavaScript lalu muat ulang halaman; pilihan yang belum dikirim tidak tersimpan.</div></noscript>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground"><p>Waktu mengikuti server. Saat habis, jawaban tersimpan akan dikumpulkan otomatis.</p><p>{confirmedAnswered} dari {view.total} soal terjawab</p></div>
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <section className="min-w-0 rounded-[22px] border bg-card p-4 sm:p-6" aria-labelledby="question-heading">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4"><h1 id="question-heading" className="text-lg font-bold">Soal {view.position} <span className="text-sm font-normal text-muted-foreground">/ {view.total}</span></h1>
+      <p className="sr-only">Waktu mengikuti server. Saat habis, jawaban tersimpan akan dikumpulkan otomatis.</p>
+      <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <section className="min-w-0 rounded-[22px] border bg-card p-4 sm:p-5" aria-labelledby="question-heading">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><h1 id="question-heading" className="text-lg font-bold">Soal {view.position} <span className="text-sm font-normal text-muted-foreground">/ {view.total}</span></h1>
             <span role="status" aria-live="polite" className={`text-xs font-semibold ${mode === "unsaved" || mode === "submit-unknown" ? "text-destructive" : "text-emerald-700 dark:text-emerald-300"}`}>
               {mode === "saving" ? pendingKind === "doubt" ? "Menyimpan tanda ragu…" : "Menyimpan jawaban…" : mode === "unsaved" ? "Belum dikonfirmasi tersimpan" : mode === "checking" ? "Memeriksa pengumpulan…" : mode === "submitting" ? "Menyelesaikan tes…" : mode === "submit-unknown" ? "Status perlu diperiksa" : mode === "navigating" ? "Memuat halaman…" : confirmed ? "Tersimpan di server" : confirmedDoubt ? "Tanda ragu tersimpan" : "Belum dijawab"}
             </span></div>
-          <div className="mt-5 text-[15px] leading-7"><QuestionRichDisplay document={view.question.promptRich} fallback={view.question.prompt} />
+          <div className="mt-3 text-[15px] leading-6"><QuestionRichDisplay document={view.question.promptRich} fallback={view.question.prompt} />
             {view.question.hasPromptImage && <img src={image("prompt")} alt="Gambar soal" className="mt-3 h-auto max-h-[480px] max-w-full rounded-lg object-contain" />}</div>
-          <fieldset className="mt-6 space-y-2" disabled={!hydrated || blocked || seconds === 0}>
-            <legend className="mb-3 text-sm font-semibold">Pilih satu jawaban</legend>
-            {view.question.options.map((option) => <label key={option.id} className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition-colors has-[:disabled]:cursor-not-allowed ${selected === option.id ? "border-emerald-600 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40" : "bg-background hover:bg-muted/40"}`}>
+          <fieldset className="mt-3 space-y-1.5" disabled={!hydrated || blocked || seconds === 0}>
+            <legend className="mb-2 text-sm font-semibold">Pilih satu jawaban</legend>
+            {view.question.options.map((option) => <label key={option.id} className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-xl border px-3 py-2 text-sm transition-colors has-[:disabled]:cursor-not-allowed ${selected === option.id ? "border-emerald-600 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40" : "bg-background hover:bg-muted/40"}`}>
               <input type="radio" name={`question-${view.position}`} value={option.id} checked={selected === option.id} onChange={() => void save(option.id)} className="mt-1 size-4 shrink-0 accent-emerald-700" />
               <span className="font-bold">{option.label}.</span><span className="min-w-0 flex-1"><QuestionRichDisplay document={option.rich} fallback={option.text} />
                 {option.hasImage && <img src={image(option.id)} alt={`Gambar pilihan ${option.label}`} className="mt-2 h-auto max-h-[320px] max-w-full rounded-lg object-contain" />}</span>
             </label>)}
           </fieldset>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-950 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100">
               <input type="checkbox" checked={selectedDoubt} disabled={!hydrated || blocked || seconds === 0} onChange={(event) => void saveDoubt(event.currentTarget.checked)} className="size-4 accent-amber-700" /> <Flag className="size-4" /> Ragu-ragu
             </label>
             <Button type="button" variant="ghost" size="sm" disabled={!hydrated || blocked || !confirmed || seconds === 0} onClick={() => void save(null)}>Kosongkan jawaban</Button>
           </div>
-          <p className="mt-2 text-xs leading-5 text-muted-foreground">Tanda ragu tidak menghapus jawaban dan dapat dipakai pada soal yang belum dijawab.</p>
+          <p className="mt-1 text-xs leading-4 text-muted-foreground">Tanda ragu tidak menghapus jawaban dan dapat dipakai pada soal yang belum dijawab.</p>
           {failure && <div role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm leading-6 text-destructive"><p>{failure.error}</p>
             {mode === "unsaved" && <p className="mt-1 font-semibold">{pendingKind === "doubt" ? "Tanda ragu" : "Pilihan terakhir"} belum terkonfirmasi; jangan dianggap aman.</p>}
             <div className="mt-3 flex flex-wrap gap-2">{mode === "unsaved" && !failure.reload && !failure.closed && !failure.login && seconds > 0 && <Button type="button" size="sm" onClick={() => { if (pendingKind === "doubt") void saveDoubt(selectedDoubt); else void save(selected); }}>Coba simpan lagi</Button>}
@@ -207,22 +212,18 @@ export function ExamWork({ view }: { view: WorkingView }) {
               {failure.login && <Button type="button" size="sm" variant="outline" onClick={() => { if (window.confirm("Perubahan terakhir belum terkonfirmasi. Masuk kembali untuk memeriksa data tersimpan?")) router.push("/peserta/login?sesi=berakhir"); }}>Masuk kembali</Button>}</div>
           </div>}
           {mode === "navigating" && <p className="mt-4 text-xs text-muted-foreground">Memuat halaman. Jika tidak berlanjut, <button type="button" className="underline" onClick={reload}>muat ulang</button>.</p>}
-          {seconds === 0 && mode !== "unsaved" && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">Perkiraan waktu habis. Memeriksa status pada server…</p>}
-          <div className="mt-6 flex flex-wrap justify-between gap-2 border-t pt-4">
-            <Button type="button" variant="outline" disabled={!hydrated || blocked || view.position <= 1} onClick={() => navigate(`${base}?soal=${view.position - 1}`)}><ChevronLeft className="size-4" /> Sebelumnya</Button>
-            <Button type="button" disabled={!hydrated || blocked || view.position >= view.total} onClick={() => navigate(`${base}?soal=${view.position + 1}`)}>Berikutnya <ChevronRight className="size-4" /></Button>
-          </div>
+          {seconds === 0 && mode !== "unsaved" && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">Memeriksa waktu dan status pada server…</p>}
         </section>
-        <aside className="rounded-[22px] border bg-card p-4 sm:p-5">
+        <aside className="rounded-[22px] border bg-card p-4">
           <div className="flex items-start justify-between gap-2"><div><h2 className="text-sm font-bold">Navigasi soal</h2><p className="mt-1 text-xs text-muted-foreground">{confirmedAnswered} dari {view.total} terjawab</p></div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{view.total ? Math.round(100 * confirmedAnswered / view.total) : 0}%</span></div>
-          <div role="img" aria-label={`Progres status: ${answeredClear} sudah dijawab tanpa ragu, ${doubtfulCount} ragu-ragu, ${unansweredClear} belum dijawab`} className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+          <div role="img" aria-label={`Progres status: ${answeredClear} sudah dijawab tanpa ragu, ${doubtfulCount} ragu-ragu, ${unansweredClear} belum dijawab`} className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
             <span className="bg-emerald-600" style={{ width: `${100 * answeredClear / view.total}%` }} /><span className="bg-amber-400" style={{ width: `${100 * doubtfulCount / view.total}%` }} /><span className="bg-slate-300 dark:bg-slate-600" style={{ width: `${100 * unansweredClear / view.total}%` }} />
           </div>
-          <ul aria-label="Keterangan status soal" className="mt-4 grid grid-cols-2 gap-x-2 gap-y-3 text-[11px] leading-4">
+          <ul aria-label="Keterangan status soal" className="mt-3 grid grid-cols-2 gap-x-2 gap-y-2 text-[11px] leading-4">
             {legend.map((item) => <li key={item.label} className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className={`size-3.5 shrink-0 rounded border ${item.color}`} /><span>{item.label}{item.count !== null ? ` (${item.count})` : ""}</span></li>)}
           </ul>
-          <p className="mt-3 text-[11px] leading-5 text-muted-foreground">Ragu-ragu termasuk soal yang sudah atau belum dijawab. Garis menunjukkan soal aktif.</p>
-          <nav aria-label="Navigasi soal" className="mt-2 max-h-80 overflow-y-auto overscroll-contain p-2" style={{ scrollbarGutter: "stable" }}>
+          <p className="mt-2 text-[11px] leading-4 text-muted-foreground">Ragu-ragu termasuk soal yang sudah atau belum dijawab. Garis menunjukkan soal aktif.</p>
+          <nav aria-label="Navigasi soal" className="mt-2 max-h-64 overflow-y-auto overscroll-contain p-2" style={{ scrollbarGutter: "stable" }}>
             <div className="grid grid-cols-5 gap-2">{navigation.map((item) => {
               const status = item.doubtful ? `ragu-ragu, ${item.answered ? "terjawab" : "belum dijawab"}` : item.answered ? "terjawab" : "belum dijawab";
               const color = item.doubtful ? "border-amber-300 bg-amber-100 text-amber-950 dark:border-amber-700 dark:bg-amber-900 dark:text-amber-100" : item.answered ? "border-emerald-300 bg-emerald-100 text-emerald-950 dark:border-emerald-700 dark:bg-emerald-900 dark:text-emerald-100" : "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
@@ -231,9 +232,9 @@ export function ExamWork({ view }: { view: WorkingView }) {
                 className={`h-9 rounded-lg border text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 ${item.position === view.position ? "ring-2 ring-indigo-600 ring-offset-2 ring-offset-card dark:ring-indigo-400" : ""} ${color}`}>{item.position}</button>;
             })}</div>
           </nav>
-          <div className="mt-4 border-t pt-4">
+          <div className="mt-3 border-t pt-3">
             <Dialog open={dialog !== null} onOpenChange={(open) => { if (!open && !inFlight.current) setDialog(null); }}>
-              <DialogTrigger asChild><Button type="button" variant="outline" className="w-full rounded-xl" disabled={!hydrated || blocked} onClick={() => void checkSubmission()}><CheckCircle2 className="size-4" /> Selesaikan tes</Button></DialogTrigger>
+              <DialogTrigger asChild><Button type="button" className="w-full rounded-xl bg-indigo-600 font-semibold text-white shadow-sm hover:bg-indigo-700 dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-600" disabled={!hydrated || blocked} onClick={() => void checkSubmission()}><CheckCircle2 className="size-4" /> Selesaikan tes</Button></DialogTrigger>
               {dialog && <DialogContent showCloseButton={false} className="rounded-2xl sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="text-lg font-bold">{dialog.kind === "checking" ? "Memeriksa pengumpulan" : dialog.kind === "blocked" ? "Belum dapat dikumpulkan" : dialog.kind === "error" ? "Pemeriksaan belum berhasil" : "Kumpulkan tes sekarang?"}</DialogTitle>
@@ -253,5 +254,12 @@ export function ExamWork({ view }: { view: WorkingView }) {
         </aside>
       </div>
     </div>
+    <nav aria-label="Navigasi sebelumnya dan berikutnya" data-testid="exam-bottom-nav" className="fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 px-4 py-3 shadow-[0_-6px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+      <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2">
+        <Button type="button" variant="outline" className="rounded-xl px-2 sm:px-4" disabled={!hydrated || blocked || view.position <= 1} onClick={() => navigate(`${base}?soal=${view.position - 1}`)}><ChevronLeft className="size-4" /> Sebelumnya</Button>
+        <span aria-label={`Soal ${view.position} dari ${view.total}`} className="whitespace-nowrap text-center text-[11px] font-semibold tabular-nums text-muted-foreground sm:text-xs">{view.position} / {view.total}</span>
+        <Button type="button" className="rounded-xl px-2 sm:px-4" disabled={!hydrated || blocked || view.position >= view.total} onClick={() => navigate(`${base}?soal=${view.position + 1}`)}>Berikutnya <ChevronRight className="size-4" /></Button>
+      </div>
+    </nav>
   </main>;
 }

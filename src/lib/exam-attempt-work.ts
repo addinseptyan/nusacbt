@@ -2,11 +2,12 @@ import "server-only";
 import type { PoolClient } from "pg";
 
 import { EXAM_OPTION_IDS, validExamOptionOrder } from "@/lib/exam-attempt-validation.mjs";
+import { gradeExamCounts } from "@/lib/exam-grading.mjs";
 import { lockParticipantSession, participantCandidate, participantSessionHash, participantSessionStillActive } from "@/lib/participant-session-lock";
 import { getPostgresPool } from "@/lib/postgres";
 
 type AttemptRow = {
-  id: string; testName: string; runLabel: string; deadline: Date; questionCount: number;
+  id: string; examTestId: string; testName: string; runLabel: string; deadline: Date; questionCount: number;
   completedAt: Date | null; completionReason: "submitted" | "time_expired" | null; expired: boolean; now: Date;
 };
 type OptionContent = { text: string; rich: unknown | null; hasImage: boolean };
@@ -15,7 +16,7 @@ type RawQuestion = {
   prompt: string; promptRich: unknown | null; hasPromptImage: boolean; options: Record<string, OptionContent>;
 };
 export type AttemptView =
-  | { state: "finished"; testName: string; runLabel: string; reason: "submitted" | "time_expired" }
+  | { state: "finished"; testName: string; runLabel: string; reason: "submitted" | "time_expired"; score: string | null }
   | { state: "working"; attemptId: string; testName: string; runLabel: string; deadline: string; serverNow: string;
       participant: { name: string; nisn: string; className: string; period: string };
       total: number; position: number; answered: number; navigation: { position: number; answered: boolean; doubtful: boolean }[];
@@ -35,7 +36,7 @@ const NOT_FOUND = "Pengerjaan tidak ditemukan atau bukan milik sesi ini.";
 
 async function lockAttempt(client: PoolClient, attemptId: string, identityId: string): Promise<AttemptRow | null> {
   const result = await client.query<AttemptRow>(
-    `SELECT id::text AS id,test_name_snapshot AS "testName",run_label_snapshot AS "runLabel",deadline,
+    `SELECT id::text AS id,exam_test_id::text AS "examTestId",test_name_snapshot AS "testName",run_label_snapshot AS "runLabel",deadline,
        question_count AS "questionCount",completed_at AS "completedAt",completion_reason AS "completionReason",
        deadline<=clock_timestamp() AS expired,clock_timestamp() AS now
      FROM exam_attempts WHERE id=$1::bigint AND participant_identity_id=$2::bigint FOR UPDATE`, [attemptId, identityId],
@@ -90,7 +91,24 @@ function checkedOptions(raw: RawQuestion) {
   });
 }
 
-/** Tidak pernah mengembalikan kunci jawaban atau hasil nilai ke peserta. */
+/** Pengaturan dikunci sampai commit. Tidak ada baris berarti nilai tersembunyi. */
+async function finishedAttemptView(client: PoolClient, attempt: AttemptRow, reason: "submitted" | "time_expired"): Promise<Extract<AttemptView, { state: "finished" }>> {
+  const policy = await client.query<{ visible: boolean }>(
+    "SELECT visible_to_participants AS visible FROM exam_score_visibility WHERE exam_test_id=$1::bigint FOR SHARE", [attempt.examTestId],
+  );
+  let score: string | null = null;
+  if (policy.rows[0]?.visible) {
+    const result = await client.query<{ correct: number; total: number }>(
+      "SELECT correct_count AS correct,question_count AS total FROM exam_attempts WHERE id=$1::bigint AND completed_at IS NOT NULL", [attempt.id],
+    );
+    const row = result.rows[0]; const grade = row && gradeExamCounts(row.correct, row.total);
+    if (!grade || !grade.ok) throw new Error("Nilai pengerjaan tidak konsisten.");
+    score = grade.display;
+  }
+  return { state: "finished", testName: attempt.testName, runLabel: attempt.runLabel, reason, score };
+}
+
+/** Kunci jawaban tidak pernah dikirim; nilai hanya jika selesai dan diizinkan server. */
 export async function loadExamAttempt(attemptId: string, requestedPosition: number): Promise<AttemptView | "login" | "missing"> {
   const hash = await participantSessionHash(); if (!hash) return "login";
   const client = await getPostgresPool().connect();
@@ -99,10 +117,10 @@ export async function loadExamAttempt(attemptId: string, requestedPosition: numb
     const { participant, attempt } = await authenticatedAttempt(client, hash, attemptId);
     const justExpired = await finishIfExpired(client, attempt);
     if (attempt.completedAt || justExpired) {
+      const finished = await finishedAttemptView(client, attempt, justExpired ? "time_expired" : attempt.completionReason!);
       if (!await participantSessionStillActive(client, hash, participant)) throw new WorkProblem(LOGIN, true);
       await client.query("COMMIT");
-      return { state: "finished", testName: attempt.testName, runLabel: attempt.runLabel,
-        reason: justExpired ? "time_expired" : attempt.completionReason! };
+      return finished;
     }
     const position = Math.min(Math.max(1, requestedPosition), attempt.questionCount);
     const navigation = (await client.query<{ position: number; answered: boolean; doubtful: boolean }>(
@@ -123,8 +141,10 @@ export async function loadExamAttempt(attemptId: string, requestedPosition: numb
     // Jika waktu habis selama loading, jangan kirim soal untuk attempt tertutup.
     const now = (await client.query<{ now: Date; expired: boolean }>("SELECT clock_timestamp() AS now,deadline<=clock_timestamp() AS expired FROM exam_attempts WHERE id=$1::bigint", [attempt.id])).rows[0];
     if (now.expired) {
-      await completeLockedAttempt(client, attempt, "time_expired"); await client.query("COMMIT");
-      return { state: "finished", testName: attempt.testName, runLabel: attempt.runLabel, reason: "time_expired" };
+      await completeLockedAttempt(client, attempt, "time_expired");
+      const finished = await finishedAttemptView(client, attempt, "time_expired");
+      if (!await participantSessionStillActive(client, hash, participant)) throw new WorkProblem(LOGIN, true);
+      await client.query("COMMIT"); return finished;
     }
     await client.query("COMMIT");
     return { state: "working", attemptId: attempt.id, testName: attempt.testName, runLabel: attempt.runLabel,

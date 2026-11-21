@@ -9,23 +9,30 @@ test("jadwal dipaginasi di server dan zona ditampilkan tanpa soal atau tes perio
   try {
     const added = await client.query<{ id: string }>(
       `INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes)
-       SELECT $1::bigint,'Jadwal tambahan ' || g || ' ' || $2,clock_timestamp() + g * interval '1 hour','WIB',60 FROM generate_series(1,23) g RETURNING id::text AS id`,
+       SELECT $1::bigint,'Jadwal tambahan ' || g || ' ' || $2,
+         (date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Jakarta') + interval '23 hours') AT TIME ZONE 'Asia/Jakarta',
+         'WIB',1 FROM generate_series(1,23) g RETURNING id::text AS id`,
       [f.periodA, f.suffix],
     );
-    const witaExam = await client.query<{ id: string }>("INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes) VALUES($1,$2,'2030-01-01 00:00:00+00','WITA',60) RETURNING id::text AS id", [f.periodA, `Zona WITA ${f.suffix}`]);
+    const witaExam = await client.query<{ id: string; start: string; end: string }>(
+      `INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes)
+       VALUES($1,$2,(date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Makassar') + interval '23 hours') AT TIME ZONE 'Asia/Makassar','WITA',60)
+       RETURNING id::text AS id,to_char(starts_at AT TIME ZONE 'Asia/Makassar','DD/MM/YYYY HH24:MI') AS start,
+         to_char((starts_at+interval '60 minutes') AT TIME ZONE 'Asia/Makassar','DD/MM/YYYY HH24:MI') AS "end"`, [f.periodA, `Zona WITA ${f.suffix}`]);
     await seedPublishedSchedules(client, [...added.rows.map((r) => r.id), witaExam.rows[0].id], f.studentA, f.placementA);
     await loginParticipant(page, f.username, f.passwordA);
-    await expect(page.getByText("27 jadwal untukmu dalam periode ini")).toBeVisible();
+    await expect(page.getByText("25 jadwal hari ini atau berlanjut dari kemarin")).toBeVisible();
     await expect(page.getByRole("list", { name: "Jadwal tes" }).getByRole("listitem")).toHaveCount(20);
     await expect(page.getByText("Halaman 1 dari 2")).toBeVisible();
-    const first = page.getByRole("list", { name: "Jadwal tes" }).getByRole("listitem").first();
-    await expect(first).toContainText(f.activeName); await expect(first).toContainText("Berlangsung");
+    const firstPage = await page.getByRole("list", { name: "Jadwal tes" }).innerText();
+    expect(firstPage).toContain(f.activeName); expect(firstPage).toContain("Berlangsung");
     await page.getByRole("link", { name: "Berikutnya" }).click();
     await expect(page).toHaveURL(/halaman=2/); await expect(page.getByText("Halaman 2 dari 2")).toBeVisible();
-    await expect(page.getByRole("list", { name: "Jadwal tes" }).getByRole("listitem")).toHaveCount(7);
-    const wita = page.getByRole("listitem").filter({ hasText: `Zona WITA ${f.suffix}` });
-    await expect(wita).toContainText("01/01/2030 08:00 WITA"); await expect(wita).toContainText("01/01/2030 09:00 WITA");
-    await expect(page.getByText(f.pastName, { exact: true })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Jadwal tes" }).getByRole("listitem")).toHaveCount(5);
+    const bothPages = firstPage + await page.getByRole("list", { name: "Jadwal tes" }).innerText();
+    expect(bothPages).toContain(`Zona WITA ${f.suffix}`);
+    expect(bothPages).toContain(`${witaExam.rows[0].start} WITA`); expect(bothPages).toContain(`${witaExam.rows[0].end} WITA`);
+    expect(bothPages).not.toContain(f.pastName); expect(bothPages).not.toContain(f.futureName);
     await expect(page.getByText(f.hiddenName, { exact: true })).toHaveCount(0);
     expect(await page.content()).not.toContain(f.questionSecret);
     await page.goto(`/peserta?halaman=999999&periode=${f.periodB}`);
@@ -73,12 +80,13 @@ for (const size of [{ name: "desktop", width: 1440, height: 650 }, { name: "pons
     try {
       const added = await client.query<{ id: string }>(
         `INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes)
-         SELECT $1::bigint,'Jadwal scroll ' || g || ' ' || $2,clock_timestamp() + g * interval '1 hour','WIB',60
+         SELECT $1::bigint,'Jadwal scroll ' || g || ' ' || $2,
+           (date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Jakarta') + interval '23 hours') AT TIME ZONE 'Asia/Jakarta','WIB',1
          FROM generate_series(1,23) g RETURNING id::text AS id`, [f.periodA, f.suffix],
       );
       await seedPublishedSchedules(client, added.rows.map((row) => row.id), f.studentA, f.placementA);
       await loginParticipant(page, f.username, f.passwordA);
-      await expect(page.getByText("26 jadwal untukmu dalam periode ini")).toBeVisible();
+      await expect(page.getByText("24 jadwal hari ini atau berlanjut dari kemarin")).toBeVisible();
       const refreshedName = `Jadwal terbarui ${f.suffix}`;
       await client.query("UPDATE exam_tests SET name=$1 WHERE id=$2", [refreshedName, f.activeTest]);
       const firstScroll = await positionRefresh(page); const firstUrl = page.url();
@@ -90,7 +98,7 @@ for (const size of [{ name: "desktop", width: 1440, height: 650 }, { name: "pons
       await page.getByRole("link", { name: "Berikutnya" }).click();
       await expect(page.getByText("Halaman 2 dari 2")).toBeVisible();
       const secondName = `Jadwal halaman dua ${f.suffix}`;
-      await client.query("UPDATE exam_tests SET name=$1 WHERE id=$2", [secondName, added.rows[22].id]);
+      await client.query("UPDATE exam_tests SET name=$1 WHERE id=$2", [secondName, added.rows[0].id]);
       const secondScroll = await positionRefresh(page); const secondUrl = page.url();
       await page.getByRole("link", { name: "Muat ulang", exact: true }).click();
       await expect(page.getByText(secondName, { exact: true })).toBeVisible();
@@ -106,7 +114,7 @@ for (const size of [{ name: "desktop", width: 1440, height: 650 }, { name: "pons
           const noJs = await fallback.newPage(); await noJs.goto("/peserta?halaman=2");
           await expect(noJs.getByRole("link", { name: "Muat ulang", exact: true })).toHaveAttribute("href", "/peserta?halaman=2");
           const fallbackName = `Jadwal fallback ${f.suffix}`;
-          await client.query("UPDATE exam_tests SET name=$1 WHERE id=$2", [fallbackName, added.rows[22].id]);
+          await client.query("UPDATE exam_tests SET name=$1 WHERE id=$2", [fallbackName, added.rows[0].id]);
           await noJs.getByRole("link", { name: "Muat ulang", exact: true }).click();
           await expect(noJs.getByText(fallbackName, { exact: true })).toBeVisible();
         } finally { await fallback.close(); }

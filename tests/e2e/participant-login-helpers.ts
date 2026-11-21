@@ -94,7 +94,7 @@ export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture>
         ($1,$3,clock_timestamp()-interval '5 minutes','WIB',90),
         ($1,$4,clock_timestamp()+interval '1 day','WITA',60),
         ($1,$5,clock_timestamp()-interval '1 day','WIT',60),
-        ($2,$6,clock_timestamp()+interval '1 day','WIB',60) RETURNING id::text AS id,name`,
+        ($2,$6,(date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Jakarta') + interval '12 hours') AT TIME ZONE 'Asia/Jakarta','WIB',60) RETURNING id::text AS id,name`,
       [periodA, periodB, activeName, futureName, pastName, hiddenName],
     )).rows;
     const activeTest = exams.find((e) => e.name === activeName)!.id;

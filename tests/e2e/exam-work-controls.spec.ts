@@ -16,12 +16,25 @@ test("token OTP, identitas dan timer sticky, ragu, progres serta tepi navigasi 2
     const tokenDialog = page.getByRole("dialog", { name: "Masukkan token ujian" });
     await expect(tokenDialog).toBeVisible(); await expect(tokenDialog.getByTestId("token-slots").locator("span")).toHaveCount(6);
     const token = tokenDialog.getByLabel("Token tes"); await token.fill("009"); await token.press("Backspace"); await expect(token).toHaveValue("00");
+    await token.press("a"); await expect(tokenDialog.getByRole("alert")).toContainText("angka");
+    await expect(token).toHaveValue("00"); await expect(tokenDialog.getByTestId("token-caret")).toBeVisible();
+    expect(await tokenDialog.getByTestId("token-caret").evaluate((node) => getComputedStyle(node).animationName)).toBe("token-caret-blink");
+    await tokenDialog.getByRole("button", { name: "Mulai pengerjaan" }).click();
+    await expect(tokenDialog.getByRole("alert")).toContainText("tepat enam angka");
+    expect((await client.query("SELECT 1 FROM exam_attempts WHERE run_id=$1", [f.runId])).rowCount).toBe(0);
     await token.evaluate((node: HTMLInputElement) => {
       const data = new DataTransfer(); data.setData("text/plain", "00 12 34");
       node.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data }));
     });
+    await expect(tokenDialog.getByRole("alert")).toContainText("angka"); await expect(token).toHaveValue("00");
+    await token.evaluate((node: HTMLInputElement) => {
+      const data = new DataTransfer(); data.setData("text/plain", "001234");
+      node.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data }));
+    });
     await expect(token).toHaveValue("001234");
     await expect(tokenDialog.getByTestId("token-slots").locator("span")).toHaveText(["0", "0", "1", "2", "3", "4"]);
+    await token.focus(); await token.press("x"); await expect(tokenDialog.getByRole("alert")).toContainText("angka"); await expect(token).toHaveValue("001234");
+    await token.press("ArrowLeft"); await expect(tokenDialog.getByTestId("token-caret")).toBeVisible();
     await tokenDialog.getByRole("button", { name: "Mulai pengerjaan" }).click();
     await expect(page).toHaveURL(/\/peserta\/pengerjaan\/[1-9]\d*/);
     const attempt = page.url().match(/\/pengerjaan\/([1-9]\d*)/)![1];
@@ -29,7 +42,7 @@ test("token OTP, identitas dan timer sticky, ragu, progres serta tepi navigasi 2
     const header = page.getByTestId("exam-sticky-header");
     await expect(header).toContainText(f.login.studentAName); await expect(header).toContainText(nisn);
     await expect(header).toContainText(`X ${f.login.majorName}`); await expect(header).toContainText(f.login.periodAName);
-    await expect(header.getByLabel(/Perkiraan sisa waktu/)).toBeVisible();
+    await expect(header.getByLabel(/Waktu tersisa/)).toBeVisible(); await expect(header).not.toContainText("Perkiraan sisa");
     expect(await header.evaluate((node) => getComputedStyle(node).position)).toBe("sticky");
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await expect.poll(async () => Math.round((await header.boundingBox())?.y ?? -1)).toBe(0);
@@ -174,8 +187,11 @@ test("form token memiliki fallback tanpa JavaScript", async ({ page, browser }) 
   try {
     await seedAttemptToken(client, f, "global", "001122"); await loginParticipant(page, f.login.username, f.login.passwordA);
     await noJs.addCookies(await page.context().cookies()); const fallback: Page = await noJs.newPage();
-    const response = await fallback.goto(`/peserta/jadwal/${f.runId}`);
-    expect(response?.headers()["cache-control"]).toContain("no-store"); expect(response?.headers()["referrer-policy"]).toBe("same-origin");
+    await fallback.goto("/peserta");
+    await fallback.getByRole("link", { name: "Mulai tes tanpa JavaScript" }).click();
+    await expect(fallback).toHaveURL(new RegExp(`/peserta/jadwal/${f.runId}$`));
+    const response = await fallback.request.get(`/peserta/jadwal/${f.runId}`);
+    expect(response.headers()["cache-control"]).toContain("no-store"); expect(response.headers()["referrer-policy"]).toBe("same-origin");
     await fallback.getByLabel("Token tes").fill("001122");
     await fallback.getByRole("button", { name: "Mulai pengerjaan" }).click();
     await expect(fallback).toHaveURL(/\/peserta\/pengerjaan\/[1-9]\d*/);
