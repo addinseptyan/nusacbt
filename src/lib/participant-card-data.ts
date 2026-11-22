@@ -12,6 +12,7 @@ import type { PasswordRow } from "@/lib/participant-password-types";
 import { getPostgresPool } from "@/lib/postgres";
 
 export class CardPageSessionExpired extends Error {}
+export class CardPeriodChanged extends Error {}
 
 type CardDatabaseRow = Omit<PasswordRow, "identityId" | "participantNumber" | "username" | "identityVersion" | "placementId" | "classId" | "classLabel"> & {
   identityId: string | null;
@@ -35,8 +36,10 @@ async function readPage(client: PoolClient, filters: CardFilters, requestedPage:
      LEFT JOIN exam_periods period ON period.id=setting.period_id WHERE setting.id=1`,
   )).rows[0];
   if (!login) throw new Error("Pengaturan login peserta tidak tersedia.");
-  const selected = periods.find((period) => period.id === filters.periodId) ?? null;
-  const empty = { filters, periods, selected, loginPeriodId: login.id, loginPeriodName: login.name,
+  if (filters.periodId && filters.periodId !== login.id) throw new CardPeriodChanged();
+  const effectiveFilters = { ...filters, periodId: login.id };
+  const selected = periods.find((period) => period.id === login.id) ?? null;
+  const empty = { filters: effectiveFilters, periods, selected, loginPeriodId: login.id, loginPeriodName: login.name,
     classes: [], tests: [], rows: [], total: 0, page: 1, pages: 1 };
   if (!selected) return empty;
 
@@ -45,17 +48,12 @@ async function readPage(client: PoolClient, filters: CardFilters, requestedPage:
      FROM student_class_placements p JOIN school_classes c ON c.id=p.class_id JOIN school_majors m ON m.id=c.major_id
      WHERE p.period_id=$1::bigint AND p.ended_at IS NULL ORDER BY label,id`, [selected.id],
   )).rows;
-  const tests = (await client.query<{ id: string; name: string }>(
-    `SELECT t.id::text AS id,t.name FROM exam_tests t
-     WHERE t.period_id=$1::bigint AND EXISTS (SELECT 1 FROM exam_schedule_runs r WHERE r.exam_test_id=t.id AND r.published_at IS NOT NULL)
-     ORDER BY lower(t.name),t.id`, [selected.id],
-  )).rows;
   const base = `FROM student_class_placements p JOIN school_students s ON s.id=p.student_id
     LEFT JOIN participant_identities i ON i.student_id=s.id AND i.period_id=p.period_id
     LEFT JOIN participant_passwords pw ON pw.participant_identity_id=i.id
     JOIN school_classes c ON c.id=p.class_id JOIN school_majors m ON m.id=c.major_id
     WHERE ${cardFilterCondition}`;
-  const values = cardFilterValues(filters);
+  const values = cardFilterValues(effectiveFilters);
   const total = (await client.query<{ total: number }>(`SELECT count(*)::int AS total ${base}`, values)).rows[0].total;
   const pages = Math.max(1, Math.ceil(total / PARTICIPANT_CARD_BATCH_SIZE));
   const page = Math.min(Math.max(1, requestedPage), pages);
@@ -69,7 +67,7 @@ async function readPage(client: PoolClient, filters: CardFilters, requestedPage:
       to_char(i.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "identityVersion",
       to_char(pw.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "passwordVersion",
       pw.xmin::text AS "passwordRevision"
-     ${base} ORDER BY lower(s.name),s.nisn,s.id LIMIT $6::integer OFFSET $7::integer`,
+     ${base} ORDER BY lower(s.name),s.nisn,s.id LIMIT $4::integer OFFSET $5::integer`,
     [...values, PARTICIPANT_CARD_BATCH_SIZE, (page - 1) * PARTICIPANT_CARD_BATCH_SIZE],
   )).rows;
   const rows: CardListRow[] = records.map((record) => {
@@ -80,7 +78,7 @@ async function readPage(client: PoolClient, filters: CardFilters, requestedPage:
     return { studentId, studentName, nisn, classId, classLabel, participantNumber, username,
       hasPassword: record.passwordVersion !== null, candidate };
   });
-  return { filters, periods, selected, loginPeriodId: login.id, loginPeriodName: login.name, classes, tests, rows, total, page, pages };
+  return { filters: effectiveFilters, periods, selected, loginPeriodId: login.id, loginPeriodName: login.name, classes, tests: [], rows, total, page, pages };
 }
 
 /** Sesi dan seluruh opsi/daftar diperiksa dalam satu snapshot. */

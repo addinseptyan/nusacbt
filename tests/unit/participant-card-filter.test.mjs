@@ -5,24 +5,19 @@ import { cardRequestIsSameOrigin } from '../../src/lib/participant-card-origin.m
 
 function parse(query) { return parseCardFilters(new URLSearchParams(query)); }
 
-test('filter kosong, periode, dan kombinasi kelas/tes/kategori mempertahankan nilai', () => {
+test('filter kartu hanya kelas dan siswa, periode internal tidak muncul pada tautan halaman', () => {
   const empty = parse(''); assert.equal(empty.ok, true); assert.equal(empty.filters.periodId, null); assert.equal(empty.page, 1);
-  for (const category of ['', 'regular', 'makeup', 'remedial']) {
-    const params = new URLSearchParams({ periode: '12', kelas: '34', tes: '56', kategori: category, siswa: " O'HARA_%\\ ", halaman: '2' });
-    const result = parseCardFilters(params); assert.equal(result.ok, true);
-    assert.equal(result.filters.student, "O'HARA_%\\"); assert.equal(result.page, 2);
-    assert.deepEqual(parseCardFilters(cardSearchParams(result.filters, result.page)), result);
-  }
+  const result = parse('periode=12&kelas=34&siswa=%20Roni%20&halaman=2');
+  assert.equal(result.ok,true); assert.equal(result.filters.student,'Roni'); assert.equal(result.page,2);
+  assert.equal(cardSearchParams(result.filters,result.page).has('periode'),false);
+  assert.deepEqual(parseCardFilters(cardSearchParams(result.filters,result.page,true)),result);
+  assert.equal(parse('kelas=34&siswa=Roni').ok,true);
 });
 
-test('duplikasi, ID, halaman, kategori, kontrol dan filter tanpa periode ditolak', () => {
-  for (const query of [
-    'periode=1&periode=2', 'periode=0', 'periode=01', 'periode=9223372036854775808',
-    'periode=1&kelas=-1', 'periode=1&tes=0', 'periode=1&kategori=__proto__', 'periode=1&kategori=Regular',
-    'periode=1&halaman=0', 'periode=1&halaman=1000000', 'periode=1&siswa=%00',
-    `periode=1&siswa=${'x'.repeat(101)}`, 'kelas=1', 'tes=1', 'kategori=regular', 'siswa=ana', 'halaman=2',
-  ]) assert.equal(parse(query).ok, false, query);
-  assert.equal(parse('periode=9223372036854775807&halaman=999999').ok, true);
+test('duplikasi, ID, filter tes/kategori lama, kontrol dan halaman salah ditolak', () => {
+  for (const query of ['periode=1&periode=2','periode=0','periode=01','periode=9223372036854775808',
+    'kelas=-1','tes=1','kategori=regular','halaman=0','halaman=1000000','siswa=%00',`siswa=${'x'.repeat(101)}`]) assert.equal(parse(query).ok,false,query);
+  assert.equal(parse('periode=9223372036854775807&halaman=999999').ok,true);
 });
 
 test('endpoint hanya menerima JSON dan header khusus dari origin yang sama', () => {

@@ -9,6 +9,8 @@ import { loginAsAdmin } from "./helpers";
 type Student = { id: string; name: string; nisn: string };
 type Fixture = {
   suffix: string;
+  yearName: string;
+  yearId: string;
   major: string;
   majorId: string;
   classX: string;
@@ -27,6 +29,7 @@ function testDatabase() {
 
 async function seedSchool(client: pg.Client, count: number): Promise<Fixture> {
   const suffix = randomBytes(5).toString("hex");
+  const yearName = `Tahun Identitas ${suffix}`;
   const major = `ID${suffix}`;
   const periodA = `Periode Identitas A ${suffix}`;
   const periodB = `Periode Identitas B ${suffix}`;
@@ -35,13 +38,14 @@ async function seedSchool(client: pg.Client, count: number): Promise<Fixture> {
   const nisns = Array.from({ length: count }, (_, index) => `0${String(base + index).padStart(9, "0")}`);
   try {
     await client.query("BEGIN");
+    const yearId = (await client.query<{ id: string }>("INSERT INTO academic_years(name) VALUES($1) RETURNING id::text AS id", [yearName])).rows[0].id;
     const majorId = (await client.query<{ id: string }>("INSERT INTO school_majors(name) VALUES($1) RETURNING id::text AS id", [major])).rows[0].id;
     const classes = await client.query<{ id: string; level: string }>(
       "INSERT INTO school_classes(level,major_id) VALUES ('X',$1),('XI',$1) RETURNING id::text AS id,level", [majorId],
     );
     const periods = await client.query<{ id: string; name: string }>(
-      "INSERT INTO exam_periods(name,start_date) VALUES ($1,DATE '2026-07-01'),($2,DATE '2027-02-01') RETURNING id::text AS id,name",
-      [periodA, periodB],
+      "INSERT INTO exam_periods(name,start_date,academic_year_id) VALUES ($1,DATE '2026-07-01',$3),($2,DATE '2027-02-01',$3) RETURNING id::text AS id,name",
+      [periodA, periodB, yearId],
     );
     const students = await client.query<Student>(
       `INSERT INTO school_students(name,nisn)
@@ -58,7 +62,7 @@ async function seedSchool(client: pg.Client, count: number): Promise<Fixture> {
       [students.rows.map((student) => student.id), periodAId, classX, `X ${major}`],
     );
     await client.query("COMMIT");
-    return { suffix, major, majorId, classX, classXI, periodA, periodB, periodAId, periodBId, students: students.rows };
+    return { suffix, yearName, yearId, major, majorId, classX, classXI, periodA, periodB, periodAId, periodBId, students: students.rows };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;
@@ -69,10 +73,12 @@ async function cleanup(client: pg.Client, fixture: Fixture) {
   const periods = [fixture.periodAId, fixture.periodBId];
   await client.query("DELETE FROM participant_identities WHERE period_id = ANY($1::bigint[])", [periods]);
   await client.query("DELETE FROM student_class_placements WHERE period_id = ANY($1::bigint[])", [periods]);
+  await client.query("DELETE FROM academic_year_enrollments WHERE academic_year_id = $1::bigint", [fixture.yearId]);
   await client.query("DELETE FROM school_students WHERE id = ANY($1::bigint[])", [fixture.students.map((student) => student.id)]);
   await client.query("DELETE FROM school_classes WHERE major_id = $1::bigint", [fixture.majorId]);
   await client.query("DELETE FROM school_majors WHERE id = $1::bigint", [fixture.majorId]);
   await client.query("DELETE FROM exam_periods WHERE id = ANY($1::bigint[])", [periods]);
+  await client.query("DELETE FROM academic_years WHERE id = $1::bigint", [fixture.yearId]);
 }
 
 async function placeInPeriodB(client: pg.Client, fixture: Fixture, students: Student[]) {
@@ -585,6 +591,11 @@ test("impor Excel dengan Nomor sebagai urutan tidak mengubah atau membuat identi
   const fixture = await seedSchool(client, 2);
   try {
     const [first, second] = fixture.students;
+    await client.query(
+      `INSERT INTO academic_year_enrollments(academic_year_id,student_id,class_id,class_name_snapshot,status)
+       SELECT $1::bigint,id::bigint,$2::bigint,$3,'active' FROM unnest($4::text[]) AS item(id)`,
+      [fixture.yearId, fixture.classX, `X ${fixture.major}`, [first.id, second.id]],
+    );
     await seedIdentity(client, first.id, fixture.periodAId, "MANUAL-01", "manual-user");
     const before = await identitySnapshot(client, fixture.periodAId);
     const workbook = makeImportWorkbook({ rows: [
@@ -593,8 +604,8 @@ test("impor Excel dengan Nomor sebagai urutan tidak mengubah atau membuat identi
     ] });
     await loginAsAdmin(page);
     await page.goto("/data-peserta/import");
-    await page.getByRole("combobox", { name: "Periode" }).click();
-    await page.getByRole("option", { name: fixture.periodA }).click();
+    await page.getByRole("combobox", { name: "Tahun ajaran" }).click();
+    await page.getByRole("option", { name: fixture.yearName }).click();
     await page.getByLabel("File Excel").setInputFiles({ name: "siswa-fiktif.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: workbook });
     await page.getByRole("button", { name: "Periksa pratinjau" }).click();
     await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText("Sudah sesuai");

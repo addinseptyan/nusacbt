@@ -6,7 +6,6 @@ import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
-import { lockSchedulePeriod } from "@/lib/exam-session-service";
 import { PARTICIPANT_CARD_BATCH_SIZE } from "@/lib/participant-card-constants.mjs";
 import type { CardFilters } from "@/lib/participant-card-filter.mjs";
 import { cardFilterCondition, cardFilterValues } from "@/lib/participant-card-sql";
@@ -395,22 +394,24 @@ export async function prepareParticipantCards(formData: FormData, filters: CardF
       await client.query("BEGIN");
       const admin = await requireActiveSession(client);
       if (key) await lockKeyBinding(client, key, false);
-      // Penarikan/penyuntingan rilis di aplikasi menggunakan pagar periode
-      // ini sebelum mengunci siswa. Tidak mengunci tes setelah siswa agar
-      // urutan tetap kompatibel dengan mulai tes dan mutasi jadwal.
-      if ((filters.testId || filters.kind) && !await lockSchedulePeriod(client, periodId)) {
-        throw new PasswordProblem("Periode sudah dihapus. Muat ulang halaman.");
+      // Lock pengaturan yang sama dengan pergantian tahun/periode dan login.
+      // Kartu dari tab lama tidak boleh disiapkan atau dicetak setelah periode berubah.
+      const login = await client.query<{ periodId: string | null }>(
+        'SELECT period_id::text AS "periodId" FROM participant_login_settings WHERE id=1 FOR SHARE',
+      );
+      if (login.rowCount !== 1 || login.rows[0].periodId !== periodId) {
+        throw new PasswordProblem("Periode login berubah atau dinonaktifkan. Muat ulang dan pilih peserta kembali.");
       }
       const rows = await lockedRows(client, periodId, candidates);
       const eligible = await client.query<{ studentId: string }>(
         `SELECT s.id::text AS "studentId" FROM student_class_placements p
          JOIN school_students s ON s.id=p.student_id
          JOIN participant_identities i ON i.student_id=s.id AND i.period_id=p.period_id
-         WHERE ${cardFilterCondition} AND s.id=ANY($6::bigint[])`,
+         WHERE ${cardFilterCondition} AND s.id=ANY($4::bigint[])`,
         [...cardFilterValues(filters), candidates.map((candidate) => candidate.studentId)],
       );
       if (eligible.rowCount !== candidates.length) {
-        throw new PasswordProblem("Peserta tidak lagi cocok dengan kelas, pencarian, tes, atau pelaksanaan dirilis yang dipilih. Muat ulang dan pilih kembali.");
+        throw new PasswordProblem("Peserta tidak lagi cocok dengan kelas atau pencarian yang dipilih. Muat ulang dan pilih kembali.");
       }
       if (includePassword && rows.some(({ password }) => !password)) {
         throw new PasswordProblem("Ada peserta terpilih yang belum memiliki sandi. Buat sandi terlebih dahulu atau siapkan kartu tanpa sandi; tidak ada sandi yang ditampilkan.");

@@ -24,6 +24,16 @@ test('XLSX memuat teks literal, NISN dan nilai numerik tanpa formula atau tautan
   }
   assert.equal(Object.keys(files).some((name) => /vba|externalLinks/i.test(name)), false);
 });
+test('tata letak matriks menyediakan judul, metadata terbaca dan pita nama tes', () => {
+  const sheet = { name: 'Rekap', columns: ['No', 'Nama', 'NISN', 'Grup', 'Rata-rata', 'Matematika', 'Bahasa'].map((title) => ({title,width: 18})),
+    preamble: [['REKAPITULASI HASIL TES'], ['Grup', 'X AK'], ['Jumlah tes', 2]], matrixLayout: {firstTestColumn: 5, groupTitle: 'DAFTAR NAMA TES'},
+    rows: [[1, 'Nama', '0123456789', 'X AK', {score: 75}, {score: 80}, {text: 'Periksa', style: 'conflict'}]] };
+  const files = unzipSync(createReportWorkbook([sheet])), xml = strFromU8(files['xl/worksheets/sheet1.xml']);
+  assert.match(xml, /mergeCell ref="A1:E1"/); assert.match(xml, /mergeCell ref="A2:B2"/); assert.match(xml, /r="C2"[^>]*><is><t[^>]*>X AK/);
+  assert.match(xml, /r="F4"[^>]*><is><t[^>]*>DAFTAR NAMA TES/); assert.match(xml, /mergeCell ref="F4:G4"/);
+  assert.match(xml, /row r="5" ht="42"/); assert.match(xml, /autoFilter ref="A5:G6"/);
+  assert.throws(() => createReportWorkbook([{ ...sheet, matrixLayout:{firstTestColumn:7, groupTitle:'Tes'} }]));
+});
 test('Excel menolak lembar atau ukuran sel yang tidak sah', () => {
   assert.throws(() => createReportWorkbook([]));
   assert.throws(() => createReportWorkbook([{ ...sample()[0], name: 'bad/name' }]));

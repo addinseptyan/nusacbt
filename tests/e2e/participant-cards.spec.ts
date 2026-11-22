@@ -113,39 +113,38 @@ async function prepareWithoutPassword(page: Page) {
 }
 
 // Semua data dan kunci dalam pengujian ini adalah fixture khusus, bukan data sekolah.
-test("filter kelas, tes, kategori dan periode hanya memilih pelaksanaan dirilis yang sama tanpa duplikat", async ({ page }) => {
+test("hanya kelas dan pencarian; kartu selalu memakai periode login aktif", async ({ page }) => {
   const client = loginTestDatabase(); await client.connect(); const f = await seed(client);
   try {
     await loginAsAdmin(page);
-    await openCards(page, f);
+    await page.goto("/data-peserta/kartu");
     const list = page.getByRole("list", { name: "Daftar peserta untuk kartu" });
+    await expect(page.getByText(f.login.periodAName).first()).toBeVisible();
     await expect(list.getByRole("listitem")).toHaveCount(4);
     await expect(choose(page, f.dName)).toBeDisabled();
     await expect(choose(page, f.cName)).toBeEnabled();
     await expect(list).toContainText("Belum bersandi"); await expect(list).toContainText("Belum beridentitas");
-    await expect(page.getByLabel("Tes dirilis")).not.toContainText(f.login.hiddenName);
-
-    await openCards(page, f, { tes: f.login.activeTest });
-    await expect(list.getByRole("listitem")).toHaveCount(2); // A ada di tiga pelaksanaan tetapi hanya sekali.
-    await expect(list).toContainText(f.login.studentAName); await expect(list).toContainText(f.login.studentBName);
-    await expect(list).not.toContainText(f.cName); // draf tidak dihitung.
-    await openCards(page, f, { tes: f.login.activeTest, kategori: "regular" });
-    await expect(list.getByRole("listitem")).toHaveCount(2);
-    await openCards(page, f, { tes: f.login.activeTest, kategori: "makeup" });
-    await expect(list.getByRole("listitem")).toHaveCount(1); await expect(list).toContainText(f.login.studentAName);
-    await openCards(page, f, { tes: f.login.activeTest, kategori: "remedial" });
-    await expect(list.getByRole("listitem")).toHaveCount(1); await expect(list).not.toContainText(f.login.studentBName);
-    await openCards(page, f, { kategori: "remedial" });
-    await expect(list.getByRole("listitem")).toHaveCount(2); // B ikut remidi tes lain.
+    await expect(page.getByLabel("Tes dirilis")).toHaveCount(0);
+    await expect(page.getByLabel("Kategori pelaksanaan")).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "Periode", exact: true })).toHaveCount(0);
     await openCards(page, f, { kelas: f.otherClassId });
     await expect(list.getByRole("listitem")).toHaveCount(1); await expect(list).toContainText(f.dName);
     await openCards(page, f, { siswa: f.login.studentBName });
     await expect(list.getByRole("listitem")).toHaveCount(1); await expect(list).toContainText(f.login.studentBName);
-    await page.goto(`/data-peserta/kartu?periode=${f.login.periodB}`);
+    await openCards(page, f, { siswa: `card-b-${f.login.suffix}` });
     await expect(list.getByRole("listitem")).toHaveCount(1); await expect(list).toContainText(f.login.studentBName);
-    await expect(page.getByText("Periode login peserta berbeda")).toBeVisible();
-    await page.goto(`/data-peserta/kartu?periode=${f.login.periodA}&tes=${f.login.activeTest}&tes=${f.login.activeTest}`);
+    await page.goto(`/data-peserta/kartu?tes=${f.login.activeTest}&kategori=regular`);
     await expect(page.getByText("Filter tidak valid")).toBeVisible();
+    await client.query("UPDATE participant_login_settings SET period_id=$1 WHERE id=1", [f.login.periodB]);
+    await page.goto("/data-peserta/kartu");
+    await expect(page.getByText(f.login.periodBName).first()).toBeVisible();
+    await expect(list.getByRole("listitem")).toHaveCount(1); await expect(list).toContainText(f.login.studentBName);
+    await page.goto(`/data-peserta/kartu?periode=${f.login.periodA}`);
+    await expect(page.getByText("Periode login berubah")).toBeVisible();
+    await client.query("UPDATE participant_login_settings SET period_id=NULL WHERE id=1");
+    await page.goto("/data-peserta/kartu");
+    await expect(page.getByText("Belum ada periode login aktif")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pratinjau kartu" })).toHaveCount(0);
     expect(await auditCount(client, f)).toBe(0);
   } finally { await cleanup(client, f); await client.end(); }
 });
@@ -273,25 +272,21 @@ test("kegagalan audit satu peserta membatalkan batch sandi secara keseluruhan", 
   }
 });
 
-test("alur memilih periode dan mencetak per kelas tetap dapat digunakan pada layar ponsel", async ({ page }) => {
+test("kartu periode login aktif dan filter kelas tetap dapat digunakan pada layar ponsel", async ({ page }) => {
   const client = loginTestDatabase(); await client.connect(); const f = await seed(client);
   try {
     await page.setViewportSize({ width: 375, height: 812 }); await loginAsAdmin(page);
     await page.goto("/data-peserta/kartu");
-    await page.getByRole("combobox", { name: "Periode", exact: true }).selectOption(f.login.periodA);
+    await expect(page.getByText(f.login.periodAName).first()).toBeVisible();
+    await page.getByLabel("Kelas / rombel").selectOption(f.login.classId);
     await expect(page.getByText("Filter berubah; terapkan")).toBeVisible();
+    await expect(choose(page, f.login.studentAName)).toBeDisabled();
     await page.getByRole("button", { name: "Terapkan" }).click();
-    await expect(page).toHaveURL(new RegExp(`periode=${f.login.periodA}`));
-    await page.getByLabel("Kelas aktif").selectOption(f.login.classId);
-    await page.getByLabel("Tes dirilis").selectOption(f.login.activeTest);
-    await page.getByLabel("Kategori pelaksanaan").selectOption("regular");
-    await expect(page.getByRole("checkbox", { name: new RegExp(`^Pilih ${f.login.studentAName} NISN`) })).toBeDisabled();
-    await page.getByRole("button", { name: "Terapkan" }).click();
-    await expect(page.getByRole("list", { name: "Daftar peserta untuk kartu" }).getByRole("listitem")).toHaveCount(2);
+    await expect(page.getByRole("list", { name: "Daftar peserta untuk kartu" }).getByRole("listitem")).toHaveCount(3);
     await page.getByRole("checkbox", { name: "Pilih semua yang beridentitas pada halaman ini" }).check();
     await prepareWithoutPassword(page);
     const dialog = page.getByRole("dialog", { name: /Pratinjau/ });
-    await expect(dialog.getByTestId("participant-card")).toHaveCount(2);
+    await expect(dialog.getByTestId("participant-card")).toHaveCount(3);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect(dialog.getByRole("button", { name: "Cetak / Simpan PDF" })).toBeVisible();
   } finally { await cleanup(client, f); await client.end(); }

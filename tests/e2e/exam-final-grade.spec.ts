@@ -150,6 +150,7 @@ test("nilai lintas kategori, ulang, izin lama, visibilitas, perubahan metode dan
     const staleAdmin = await adminContext.newPage(); await staleAdmin.goto(`/data-tes/monitoring?tes=${f.login.activeTest}`);
     await attemptRow(staleAdmin, f, "Remidi nilai akhir", 1).getByRole("button", { name: /Berikan izin ulang/ }).click();
     const staleGrant = staleAdmin.getByRole("dialog", { name: "Berikan izin mengulang?" });
+    await admin.bringToFront();
     const capture = admin.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/data-tes/monitoring");
     await finalRow(admin, f).getByRole("button", { name: /Tetapkan nilai akhir/ }).click();
     const confirm = admin.getByRole("dialog", { name: "Tetapkan nilai akhir?" }); await expect(confirm).toContainText("2 saat daftar dimuat");
@@ -184,27 +185,32 @@ test("nilai lintas kategori, ulang, izin lama, visibilitas, perubahan metode dan
     for (const secret of ["correctCount", "questionCount", "correct_count", "correct_option"]) expect(body).not.toContain(secret);
     await plain.goto("/peserta/nilai"); expect(await plain.content()).not.toContain("50,00"); await expect(plain.getByText(/^Nilai akhir · (Rata-rata|Tertinggi)$/)).toHaveCount(0);
     await plainContext.close(); await setVisibility(admin, "Susulan", true);
-    await admin.goto(`/data-tes/monitoring?tes=${f.login.activeTest}`);
+    await admin.bringToFront(); await admin.goto(`/data-tes/monitoring?tes=${f.login.activeTest}`);
     // Dialog buka kembali yang dibuka sebelum perubahan metode harus ditolak.
     const staleReopenPage = await adminContext.newPage(); await staleReopenPage.goto(`/data-tes/monitoring?tes=${f.login.activeTest}`);
     await finalRow(staleReopenPage, f).getByRole("button", { name: /Buka kembali/ }).click();
     const staleReopen = staleReopenPage.getByRole("dialog", { name: "Buka kembali nilai akhir?" });
-    await changeMethod(admin, f); await expect(finalRow(admin, f)).toContainText("100,00");
+    await admin.bringToFront(); await changeMethod(admin, f); await expect(finalRow(admin, f)).toContainText("100,00");
+    await staleReopenPage.bringToFront();
     await staleReopen.getByRole("button", { name: "Ya, buka kembali" }).click(); await expect(staleReopen.getByRole("alert")).toContainText("Metode tes sudah berubah");
-    await page.goto("/peserta"); await page.getByRole("button", { name: "Nilai dibagikan" }).click();
+    await staleReopenPage.close();
+    await page.bringToFront(); await page.goto("/peserta"); await page.getByRole("button", { name: "Nilai dibagikan" }).click();
     scores = page.getByRole("dialog", { name: "Nilai yang dibagikan" }); await expect(scores.getByRole("listitem").filter({ hasText: "Nilai akhir · Tertinggi" }).getByTestId("score-value")).toHaveText("100,00");
     await scores.getByRole("button", { name: "Tutup" }).click();
-    await reopen(admin, f); await expect(finalRow(admin, f)).toContainText("Sementara");
+    await admin.bringToFront(); await reopen(admin, f); await expect(finalRow(admin, f)).toContainText("Sementara");
     await replay(finalRequest, admin); // Operasi yang sudah diterapkan tidak menetapkan ulang setelah dibuka.
     expect((await client.query<{ final: boolean; rev: string }>("SELECT finalized_at IS NOT NULL AS final,revision::text AS rev FROM exam_final_grade_state WHERE exam_test_id=$1", [f.login.activeTest])).rows[0]).toEqual({ final: false, rev: "2" });
+    await staleAdmin.bringToFront();
     await staleGrant.getByRole("button", { name: "Ya, berikan izin" }).click(); await expect(staleGrant.getByRole("alert")).toContainText("Status nilai akhir sudah berubah");
+    await staleAdmin.close();
+    await staleStart.bringToFront();
     await staleStart.getByRole("button", { name: "Mulai pengerjaan" }).click(); await expect(staleStart.getByRole("alert")).toContainText("Status kesempatan tes sudah berubah");
     expect((await client.query("SELECT id FROM exam_attempts WHERE run_id=$1", [unused])).rowCount).toBe(0);
-    await page.goto("/peserta"); await page.getByRole("button", { name: "Nilai dibagikan" }).click();
+    await page.bringToFront(); await page.goto("/peserta"); await page.getByRole("button", { name: "Nilai dibagikan" }).click();
     scores = page.getByRole("dialog", { name: "Nilai yang dibagikan" }); await expect(scores).not.toContainText("Nilai akhir ·"); await expect(scores).toContainText("Pengerjaan ke-2");
     expect((await client.query("SELECT id,run_id,kind,correct_count,question_count,completed_at FROM exam_attempts WHERE exam_test_id=$1 ORDER BY id", [f.login.activeTest])).rows).toEqual(historyBefore);
-    await startWithToken(staleStart, unused, "987654");
-    await admin.reload(); await grant(admin, f, "Remidi nilai akhir", 1);
+    await staleStart.bringToFront(); await startWithToken(staleStart, unused, "987654");
+    await admin.bringToFront(); await admin.reload(); await grant(admin, f, "Remidi nilai akhir", 1);
     expect((await client.query<{ n: number }>("SELECT count(*)::int AS n FROM exam_retake_permissions WHERE run_id=$1 AND revoked_at IS NULL AND consumed_at IS NULL", [remedial])).rows[0].n).toBe(1);
   } finally {
     await client.query("UPDATE exam_score_category_visibility SET visible_to_participants=true,revision=revision+1 WHERE NOT visible_to_participants");
@@ -276,9 +282,11 @@ test("penetapan menang atas mulai pertama, izin baru dan penetapan ganda", async
     await grantDialog.getByRole("button", { name: "Ya, berikan izin" }).click(); await waitForBlocked(client, "nusacbt:final-grade:", 3);
     await page.getByRole("button", { name: "Mulai pengerjaan" }).click(); await waitForBlocked(client, "nusacbt:final-grade:", 4);
     await blocker.query("COMMIT");
-    await expect(dialog).toBeHidden(); await expect(duplicateDialog.getByRole("alert")).toContainText("Status nilai akhir sudah berubah");
-    await expect(grantDialog.getByRole("alert")).toContainText("Nilai akhir sudah ditetapkan");
-    await expect(page.getByRole("alert")).toContainText("Nilai akhir tes ini sudah ditetapkan");
+    await admin.bringToFront();
+    await expect(dialog).toBeHidden();
+    await duplicate.bringToFront(); await expect(duplicateDialog.getByRole("alert")).toContainText("Status nilai akhir sudah berubah");
+    await grantPage.bringToFront(); await expect(grantDialog.getByRole("alert")).toContainText("Nilai akhir sudah ditetapkan");
+    await page.bringToFront(); await expect(page.getByRole("alert")).toContainText("Nilai akhir tes ini sudah ditetapkan");
     expect((await client.query("SELECT id FROM exam_attempts WHERE run_id=$1", [nextRun])).rowCount).toBe(0);
     expect((await client.query("SELECT id FROM exam_retake_permissions WHERE run_id=$1 AND revoked_at IS NULL AND consumed_at IS NULL", [f.runId])).rowCount).toBe(0);
     expect((await client.query<{ count: number }>("SELECT count(*)::int AS count FROM exam_final_grade_operations WHERE exam_test_id=$1 AND action='finalize' AND result='applied'", [f.login.activeTest])).rows[0].count).toBe(1);

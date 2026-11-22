@@ -56,7 +56,7 @@ export function RetakeControl(props: Props) {
   }
   return <>
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogTrigger asChild><Button type="button" variant="outline" size="sm" className="mt-2 rounded-lg" disabled={!hydrated || pending}
+      <DialogTrigger asChild><Button type="button" variant="outline" size="sm" className="mt-2 h-auto min-h-7 max-w-full rounded-lg whitespace-normal" disabled={!hydrated || pending}
         aria-label={`${isGrant ? "Berikan izin ulang" : "Cabut izin ulang"} ${props.student} ${props.number}`}>
         {isGrant ? <RotateCcw className="size-3.5" /> : <XCircle className="size-3.5" />}{isGrant ? "Berikan izin ulang" : "Cabut izin"}
       </Button></DialogTrigger>

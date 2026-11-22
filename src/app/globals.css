@@ -184,3 +184,15 @@
 
 /* Saat tab/keyboard menavigasi form panjang, sisakan ruang untuk footer modal. */
 [data-slot="dialog-content"] { scroll-padding-bottom: 6rem; }
+
+/* Aktif hanya sebentar saat pengguna mengganti tema, agar transisi tidak
+   mengganggu interaksi lain; pengguna dengan reduced motion tidak dianimasi. */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-changing, html.theme-changing body,
+  html.theme-changing *:not(.theme-toggle-icon),
+  html.theme-changing *::before, html.theme-changing *::after {
+    transition-property: background-color, color, border-color, box-shadow, fill, stroke;
+    transition-duration: 300ms;
+    transition-timing-function: ease-in-out;
+  }
+}

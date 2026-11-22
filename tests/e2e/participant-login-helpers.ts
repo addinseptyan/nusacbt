@@ -9,7 +9,7 @@ import { postgresConfig } from "../../src/lib/postgres-config.mjs";
 
 export type LoginFixture = {
   suffix: string; username: string; passwordA: string; passwordB: string;
-  periodA: string; periodB: string; periodAName: string; periodBName: string;
+  periodA: string; periodB: string; periodAName: string; periodBName: string; yearId: string;
   majorId: string; classId: string; majorName: string;
   studentA: string; studentB: string; studentAName: string; studentBName: string;
   identityA: string; identityB: string; placementA: string; placementB: string;
@@ -59,10 +59,14 @@ export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture>
     const majorName = `LP${suffix}`;
     const majorId = (await client.query<{ id: string }>("INSERT INTO school_majors(name) VALUES($1) RETURNING id::text AS id", [majorName])).rows[0].id;
     const classId = (await client.query<{ id: string }>("INSERT INTO school_classes(level,major_id) VALUES('X',$1) RETURNING id::text AS id", [majorId])).rows[0].id;
+    const settingYear = await client.query<{ id: string | null }>('SELECT active_year_id::text AS id FROM academic_year_settings WHERE id=1 FOR UPDATE');
+    if (settingYear.rowCount !== 1 || settingYear.rows[0].id !== null) throw new Error("Tahun aktif database uji harus kosong sebelum fixture.");
+    const yearId = (await client.query<{ id: string }>('INSERT INTO academic_years(name) VALUES($1) RETURNING id::text AS id', [`Fixture ${suffix}`])).rows[0].id;
+    await client.query('UPDATE academic_year_settings SET active_year_id=$1,revision=revision+1 WHERE id=1', [yearId]);
     const periodAName = `Periode A ${suffix}`; const periodBName = `Periode B ${suffix}`;
     const periods = (await client.query<{ id: string; name: string }>(
-      "INSERT INTO exam_periods(name,start_date,end_date) VALUES($1,'2025-01-01','2025-12-31'),($2,'2027-01-01','2027-12-31') RETURNING id::text AS id,name",
-      [periodAName, periodBName],
+      "INSERT INTO exam_periods(name,start_date,end_date,academic_year_id) VALUES($1,'2025-01-01','2025-12-31',$3),($2,'2027-01-01','2027-12-31',$3) RETURNING id::text AS id,name",
+      [periodAName, periodBName, yearId],
     )).rows;
     const periodA = periods.find((p) => p.name === periodAName)!.id; const periodB = periods.find((p) => p.name === periodBName)!.id;
     const studentAName = `Peserta A ${suffix}`; const studentBName = `Peserta B ${suffix}`;
@@ -111,7 +115,7 @@ export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture>
     if (setting.rowCount !== 1 || setting.rows[0].period !== null) throw new Error("Pengaturan DB uji harus tersedia dan tidak memiliki periode aktif sebelum fixture.");
     await client.query("UPDATE participant_login_settings SET period_id=$1 WHERE id=1", [periodA]);
     await client.query("COMMIT");
-    return { suffix, username, passwordA, passwordB, periodA, periodB, periodAName, periodBName, majorId, classId, majorName,
+    return { suffix, username, passwordA, passwordB, periodA, periodB, periodAName, periodBName, yearId, majorId, classId, majorName,
       studentA, studentB, studentAName, studentBName, identityA, identityB, placementA, placementB,
       activeTest, activeName, futureName, pastName, hiddenName, questionId, topicId, questionSecret };
   } catch (error) { await client.query("ROLLBACK").catch(() => {}); throw error; }
@@ -144,6 +148,8 @@ export async function cleanupLoginFixture(client: pg.Client, f: LoginFixture, ex
   await client.query("DELETE FROM school_classes WHERE id=$1::bigint", [f.classId]);
   await client.query("DELETE FROM school_majors WHERE id=$1::bigint", [f.majorId]);
   await client.query("DELETE FROM exam_periods WHERE id=ANY($1::bigint[])", [periods]);
+  await client.query("UPDATE academic_year_settings SET active_year_id=NULL,revision=revision+1 WHERE id=1 AND active_year_id=$1::bigint", [f.yearId]);
+  await client.query("DELETE FROM academic_years WHERE id=$1::bigint", [f.yearId]);
   await resetLoginGlobal(client);
 }
 

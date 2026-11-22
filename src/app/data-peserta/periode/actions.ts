@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { AcademicYearProblem, attachPeriodToYear, lockAcademicMutation, syncYearPlacements } from "@/lib/academic-year-service";
 import { lockSchedulePeriod } from "@/lib/exam-session-service";
 import { getPostgresPool } from "@/lib/postgres";
 import { validPeriodId, validatePeriodInput } from "@/lib/period-validation.mjs";
@@ -15,34 +16,39 @@ export async function savePeriod(formData: FormData): Promise<ActionResult> {
   await requireAdmin();
   const rawId = formData.get("id");
   const id = rawId === null || rawId === "" ? null : validPeriodId(rawId);
-  if (rawId !== null && rawId !== "" && !id) return { ok: false, error: "Identitas periode tidak valid." };
-  const parsed = validatePeriodInput({
-    name: formData.get("name"),
-    startDate: formData.get("startDate"),
-    endDate: formData.get("endDate"),
-  });
+  const yearId = validPeriodId(formData.get("yearId"));
+  const revision = id ? validRowRevision(formData.get("expectedRevision")) : null;
+  if ((rawId !== null && rawId !== "" && !id) || !yearId || (id && !revision)) return { ok: false, error: "Pilih tahun ajaran dan identitas periode yang valid. Muat ulang halaman." };
+  const parsed = validatePeriodInput({ name: formData.get("name"), startDate: formData.get("startDate"), endDate: formData.get("endDate") });
   if (!parsed.ok) return parsed;
-
-  const { name, startDate, endDate } = parsed.value;
+  let client: PoolClient | undefined;
   try {
+    client = await getPostgresPool().connect();
+    await client.query("BEGIN");
+    const admin = await lockActiveAdminSession(client);
+    if (!admin) throw new AcademicYearProblem("Sesi admin berakhir. Masuk kembali.");
+    await lockAcademicMutation(client);
+    const year = await client.query("SELECT id FROM academic_years WHERE id=$1::bigint FOR UPDATE", [yearId]);
+    if (!year.rowCount) throw new AcademicYearProblem("Tahun ajaran tidak ditemukan.");
     if (id) {
-      const result = await getPostgresPool().query(
-        `UPDATE exam_periods SET name = $1, start_date = $2::date, end_date = $3::date, updated_at = now()
-         WHERE id = $4::bigint RETURNING id`,
-        [name, startDate, endDate, id],
-      );
-      if (!result.rowCount) return { ok: false, error: "Periode tidak ditemukan atau sudah dihapus." };
+      const current = await client.query<{ revision: string }>('SELECT xmin::text AS revision FROM exam_periods WHERE id=$1::bigint FOR UPDATE', [id]);
+      if (!current.rowCount || current.rows[0].revision !== revision) throw new AcademicYearProblem("Periode telah berubah atau dihapus. Muat ulang halaman.");
+      await attachPeriodToYear(client, id, yearId);
+      await client.query("UPDATE exam_periods SET name=$1,start_date=$2::date,end_date=$3::date,updated_at=clock_timestamp() WHERE id=$4::bigint", [parsed.value.name, parsed.value.startDate, parsed.value.endDate, id]);
     } else {
-      await getPostgresPool().query(
-        "INSERT INTO exam_periods (name, start_date, end_date) VALUES ($1, $2::date, $3::date)",
-        [name, startDate, endDate],
-      );
+      await client.query("INSERT INTO exam_periods(name,start_date,end_date,academic_year_id) VALUES($1,$2::date,$3::date,$4::bigint)", [parsed.value.name, parsed.value.startDate, parsed.value.endDate, yearId]);
+      await syncYearPlacements(client, yearId);
     }
-  } catch {
-    return { ok: false, error: "Hasil penyimpanan belum dapat dipastikan. Periksa koneksi dan migrasi, lalu muat ulang daftar sebelum mencoba lagi." };
-  }
-  revalidatePath("/data-peserta/periode");
-  return { ok: true, message: id ? "Periode berhasil diubah." : "Periode berhasil ditambahkan." };
+    const stillActive = await lockActiveAdminSession(client);
+    if (!stillActive || stillActive.id !== admin.id) throw new AcademicYearProblem("Sesi admin sudah berakhir. Masuk kembali.");
+    await client.query("COMMIT");
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    if (error instanceof AcademicYearProblem) return { ok: false, error: error.message };
+    return { ok: false, error: "Hasil penyimpanan belum dapat dipastikan. Periksa koneksi, lalu muat ulang daftar." };
+  } finally { client?.release(); }
+  revalidatePath("/data-peserta/periode"); revalidatePath("/data-peserta/siswa");
+  return { ok: true, message: id ? "Periode berhasil diubah." : "Periode berhasil ditambahkan; siswa aktif tahun tersebut tersedia pada periode." };
 }
 
 class PeriodDeleteProblem extends Error {}
@@ -127,9 +133,12 @@ export async function setActiveLoginPeriod(formData: FormData): Promise<ActionRe
       const changed = result.rows[0].periodId !== target;
       if (changed) {
         if (target) {
-          const period = await client.query<{ revision: string }>("SELECT xmin::text AS revision FROM exam_periods WHERE id = $1::bigint FOR SHARE", [target]);
+          const period = await client.query<{ revision: string; yearId: string | null; activeYear: string | null }>(
+            `SELECT e.xmin::text AS revision,e.academic_year_id::text AS "yearId",ys.active_year_id::text AS "activeYear"
+             FROM exam_periods e CROSS JOIN academic_year_settings ys WHERE e.id=$1::bigint AND ys.id=1 FOR SHARE OF e,ys`, [target]);
           if (!period.rowCount) throw new LoginPeriodProblem("Periode tidak ditemukan atau sudah dihapus. Muat ulang halaman.");
           if (period.rows[0].revision !== targetRevision) throw new LoginPeriodProblem("Data periode tujuan sudah berubah. Tidak ada perubahan; muat ulang halaman.");
+          if (!period.rows[0].yearId || period.rows[0].yearId !== period.rows[0].activeYear) throw new LoginPeriodProblem("Periode harus berada pada tahun ajaran yang sedang aktif.");
         }
         await client.query("UPDATE participant_login_settings SET period_id = $1::bigint WHERE id = 1", [target]);
         await client.query("DELETE FROM participant_sessions");

@@ -9,17 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatFinalGrade } from "@/lib/exam-final-grade.mjs";
 
-type Props = { test: { id: string; name: string; period: string }; data: FinalGradeData; attemptPage: number };
+type Props = { test: { id: string; name: string; period: string }; data: FinalGradeData; attemptPage: number; filterQuery?: string };
 const kindName = (kind: "regular" | "makeup" | "remedial") => kind === "regular" ? "Reguler" : kind === "makeup" ? "Susulan" : "Remidi";
 const methodName = (method: string) => method === "highest" ? "Tertinggi" : "Rata-rata";
-function pageUrl(test: string, finalPage: number, attemptPage: number) {
-  const params = new URLSearchParams({ tes: test });
+function pageUrl(test: string, finalPage: number, attemptPage: number, filterQuery = "") {
+  const params = new URLSearchParams(filterQuery); params.set("tes", test); params.delete("halaman"); params.delete("nilaiHalaman");
   if (finalPage > 1) params.set("nilaiHalaman", String(finalPage));
   if (attemptPage > 1) params.set("halaman", String(attemptPage));
   return `/data-tes/monitoring?${params.toString()}#nilai-akhir`;
 }
 
-export function FinalGradePanel({ test, data, attemptPage }: Props) {
+export function FinalGradePanel({ test, data, attemptPage, filterQuery }: Props) {
   return <Card id="nilai-akhir" className="mb-5 gap-0 overflow-hidden rounded-[20px] py-0">
     <div className="flex flex-wrap items-start justify-between gap-4 border-b p-5"><div>
       <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Tes dan peserta</p>
@@ -39,7 +39,7 @@ export function FinalGradePanel({ test, data, attemptPage }: Props) {
           {!row.finalized && row.unfinished > 0 && <p className="mt-1 max-w-[190px] text-xs text-muted-foreground">Tunggu semua pengerjaan selesai.</p>}
           {!row.finalized && row.finished === 0 && <p className="mt-1 max-w-[190px] text-xs text-muted-foreground">Perlu setidaknya satu pengerjaan selesai.</p>}</td>
       </tr>)}</tbody></table></div>}
-    {data.pages > 1 && <nav aria-label="Halaman nilai akhir" className="flex flex-wrap items-center justify-between gap-2 border-t p-5 text-xs"><span>Halaman {data.page} dari {data.pages}</span><div className="flex gap-2">{data.page > 1 && <Button asChild size="sm" variant="outline"><Link href={pageUrl(test.id, data.page - 1, attemptPage)}><ChevronLeft className="size-4" /> Sebelumnya</Link></Button>}{data.page < data.pages && <Button asChild size="sm" variant="outline"><Link href={pageUrl(test.id, data.page + 1, attemptPage)}>Berikutnya <ChevronRight className="size-4" /></Link></Button>}</div></nav>}
+    {data.pages > 1 && <nav aria-label="Halaman nilai akhir" className="flex flex-wrap items-center justify-between gap-2 border-t p-5 text-xs"><span>Halaman {data.page} dari {data.pages}</span><div className="flex gap-2">{data.page > 1 && <Button asChild size="sm" variant="outline"><Link href={pageUrl(test.id, data.page - 1, attemptPage, filterQuery)}><ChevronLeft className="size-4" /> Sebelumnya</Link></Button>}{data.page < data.pages && <Button asChild size="sm" variant="outline"><Link href={pageUrl(test.id, data.page + 1, attemptPage, filterQuery)}>Berikutnya <ChevronRight className="size-4" /></Link></Button>}</div></nav>}
     <details className="border-t p-5 text-sm"><summary className="cursor-pointer font-semibold">Riwayat tindakan nilai akhir · 20 terbaru</summary>
       {!data.audit.length ? <p className="mt-3 text-xs text-muted-foreground">Belum ada tindakan nilai akhir.</p> : <ol className="mt-3 space-y-3">{data.audit.map((event, index) => <li key={`${event.time}-${index}`} className="rounded-lg border p-3 text-xs leading-5">
         <strong>{event.action === "method" ? `Metode: ${methodName(event.oldValue)} → ${methodName(event.newValue)}` : `${event.action === "finalize" ? "Ditetapkan" : "Dibuka kembali"}: ${event.student ?? "peserta"} · ${event.number ?? "—"}`}</strong>

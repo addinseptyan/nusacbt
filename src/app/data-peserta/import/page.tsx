@@ -16,8 +16,7 @@ export default async function ImportPage() {
   try {
     const [periodResult, classResult] = await Promise.all([
       getPostgresPool().query<PlacementPeriod>(
-        `SELECT id::text AS id, name, to_char(start_date, 'YYYY-MM-DD') AS "startDate"
-         FROM exam_periods ORDER BY start_date DESC, id DESC`,
+        `SELECT id::text AS id,name,''::text AS "startDate" FROM academic_years ORDER BY name DESC,id DESC`,
       ),
       getPostgresPool().query<{ count: string }>("SELECT count(*)::text AS count FROM school_classes"),
     ]);
@@ -43,7 +42,7 @@ export default async function ImportPage() {
         <div>
           <p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data peserta</p>
           <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Import Data Peserta</h1>
-          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">Periksa file Excel sebelum menambahkan siswa dan penempatannya.</p>
+          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">Periksa file Excel sebelum menambahkan siswa dan penempatannya pada tahun ajaran.</p>
         </div>
       </div>
       <ImportManager periods={periods} classCount={classCount} />

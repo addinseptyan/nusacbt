@@ -111,7 +111,7 @@ export function planStudentImport(rows, classes, students, placements) {
     const name = sameName && student ? student.name : parsedName.ok ? parsedName.value : nameText.trim();
     if (schoolClass && placement && placement.classId !== schoolClass.id) {
       const activeName = classesById.get(placement.classId)?.label ?? placement.classNameSnapshot;
-      issues.push(`Kelas aktif di periode ini adalah ${activeName}, berbeda dari Excel. Ubah penempatan secara manual atau perbaiki file.`);
+      issues.push(`Kelas aktif pada tahun ajaran ini adalah ${activeName}, berbeda dari Excel. Ubah penempatan secara manual atau perbaiki file.`);
     }
     /** @type {ImportStatus} */
     const status = issues.length ? "masalah" : !student ? "siswa-baru" : placement ? "sudah-sesuai" : "penempatan-baru";

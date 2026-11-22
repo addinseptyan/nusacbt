@@ -11,8 +11,8 @@ test.use({ actionTimeout: 15_000 });
 
 type Payload = { mode: "prepare" | "verify"; filters: string; candidates: Array<{ identityId: string; studentId: string; token: string }>; includePassword: boolean };
 
-async function capturePayload(page: import("@playwright/test").Page, periodId: string, studentName: string, testId?: string) {
-  const params = new URLSearchParams({ periode: periodId, ...(testId ? { tes: testId, kategori: "makeup" } : {}) });
+async function capturePayload(page: import("@playwright/test").Page, periodId: string, studentName: string) {
+  const params = new URLSearchParams({ periode: periodId });
   await page.goto(`/data-peserta/kartu?${params}`);
   await page.getByRole("checkbox", { name: new RegExp(`^Pilih ${studentName} NISN`) }).check();
   const waiting = page.waitForResponse((response) => response.url().includes(endpoint) && response.request().method() === "POST");
@@ -50,20 +50,19 @@ test("pratinjau bersandi tidak dicetak bila sandi berubah sebelum pemeriksaan ul
   } finally { await cleanupLoginFixture(client, f); await client.end(); }
 });
 
-test("rilis ditarik ketika permintaan menunggu pagar periode: sandi dan audit tidak dikirim", async ({ page }) => {
+test("periode login berubah ketika permintaan menunggu lock: sandi dan audit tidak dikirim", async ({ page }) => {
   test.setTimeout(60_000);
   const client = loginTestDatabase(); const blocker = loginTestDatabase(); await client.connect(); await blocker.connect();
   const f = await seedLoginFixture(client);
   try {
-    await loginAsAdmin(page); const payload = await capturePayload(page, f.periodA, f.studentAName, f.activeTest);
-    const runId = (await client.query<{ id: string }>("SELECT id::text AS id FROM exam_schedule_runs WHERE exam_test_id=$1", [f.activeTest])).rows[0].id;
+    await loginAsAdmin(page); const payload = await capturePayload(page, f.periodA, f.studentAName);
     await blocker.query("BEGIN");
-    await blocker.query("SELECT pg_advisory_xact_lock(hashtextextended('nusacbt:exam-schedule:period:' || $1::text,0))", [f.periodA]);
+    await blocker.query("SELECT id FROM participant_login_settings WHERE id=1 FOR UPDATE");
     const pending = page.request.post(endpoint, { headers, data: { ...payload, includePassword: true }, timeout: 30_000 });
     await expect.poll(async () => (await client.query<{ n: number }>(`SELECT count(*)::int AS n FROM pg_stat_activity
-      WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE '%nusacbt:exam-schedule:period:%'`)).rows[0].n,
+      WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE '%FROM participant_login_settings WHERE id=1 FOR SHARE%'`)).rows[0].n,
       { timeout: 12_000 }).toBeGreaterThan(0);
-    await blocker.query("UPDATE exam_schedule_runs SET published_at=NULL,published_by=NULL WHERE id=$1", [runId]);
+    await blocker.query("UPDATE participant_login_settings SET period_id=$1 WHERE id=1", [f.periodB]);
     await blocker.query("COMMIT");
     const response = await pending; expect(response.status()).toBe(409);
     expect(await response.text()).not.toContain(f.passwordA); expect(await count(client, f.identityA)).toBe(0);

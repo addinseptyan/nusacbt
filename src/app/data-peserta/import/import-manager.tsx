@@ -64,7 +64,7 @@ export function ImportManager({ periods, classCount }: { periods: PlacementPerio
     event.preventDefault();
     if (busy) return;
     clearResult();
-    if (!periodId) return setError("Pilih periode terlebih dahulu.");
+    if (!periodId) return setError("Pilih tahun ajaran terlebih dahulu.");
     if (!file || !file.name.toLowerCase().endsWith(".xlsx")) return setError("Pilih file Excel .xlsx.");
     if (file.size === 0 || file.size > MAX_FILE_SIZE) return setError("Ukuran file harus lebih dari 0 dan maksimal 512 KB.");
     const data = new FormData();
@@ -117,17 +117,17 @@ export function ImportManager({ periods, classCount }: { periods: PlacementPerio
         <AlertTitle className="text-[12px] font-bold">Impor aman dengan pratinjau</AlertTitle>
         <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Nama siswa baru disimpan dengan HURUF KAPITAL. Siswa lama tidak ditimpa; perbedaan huruf besar/kecil saja bukan konflik. Jika nama atau kelas aktif berbeda, perbaiki konfliknya. Semua baris harus lolos sebelum disimpan bersama.</AlertDescription>
       </Alert>
-      {!ready && <Alert className="rounded-2xl"><Info className="size-4" /><AlertTitle>Siapkan periode dan kelas</AlertTitle><AlertDescription>Buat <Link href="/data-peserta/periode" className="font-semibold text-primary underline">periode</Link> dan <Link href="/data-peserta/kelas" className="font-semibold text-primary underline">kelas</Link> terlebih dahulu.</AlertDescription></Alert>}
+      {!ready && <Alert className="rounded-2xl"><Info className="size-4" /><AlertTitle>Siapkan tahun ajaran dan kelas</AlertTitle><AlertDescription>Buat <Link href="/data-peserta/tahun-ajaran" className="font-semibold text-primary underline">tahun ajaran</Link> dan <Link href="/data-peserta/kelas" className="font-semibold text-primary underline">kelas</Link> terlebih dahulu.</AlertDescription></Alert>}
       {error && <Alert variant="destructive" role="alert" className="rounded-2xl"><CircleAlert className="size-4" /><AlertTitle>Perlu diperiksa</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
       {completed && <Alert role="status" className="rounded-2xl border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"><CheckCircle2 className="size-4" /><AlertTitle>Impor selesai</AlertTitle><AlertDescription>{completed.newStudents} siswa baru dan {completed.newPlacements} penempatan baru disimpan; {completed.unchanged} baris sudah sesuai. <Link href="/data-peserta/siswa" className="font-semibold underline">Lihat Data Siswa</Link>.</AlertDescription></Alert>}
       <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(270px,0.7fr)]">
         <Card className="min-w-0 gap-0 rounded-[18px] p-5 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)] sm:p-6">
-          <div className="flex items-center gap-2.5"><span className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><UploadCloud className="size-4" /></span><div><h2 className="text-[15px] font-bold">Pilih file dan periode</h2><p className="mt-0.5 text-[11px] text-muted-foreground">Tidak ada perubahan sebelum Anda menyimpan.</p></div></div>
+          <div className="flex items-center gap-2.5"><span className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><UploadCloud className="size-4" /></span><div><h2 className="text-[15px] font-bold">Pilih file dan tahun ajaran</h2><p className="mt-0.5 text-[11px] text-muted-foreground">Tidak ada perubahan sebelum Anda menyimpan.</p></div></div>
           <form onSubmit={handlePreview} className="mt-5 space-y-4">
-            <div className="space-y-2"><label htmlFor="import-period" className="text-sm font-semibold">Periode <span className="text-destructive">*</span></label>
+            <div className="space-y-2"><label htmlFor="import-period" className="text-sm font-semibold">Tahun ajaran <span className="text-destructive">*</span></label>
               <Select value={periodId} onValueChange={(value) => { setPeriodId(value); clearResult(); }} disabled={Boolean(busy) || periods.length === 0}>
-                <SelectTrigger id="import-period" aria-required="true" className="h-11! w-full min-w-0 rounded-xl"><SelectValue placeholder="Pilih periode" /></SelectTrigger>
-                <SelectContent position="popper">{periods.map((period) => <SelectItem key={period.id} value={period.id}>{period.name} · {period.startDate}</SelectItem>)}</SelectContent>
+                <SelectTrigger id="import-period" aria-required="true" className="h-11! w-full min-w-0 rounded-xl"><SelectValue placeholder="Pilih tahun ajaran" /></SelectTrigger>
+                <SelectContent position="popper">{periods.map((period) => <SelectItem key={period.id} value={period.id}>{period.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><label htmlFor="import-file" className="text-sm font-semibold">File Excel <span className="text-destructive">*</span></label>
@@ -145,9 +145,9 @@ export function ImportManager({ periods, classCount }: { periods: PlacementPerio
       </div>
       {preview && <Card className="min-w-0 gap-0 overflow-hidden rounded-[18px] ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]">
         <div className="border-b border-border p-5 sm:px-6">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-[15px] font-bold">Hasil pratinjau</h2><p className="mt-1 break-words text-[12px] leading-5 text-muted-foreground">Periode <strong>{preview.periodName}</strong> · mulai {preview.periodStart}</p></div><Badge variant={preview.counts.problems ? "destructive" : "secondary"} className="rounded-full text-[10px]">{preview.counts.problems ? "Perlu perbaikan" : "Siap disimpan"}</Badge></div>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-[15px] font-bold">Hasil pratinjau</h2><p className="mt-1 break-words text-[12px] leading-5 text-muted-foreground">Tahun ajaran <strong>{preview.periodName}</strong></p></div><Badge variant={preview.counts.problems ? "destructive" : "secondary"} className="rounded-full text-[10px]">{preview.counts.problems ? "Perlu perbaikan" : "Siap disimpan"}</Badge></div>
           <div className="mt-4"><Summary counts={preview.counts} /></div>
-          <p className="mt-3 text-[11px] leading-5 text-muted-foreground">Penempatan baru mencakup siswa baru dan siswa lama yang belum ditempatkan pada periode ini. Data yang sudah sesuai tidak diubah.</p>
+          <p className="mt-3 text-[11px] leading-5 text-muted-foreground">Penempatan baru mencakup siswa baru dan siswa lama yang belum ditempatkan pada tahun ajaran ini. Data yang sudah sesuai tidak diubah.</p>
         </div>
         <ul aria-label="Hasil pratinjau impor" className="divide-y divide-border">
           {visibleRows.map((row) => <li key={row.rowNumber} className="min-w-0 px-5 py-4 sm:px-6">
@@ -160,7 +160,7 @@ export function ImportManager({ periods, classCount }: { periods: PlacementPerio
       </Card>}
       <Dialog open={confirmOpen} onOpenChange={(open) => { if (!busy) setConfirmOpen(open); }}>
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-md" showCloseButton={!busy} onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onInteractOutside={(event) => { if (busy) event.preventDefault(); }}>
-          <DialogHeader><DialogTitle className="text-lg font-bold">Simpan hasil impor?</DialogTitle><DialogDescription>Periode <strong className="text-foreground">{preview?.periodName}</strong>. {preview?.counts.newStudents ?? 0} siswa baru dan {preview?.counts.newPlacements ?? 0} penempatan baru akan disimpan. Data yang sudah sesuai tidak diubah.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="text-lg font-bold">Simpan hasil impor?</DialogTitle><DialogDescription>Tahun ajaran <strong className="text-foreground">{preview?.periodName}</strong>. {preview?.counts.newStudents ?? 0} siswa baru dan {preview?.counts.newPlacements ?? 0} penempatan baru akan disimpan. Data yang sudah sesuai tidak diubah.</DialogDescription></DialogHeader>
           <p className="text-[12px] leading-5 text-muted-foreground">Jika data berubah sejak pratinjau, penyimpanan dibatalkan dan Anda perlu memeriksa ulang.</p>
           <DialogFooter><Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => setConfirmOpen(false)}>Batal</Button><Button type="button" disabled={Boolean(busy)} onClick={handleSave}>{busy === "save" ? "Menyimpan..." : "Ya, simpan impor"}</Button></DialogFooter>
         </DialogContent>

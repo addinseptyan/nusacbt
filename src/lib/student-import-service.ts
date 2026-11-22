@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 
 import { validDataId } from "@/lib/class-validation.mjs";
+import { lockAcademicMutation, syncYearPlacements } from "@/lib/academic-year-service";
+import { lockActiveAdminSession } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import { planStudentImport } from "@/lib/student-import-validation.mjs";
 import { ImportFileError, MAX_IMPORT_BYTES, readStudentWorkbook } from "@/lib/student-import-xlsx.mjs";
@@ -15,7 +17,7 @@ type PlannedRow = ReturnType<typeof planStudentImport>[number];
 type Period = { id: string; name: string; startDate: string; version: string };
 type SchoolClass = { id: string; label: string };
 type ExistingStudent = { id: string; name: string; nisn: string; version: string };
-type Placement = { id: string; studentId: string; classId: string; classNameSnapshot: string };
+type Placement = { id: string; studentId: string; classId: string; classNameSnapshot: string; status: "active" | "graduated" | "left" };
 type Upload = { periodId: string; rows: WorkbookRow[]; hash: string };
 type Plan = { period: Period; rows: PlannedRow[]; counts: ImportCounts; token: string | null };
 
@@ -23,7 +25,7 @@ class ImportProblem extends Error {}
 
 async function readUpload(formData: FormData): Promise<Upload> {
   const periodId = validDataId(formData.get("periodId"));
-  if (!periodId) throw new ImportProblem("Pilih periode yang valid terlebih dahulu.");
+  if (!periodId) throw new ImportProblem("Pilih tahun ajaran yang valid terlebih dahulu.");
   const input = formData.get("file");
   if (!(input instanceof File) || !input.name.toLowerCase().endsWith(".xlsx")) {
     throw new ImportProblem("Pilih file Excel .xlsx dari template NusaCBT.");
@@ -59,26 +61,30 @@ async function makePlan(client: PoolClient, upload: Upload, adminId: string, loc
     [nisns],
   );
   const periods = await client.query<Period>(
-    `SELECT id::text AS id, name, to_char(start_date, 'YYYY-MM-DD') AS "startDate",
+    `SELECT id::text AS id,name,''::text AS "startDate",
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
-     FROM exam_periods WHERE id = $1::bigint ${lock ? "FOR SHARE" : ""}`,
+     FROM academic_years WHERE id = $1::bigint ${lock ? "FOR SHARE" : ""}`,
     [upload.periodId],
   );
-  if (!periods.rowCount) throw new ImportProblem("Periode tidak ditemukan atau sudah dihapus. Muat ulang halaman.");
+  if (!periods.rowCount) throw new ImportProblem("Tahun ajaran tidak ditemukan atau sudah dihapus. Muat ulang halaman.");
   const classes = await client.query<SchoolClass>(
     `SELECT c.id::text AS id, c.level || ' ' || m.name AS label
      FROM school_classes c JOIN school_majors m ON m.id = c.major_id ORDER BY c.id
      ${lock ? "FOR SHARE OF c, m" : ""}`,
   );
   const placements = await client.query<Placement>(
-    `SELECT id::text AS id, student_id::text AS "studentId", class_id::text AS "classId",
-      class_name_snapshot AS "classNameSnapshot"
-     FROM student_class_placements
-     WHERE period_id = $1::bigint AND student_id = ANY($2::bigint[]) AND ended_at IS NULL
+    `SELECT id::text AS id,student_id::text AS "studentId",class_id::text AS "classId",
+      class_name_snapshot AS "classNameSnapshot",status
+     FROM academic_year_enrollments
+     WHERE academic_year_id = $1::bigint AND student_id = ANY($2::bigint[])
      ORDER BY id ${lock ? "FOR UPDATE" : ""}`,
     [upload.periodId, students.rows.map((student) => student.id)],
   );
   const rows = planStudentImport(upload.rows, classes.rows, students.rows, placements.rows);
+  const inactive = new Set(placements.rows.filter((p) => p.status !== "active").map((p) => p.studentId));
+  for (const row of rows) if (row.student && inactive.has(row.student.id)) {
+    row.status = "masalah"; row.issues.push("Siswa sudah berstatus lulus/keluar pada tahun ini. Periksa status secara manual.");
+  }
   const counts = summarize(rows);
   // Hash mendeteksi pratinjau usang, bukan pengganti autentikasi atau validasi server.
   const token = counts.problems ? null : createHash("sha256").update(JSON.stringify({
@@ -128,6 +134,9 @@ export async function applyImport(formData: FormData, adminId: string): Promise<
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN");
+    const admin = await lockActiveAdminSession(client);
+    if (!admin || admin.id !== adminId) throw new ImportProblem("Sesi admin berakhir. Masuk kembali.");
+    await lockAcademicMutation(client);
     const plan = await makePlan(client, upload, adminId, true);
     if (!plan.token || plan.token !== expected) {
       throw new ImportProblem("File atau data telah berubah sejak pratinjau. Periksa ulang sebelum menyimpan; tidak ada perubahan yang disimpan.");
@@ -149,13 +158,16 @@ export async function applyImport(formData: FormData, adminId: string): Promise<
       const studentIds = toPlace.map((row) => row.student?.id ?? newIds.get(row.nisn));
       if (studentIds.some((id) => !id) || toPlace.some((row) => !row.schoolClass)) throw new Error("Rencana penempatan tidak lengkap.");
       const inserted = await client.query(
-        `INSERT INTO student_class_placements (student_id, period_id, class_id, class_name_snapshot)
-         SELECT input.student_id::bigint, $1::bigint, input.class_id::bigint, input.class_name
+        `INSERT INTO academic_year_enrollments (student_id, academic_year_id, class_id, class_name_snapshot, status)
+         SELECT input.student_id::bigint, $1::bigint, input.class_id::bigint, input.class_name,'active'
          FROM unnest($2::text[], $3::text[], $4::text[]) AS input(student_id, class_id, class_name)`,
         [upload.periodId, studentIds, toPlace.map((row) => row.schoolClass!.id), toPlace.map((row) => row.schoolClass!.label)],
       );
       if (inserted.rowCount !== toPlace.length) throw new Error("Jumlah penempatan yang disimpan tidak sesuai.");
+      await syncYearPlacements(client, upload.periodId, studentIds as string[]);
     }
+    const stillActive = await lockActiveAdminSession(client);
+    if (!stillActive || stillActive.id !== adminId) throw new ImportProblem("Sesi admin berakhir. Masuk kembali.");
     await client.query("COMMIT");
     return plan.counts;
   } catch (error) {

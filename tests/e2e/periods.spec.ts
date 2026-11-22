@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import pg from "pg";
 
@@ -19,11 +19,16 @@ async function revokeCurrentSession(page: import("@playwright/test").Page, clien
 
 test("admin dapat menambah, mengubah, dan menghapus periode dengan konfirmasi", async ({ page }) => {
   const suffix = randomBytes(5).toString("hex");
+  const yearName = `20${randomInt(30, 89)}/${randomInt(31, 90)}`;
+  const uniqueYear = `Tahun Periode ${suffix}`;
   const name = `Periode Uji ${suffix}`;
   const changedName = `Periode Revisi ${suffix}`;
   const client = testDatabase();
   await client.connect();
+  let yearId = "";
   try {
+    yearId = (await client.query<{ id: string }>("INSERT INTO academic_years (name) VALUES ($1) RETURNING id::text AS id", [uniqueYear])).rows[0].id;
+    void yearName;
     await loginAsAdmin(page);
     await page.getByRole("button", { name: "Data Peserta", exact: true }).click();
     await page.getByRole("link", { name: "Periode Ujian", exact: true }).click();
@@ -31,6 +36,7 @@ test("admin dapat menambah, mengubah, dan menghapus periode dengan konfirmasi", 
     await expect(page.getByRole("heading", { name: "Periode Ujian" })).toBeVisible();
     await page.getByRole("button", { name: "Tambah periode" }).click();
     const editor = page.getByRole("dialog", { name: "Tambah periode" });
+    await editor.getByLabel(/Tahun ajaran/).selectOption(yearId);
     await editor.getByLabel("Nama periode").fill(name);
     await editor.getByLabel("Tanggal mulai").fill("2026-07-01");
     await editor.getByLabel("Tanggal akhir").fill("2026-06-30");
@@ -45,6 +51,7 @@ test("admin dapat menambah, mengubah, dan menghapus periode dengan konfirmasi", 
     await expect(editor).toBeHidden();
     let row = page.getByRole("list", { name: "Daftar periode ujian" }).getByRole("listitem").filter({ hasText: name });
     await expect(row).toBeVisible();
+    await expect(row).toContainText(uniqueYear);
     await expect(row).toContainText("1 Jul 2026");
     await expect(row).toContainText("31 Des 2026");
 
@@ -59,8 +66,8 @@ test("admin dapat menambah, mengubah, dan menghapus periode dengan konfirmasi", 
     });
     expect(replay.status()).toBeGreaterThanOrEqual(400);
     expect((await client.query("SELECT 1 FROM exam_periods WHERE name = $1", [name])).rowCount).toBe(1);
-    const created = await client.query("SELECT to_char(start_date, 'YYYY-MM-DD') AS start, to_char(end_date, 'YYYY-MM-DD') AS finish FROM exam_periods WHERE name = $1", [name]);
-    expect(created.rows).toEqual([{ start: "2026-07-01", finish: "2026-12-31" }]);
+    const created = await client.query("SELECT to_char(start_date, 'YYYY-MM-DD') AS start, to_char(end_date, 'YYYY-MM-DD') AS finish, academic_year_id::text AS year FROM exam_periods WHERE name = $1", [name]);
+    expect(created.rows).toEqual([{ start: "2026-07-01", finish: "2026-12-31", year: yearId }]);
     await page.reload();
     await expect(row).toBeVisible();
 
@@ -88,19 +95,25 @@ test("admin dapat menambah, mengubah, dan menghapus periode dengan konfirmasi", 
     expect((await client.query("SELECT 1 FROM exam_periods WHERE name = $1", [changedName])).rowCount).toBe(0);
   } finally {
     await client.query("DELETE FROM exam_periods WHERE name = ANY($1::text[])", [[name, changedName]]);
+    if (yearId) await client.query("DELETE FROM academic_years WHERE id = $1", [yearId]);
     await client.end();
   }
 });
 
 test("aksi menyimpan menolak sesi yang sudah dicabut", async ({ page }) => {
-  const name = `Sesi Dicabut ${randomBytes(5).toString("hex")}`;
+  const suffix = randomBytes(5).toString("hex");
+  const yearName = `Tahun Sesi ${suffix}`;
+  const name = `Sesi Dicabut ${suffix}`;
   const client = testDatabase();
   await client.connect();
+  let yearId = "";
   try {
+    yearId = (await client.query<{ id: string }>("INSERT INTO academic_years (name) VALUES ($1) RETURNING id::text AS id", [yearName])).rows[0].id;
     await loginAsAdmin(page);
     await page.goto("/data-peserta/periode");
     await page.getByRole("button", { name: "Tambah periode" }).click();
     const editor = page.getByRole("dialog", { name: "Tambah periode" });
+    await editor.getByLabel(/Tahun ajaran/).selectOption(yearId);
     await editor.getByLabel("Nama periode").fill(name);
     await editor.getByLabel("Tanggal mulai").fill("2026-07-01");
     await revokeCurrentSession(page, client);
@@ -111,6 +124,7 @@ test("aksi menyimpan menolak sesi yang sudah dicabut", async ({ page }) => {
     await expect(page).toHaveURL(/\/login$/);
   } finally {
     await client.query("DELETE FROM exam_periods WHERE name = $1", [name]);
+    if (yearId) await client.query("DELETE FROM academic_years WHERE id = $1", [yearId]);
     await client.end();
   }
 });
@@ -139,11 +153,15 @@ test("aksi menghapus menolak sesi yang sudah dicabut", async ({ page }) => {
 });
 
 test("perubahan dan penghapusan memberi pesan jika periode sudah dihapus oleh sesi lain", async ({ page }) => {
-  const name = `Periode Bersamaan ${randomBytes(5).toString("hex")}`;
+  const suffix = randomBytes(5).toString("hex");
+  const yearName = `Tahun Bersamaan ${suffix}`;
+  const name = `Periode Bersamaan ${suffix}`;
   const client = testDatabase();
   await client.connect();
+  let yearId = "";
   try {
-    let inserted = await client.query("INSERT INTO exam_periods (name, start_date) VALUES ($1, DATE '2026-07-01') RETURNING id", [name]);
+    yearId = (await client.query<{ id: string }>("INSERT INTO academic_years (name) VALUES ($1) RETURNING id::text AS id", [yearName])).rows[0].id;
+    let inserted = await client.query("INSERT INTO exam_periods (name, start_date, academic_year_id) VALUES ($1, DATE '2026-07-01', $2) RETURNING id", [name, yearId]);
     await loginAsAdmin(page);
     await page.goto("/data-peserta/periode");
     let row = page.getByRole("list", { name: "Daftar periode ujian" }).getByRole("listitem").filter({ hasText: name });
@@ -151,10 +169,10 @@ test("perubahan dan penghapusan memberi pesan jika periode sudah dihapus oleh se
     const editor = page.getByRole("dialog", { name: "Ubah periode" });
     await client.query("DELETE FROM exam_periods WHERE id = $1", [inserted.rows[0].id]);
     await editor.getByRole("button", { name: "Simpan periode" }).click();
-    await expect(editor.getByRole("alert")).toContainText("Periode tidak ditemukan atau sudah dihapus");
+    await expect(editor.getByRole("alert")).toContainText("Periode telah berubah atau dihapus");
     await editor.getByRole("button", { name: "Batal" }).click();
 
-    inserted = await client.query("INSERT INTO exam_periods (name, start_date) VALUES ($1, DATE '2026-07-01') RETURNING id", [name]);
+    inserted = await client.query("INSERT INTO exam_periods (name, start_date, academic_year_id) VALUES ($1, DATE '2026-07-01', $2) RETURNING id", [name, yearId]);
     await page.reload();
     row = page.getByRole("list", { name: "Daftar periode ujian" }).getByRole("listitem").filter({ hasText: name });
     await row.getByRole("button", { name: `Hapus periode ${name}` }).click();
@@ -165,6 +183,7 @@ test("perubahan dan penghapusan memberi pesan jika periode sudah dihapus oleh se
     expect((await client.query("SELECT 1 FROM exam_periods WHERE name = $1", [name])).rowCount).toBe(0);
   } finally {
     await client.query("DELETE FROM exam_periods WHERE name = $1", [name]);
+    if (yearId) await client.query("DELETE FROM academic_years WHERE id = $1", [yearId]);
     await client.end();
   }
 });
