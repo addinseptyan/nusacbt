@@ -35,7 +35,7 @@ const steps = [
   { number: "01", title: "Tinjau template impor", detail: "Contoh Word dan Excel sudah tersedia untuk diperiksa.", status: "Tersedia", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300" },
   { number: "02", title: "Siapkan data sekolah", detail: "Periode, kelas, siswa, impor Excel, serta nomor dan username per periode tersedia.", status: "Sebagian tersedia", icon: CircleDashed, color: "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300" },
   { number: "03", title: "Susun bank soal", detail: "Topik, soal berformat dan gambar dapat dikelola; impor Word tersedia untuk format terbatas.", status: "Sebagian tersedia", icon: CircleDashed, color: "bg-violet-50 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300" },
-  { number: "04", title: "Atur dan jalankan tes", detail: "Siapkan jadwal, token, durasi, serta monitoring.", status: "Direncanakan", icon: CircleDashed, color: "bg-orange-50 text-orange-600 dark:bg-orange-950/50 dark:text-orange-300" },
+  { number: "04", title: "Atur dan jalankan tes", detail: "Siapkan jadwal, token, durasi, serta monitoring.", status: "Sebagian tersedia", icon: CircleDashed, color: "bg-orange-50 text-orange-600 dark:bg-orange-950/50 dark:text-orange-300" },
 ];
 
 const cardClass = "rounded-[18px] bg-card ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]";
@@ -56,7 +56,7 @@ export default async function DashboardPage() {
       <Alert className="mb-7 rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
         <Info className="size-4 text-[#727fc8] dark:text-indigo-300" />
         <AlertTitle className="text-[12px] font-bold">Anda sedang melihat pratinjau awal</AlertTitle>
-        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Login, pengelolaan siswa, soal, jadwal, token, dan pengerjaan beserta nilai dasar tersedia untuk pratinjau. Pengulangan, nilai akhir, dan laporan belum aktif.</AlertDescription>
+        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Login, pengelolaan siswa, soal, jadwal, token, pengerjaan, pengulangan, nilai akhir, serta rekap dan unduhan Excel tersedia untuk pratinjau dengan data fiktif.</AlertDescription>
       </Alert>
 
       <div className="mb-3.5 flex items-center justify-between">
