@@ -6,6 +6,11 @@ import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
+import { lockSchedulePeriod } from "@/lib/exam-session-service";
+import { PARTICIPANT_CARD_BATCH_SIZE } from "@/lib/participant-card-constants.mjs";
+import type { CardFilters } from "@/lib/participant-card-filter.mjs";
+import { cardFilterCondition, cardFilterValues } from "@/lib/participant-card-sql";
+import type { PreparedCards } from "@/lib/participant-card-types";
 import type { IdentityPeriod } from "@/lib/participant-identity-types";
 import {
   decryptParticipantPassword,
@@ -22,12 +27,13 @@ import type { PasswordAudit, PasswordCandidate, PasswordDisplayRow, PasswordKeyS
 import { hashParticipantPassword } from "@/lib/password.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 
-class PasswordProblem extends Error {}
+export class PasswordProblem extends Error {}
 
 type Student = { id: string; name: string; nisn: string; version: string };
 type Placement = { id: string; studentId: string; classId: string; classLabel: string };
 type Identity = { id: string; studentId: string; participantNumber: string; username: string; version: string };
-type StoredPassword = { identityId: string; version: string; revision: string; nonce: Buffer; ciphertext: Buffer; authenticationTag: Buffer };
+type PasswordMetadata = { identityId: string; version: string; revision: string };
+type PasswordCiphertext = { identityId: string; nonce: Buffer; ciphertext: Buffer; authenticationTag: Buffer };
 type PasswordPageRow = PasswordRow & { passwordRevision: string | null };
 type PreparedPassword = { identityId: string; hash: string; nonce: Buffer; ciphertext: Buffer; authenticationTag: Buffer };
 
@@ -41,9 +47,15 @@ function candidateToken(period: IdentityPeriod, row: PasswordRow, passwordRevisi
   ])).digest("hex");
 }
 
+// Token adalah fingerprint data yang sudah dilihat admin, bukan kunci atau
+// otorisasi. Pembuatan dan pemeriksaannya tetap berada di server.
+export function passwordCandidate(period: IdentityPeriod, row: PasswordRow, passwordRevision: string | null): PasswordCandidate {
+  return { identityId: row.identityId, studentId: row.studentId, token: candidateToken(period, row, passwordRevision) };
+}
+
 function makeDisplayRow(period: IdentityPeriod, record: PasswordPageRow): PasswordDisplayRow {
   const { passwordRevision, ...row } = record;
-  return { ...row, candidate: { identityId: row.identityId, studentId: row.studentId, token: candidateToken(period, row, passwordRevision) } };
+  return { ...row, candidate: passwordCandidate(period, row, passwordRevision) };
 }
 
 async function currentKeyStatus(client: PoolClient, key: Buffer): Promise<PasswordKeyStatus> {
@@ -168,13 +180,13 @@ async function lockKeyBinding(client: PoolClient, key: Buffer, allowInitialize: 
   if (!sameParticipantVerifier(result.rows[0].verifier, participantKeyVerifier(key))) throw keyProblem("mismatch");
 }
 
-function parseCandidates(formData: FormData): { periodId: string; candidates: PasswordCandidate[] } {
+function parseCandidates(formData: FormData, limit: number = PARTICIPANT_PASSWORD_BATCH_SIZE): { periodId: string; candidates: PasswordCandidate[] } {
   const periodId = validDataId(formData.get("periodId"));
   const input = formData.get("candidates");
-  if (!periodId || typeof input !== "string" || input.length > 6_000) throw new PasswordProblem("Permintaan tidak valid. Muat ulang halaman.");
+  if (!periodId || typeof input !== "string" || input.length > limit * 200 + 1_000) throw new PasswordProblem("Permintaan tidak valid. Muat ulang halaman.");
   let parsed: unknown;
   try { parsed = JSON.parse(input); } catch { throw new PasswordProblem("Daftar peserta tidak valid. Muat ulang halaman."); }
-  if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > PARTICIPANT_PASSWORD_BATCH_SIZE || parsed.some((item) =>
+  if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > limit || parsed.some((item) =>
     !item || typeof item !== "object" || !validDataId(item.identityId) || !validDataId(item.studentId) ||
     typeof item.token !== "string" || !/^[0-9a-f]{64}$/.test(item.token))) {
     throw new PasswordProblem("Daftar peserta tidak valid. Muat ulang halaman.");
@@ -213,8 +225,10 @@ async function lockedRows(client: PoolClient, periodId: string, candidates: Pass
      FROM participant_identities WHERE period_id = $1::bigint AND id = ANY($2::bigint[])
      ORDER BY student_id FOR UPDATE`, [periodId, identityIds],
   );
-  const passwords = await client.query<StoredPassword>(
-    `SELECT participant_identity_id::text AS "identityId", nonce, ciphertext, authentication_tag AS "authenticationTag", xmin::text AS revision,
+  // Metadata cukup untuk mendeteksi reset/perubahan. Ciphertext hanya dimuat
+  // setelah admin benar-benar meminta pengungkapan sandi.
+  const passwords = await client.query<PasswordMetadata>(
+    `SELECT participant_identity_id::text AS "identityId", xmin::text AS revision,
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
      FROM participant_passwords WHERE participant_identity_id = ANY($1::bigint[]) ORDER BY participant_identity_id FOR UPDATE`, [identityIds],
   );
@@ -244,9 +258,21 @@ async function lockedRows(client: PoolClient, periodId: string, candidates: Pass
   return rows;
 }
 
+// Semua baris sandi sudah dikunci oleh lockedRows pada transaksi yang sama.
+async function lockedCiphertexts(client: PoolClient, identityIds: string[]) {
+  const result = await client.query<PasswordCiphertext>(
+    `SELECT participant_identity_id::text AS "identityId", nonce, ciphertext, authentication_tag AS "authenticationTag"
+     FROM participant_passwords WHERE participant_identity_id = ANY($1::bigint[]) ORDER BY participant_identity_id`, [identityIds],
+  );
+  if (result.rowCount !== identityIds.length) throw new PasswordProblem("Sandi berubah. Muat ulang halaman.");
+  return new Map(result.rows.map((row) => [row.identityId, row]));
+}
+
+export class PasswordSessionExpired extends PasswordProblem {}
+
 async function requireActiveSession(client: PoolClient, expectedId?: string) {
   const admin = await lockActiveAdminSession(client);
-  if (!admin || (expectedId && admin.id !== expectedId)) throw new PasswordProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+  if (!admin || (expectedId && admin.id !== expectedId)) throw new PasswordSessionExpired("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
   return admin;
 }
 
@@ -335,8 +361,10 @@ export async function revealParticipantPassword(formData: FormData): Promise<str
       await lockKeyBinding(client, key, false);
       const [{ row, password }] = await lockedRows(client, periodId, candidates);
       if (!password) throw new PasswordProblem("Sandi belum tersedia. Muat ulang halaman.");
+      const ciphertext = (await lockedCiphertexts(client, [row.identityId])).get(row.identityId);
+      if (!ciphertext) throw new PasswordProblem("Sandi berubah. Muat ulang halaman.");
       let plaintext: string;
-      try { plaintext = decryptParticipantPassword(password, key, { identityId: row.identityId, periodId }); }
+      try { plaintext = decryptParticipantPassword(ciphertext, key, { identityId: row.identityId, periodId }); }
       catch { throw new PasswordProblem("Sandi tidak dapat ditampilkan. Periksa kunci dan integritas data; tidak ada sandi yang diubah."); }
       await client.query(
         "INSERT INTO participant_password_audit (participant_identity_id, admin_id, event) VALUES ($1::bigint, $2::bigint, 'reveal')",
@@ -350,6 +378,79 @@ export async function revealParticipantPassword(formData: FormData): Promise<str
       throw knownDatabaseProblem(error);
     } finally { client.release(); }
   } finally { key.fill(0); }
+}
+
+/**
+ * Siapkan satu batch kartu, atau periksa ulang sebelum dialog cetak. Tanpa
+ * includePassword fungsi ini tidak membaca file kunci maupun ciphertext. Dengan
+ * sandi, SEMUA identitas dan audit commit sebelum plaintext dikembalikan.
+ */
+export async function prepareParticipantCards(formData: FormData, filters: CardFilters, includePassword: boolean): Promise<PreparedCards> {
+  const { periodId, candidates } = parseCandidates(formData, PARTICIPANT_CARD_BATCH_SIZE);
+  if (periodId !== filters.periodId) throw new PasswordProblem("Periode kartu tidak valid. Muat ulang halaman.");
+  const key = includePassword ? await loadKey() : null;
+  try {
+    const client = await getPostgresPool().connect();
+    try {
+      await client.query("BEGIN");
+      const admin = await requireActiveSession(client);
+      if (key) await lockKeyBinding(client, key, false);
+      // Penarikan/penyuntingan rilis di aplikasi menggunakan pagar periode
+      // ini sebelum mengunci siswa. Tidak mengunci tes setelah siswa agar
+      // urutan tetap kompatibel dengan mulai tes dan mutasi jadwal.
+      if ((filters.testId || filters.kind) && !await lockSchedulePeriod(client, periodId)) {
+        throw new PasswordProblem("Periode sudah dihapus. Muat ulang halaman.");
+      }
+      const rows = await lockedRows(client, periodId, candidates);
+      const eligible = await client.query<{ studentId: string }>(
+        `SELECT s.id::text AS "studentId" FROM student_class_placements p
+         JOIN school_students s ON s.id=p.student_id
+         JOIN participant_identities i ON i.student_id=s.id AND i.period_id=p.period_id
+         WHERE ${cardFilterCondition} AND s.id=ANY($6::bigint[])`,
+        [...cardFilterValues(filters), candidates.map((candidate) => candidate.studentId)],
+      );
+      if (eligible.rowCount !== candidates.length) {
+        throw new PasswordProblem("Peserta tidak lagi cocok dengan kelas, pencarian, tes, atau pelaksanaan dirilis yang dipilih. Muat ulang dan pilih kembali.");
+      }
+      if (includePassword && rows.some(({ password }) => !password)) {
+        throw new PasswordProblem("Ada peserta terpilih yang belum memiliki sandi. Buat sandi terlebih dahulu atau siapkan kartu tanpa sandi; tidak ada sandi yang ditampilkan.");
+      }
+      const period = await client.query<{ name: string }>("SELECT name FROM exam_periods WHERE id=$1::bigint", [periodId]);
+      if (period.rowCount !== 1) throw new PasswordProblem("Periode berubah. Muat ulang halaman.");
+      const secrets = new Map<string, string>();
+      if (key) {
+        const encrypted = await lockedCiphertexts(client, rows.map(({ row }) => row.identityId));
+        try {
+          for (const { row } of rows) {
+            const ciphertext = encrypted.get(row.identityId);
+            if (!ciphertext) throw new Error("Sandi tidak ditemukan.");
+            secrets.set(row.identityId, decryptParticipantPassword(ciphertext, key, { identityId: row.identityId, periodId }));
+          }
+        } catch {
+          throw new PasswordProblem("Sandi tidak dapat ditampilkan. Periksa kunci dan integritas data; tidak ada sandi yang ditampilkan atau diubah.");
+        }
+        await client.query(
+          `INSERT INTO participant_password_audit (participant_identity_id,admin_id,event)
+           SELECT id,$2::bigint,'reveal' FROM unnest($1::bigint[]) AS x(id)`,
+          [rows.map(({ row }) => row.identityId), admin.id],
+        );
+      }
+      const result: PreparedCards = {
+        periodName: period.rows[0].name,
+        preparedAt: new Date().toISOString(),
+        cards: rows.map(({ row }) => ({
+          studentName: row.studentName, nisn: row.nisn, classLabel: row.classLabel!,
+          participantNumber: row.participantNumber, username: row.username, password: key ? secrets.get(row.identityId)! : null,
+        })).sort((a, b) => a.studentName.localeCompare(b.studentName, "id") || a.nisn.localeCompare(b.nisn)),
+      };
+      await requireActiveSession(client, admin.id);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw knownDatabaseProblem(error);
+    } finally { client.release(); }
+  } finally { key?.fill(0); }
 }
 
 export function passwordErrorMessage(error: unknown): string {
