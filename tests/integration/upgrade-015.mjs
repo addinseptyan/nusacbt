@@ -154,7 +154,7 @@ try {
   assert.deepEqual(token.digest, digestSixDigitToken("654321", tokenKey));
   assert.equal((await client.query("SELECT prompt_text FROM question_bank")).rows[0].prompt_text, "ما قيمة √٤؟ 🧪");
   assert.equal((await client.query("SELECT count(*)::int AS n FROM exam_schedule_runs")).rows[0].n, 0);
-  console.log(`Migrasi 014 → terbaru (015–022) dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
+  console.log(`Migrasi 014 → terbaru (015–023) dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
 
   // Aplikasi baru menggunakan database upgrade dan file kunci fiktif terpisah.
   temp = await mkdtemp(join(tmpdir(), "nusacbt-upgrade-015-"));

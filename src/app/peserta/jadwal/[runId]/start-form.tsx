@@ -13,8 +13,8 @@ const subscribe = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
 
-type Props = { runId: string; testName?: string; runLabel?: string; initialOpen?: boolean; retakePermissionId?: string | null };
-export function StartForm({ runId, testName, runLabel, initialOpen = true, retakePermissionId = null }: Props) {
+type Props = { runId: string; testName?: string; runLabel?: string; initialOpen?: boolean; retakePermissionId?: string | null; finalRevision: string };
+export function StartForm({ runId, testName, runLabel, initialOpen = true, retakePermissionId = null, finalRevision }: Props) {
   const [state, action, pending] = useActionState(beginExamAction, { error: "" });
   const [open, setOpen] = useState(initialOpen);
   const [token, setToken] = useState(""); const [caret, setCaret] = useState(0); const [focused, setFocused] = useState(false);
@@ -56,7 +56,7 @@ export function StartForm({ runId, testName, runLabel, initialOpen = true, retak
           if (!/^[0-9]{6}$/.test(token)) { event.preventDefault(); setWarning("Token salah. Masukkan tepat enam angka."); focusAt(token.length); }
           else { setWarning(""); setEdited(false); }
         }}>
-          <input type="hidden" name="runId" value={runId} />
+          <input type="hidden" name="runId" value={runId} /><input type="hidden" name="expectedFinalRevision" value={finalRevision} />
           {retakePermissionId && <input type="hidden" name="retakeId" value={retakePermissionId} />}
           <div className="flex items-center justify-between gap-3"><label htmlFor={id} className="text-sm font-semibold">Token tes</label><span aria-hidden="true" className="text-xs font-medium text-muted-foreground">{token.length} / 6 angka</span></div>
           <div className="relative w-full rounded-xl focus-within:outline-2 focus-within:outline-offset-4 focus-within:outline-emerald-600 dark:focus-within:outline-emerald-400">
@@ -96,7 +96,7 @@ export function StartForm({ runId, testName, runLabel, initialOpen = true, retak
         </form>
       </DialogContent>
     </Dialog>
-    {initialOpen ? <noscript><form action={action} className="mt-4 space-y-3"><input type="hidden" name="runId" value={runId} />{retakePermissionId && <input type="hidden" name="retakeId" value={retakePermissionId} />}<label htmlFor={`${id}-fallback`} className="block text-sm font-semibold">Token tes</label><Input id={`${id}-fallback`} name="token" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} required autoComplete="one-time-code" className="max-w-xs" /><p className="text-xs text-muted-foreground">Masukkan enam angka dari pengawas.</p>{state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}<Button type="submit">{retakePermissionId ? "Mulai pengulangan" : "Mulai pengerjaan"}</Button></form></noscript>
+    {initialOpen ? <noscript><form action={action} className="mt-4 space-y-3"><input type="hidden" name="runId" value={runId} /><input type="hidden" name="expectedFinalRevision" value={finalRevision} />{retakePermissionId && <input type="hidden" name="retakeId" value={retakePermissionId} />}<label htmlFor={`${id}-fallback`} className="block text-sm font-semibold">Token tes</label><Input id={`${id}-fallback`} name="token" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} required autoComplete="one-time-code" className="max-w-xs" /><p className="text-xs text-muted-foreground">Masukkan enam angka dari pengawas.</p>{state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}<Button type="submit">{retakePermissionId ? "Mulai pengulangan" : "Mulai pengerjaan"}</Button></form></noscript>
       : <noscript><Button asChild size="sm" variant="outline" className="mt-2 rounded-xl"><Link href={`/peserta/jadwal/${runId}`}>{retakePermissionId ? "Mulai ulang tanpa JavaScript" : "Mulai tes tanpa JavaScript"}</Link></Button></noscript>}
   </div>;
 }

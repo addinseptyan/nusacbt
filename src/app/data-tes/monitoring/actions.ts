@@ -5,7 +5,9 @@ import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
+import { examAnswerRevision } from "@/lib/exam-attempt-validation.mjs";
 import { validTokenOperationId } from "@/lib/exam-token-validation.mjs";
+import { lockFinalGradePair, readFinalGradeState } from "@/lib/exam-final-grade-server";
 import { getPostgresPool } from "@/lib/postgres";
 
 export type RetakeActionResult = { ok: true; message: string } | { ok: false; error: string; uncertain?: boolean };
@@ -34,7 +36,7 @@ async function readOperation(client: PoolClient, operationId: string): Promise<O
  * sumber otorisasi atau status; seluruh aturan diperiksa ulang di database.
  */
 export async function changeRetakePermission(form: FormData): Promise<RetakeActionResult> {
-  if (!(form instanceof FormData) || ["operation", "operationId", "attemptId", "expectedPermissionId"].some((field) => form.getAll(field).length !== 1)) {
+  if (!(form instanceof FormData) || ["operation", "operationId", "attemptId", "expectedPermissionId", "expectedFinalRevision"].some((field) => form.getAll(field).length !== 1)) {
     return { ok: false, error: "Data izin tidak valid. Muat ulang halaman." };
   }
   const operation = form.get("operation");
@@ -42,7 +44,8 @@ export async function changeRetakePermission(form: FormData): Promise<RetakeActi
   const attemptId = validDataId(form.get("attemptId"));
   const expectedRaw = form.get("expectedPermissionId");
   const expected = expectedRaw === "" ? null : validDataId(expectedRaw);
-  if (!attemptId || !operationId || (operation !== "grant" && operation !== "revoke") || (expectedRaw !== "" && !expected) || (operation === "revoke" && !expected)) {
+  const expectedFinalRevision = examAnswerRevision(form.get("expectedFinalRevision"));
+  if (!attemptId || !operationId || expectedFinalRevision === null || (operation !== "grant" && operation !== "revoke") || (expectedRaw !== "" && !expected) || (operation === "revoke" && !expected)) {
     return { ok: false, error: "Data izin tidak valid. Muat ulang halaman." };
   }
 
@@ -68,8 +71,8 @@ export async function changeRetakePermission(form: FormData): Promise<RetakeActi
       await client.query("COMMIT"); transactionOpen = false;
       return { ok: true, message: "Tindakan ini sudah diproses. Muat ulang untuk melihat status terkini." };
     }
-    const lookup = await client.query<{ runId: string; testId: string }>(
-      `SELECT a.run_id::text AS "runId",a.exam_test_id::text AS "testId"
+    const lookup = await client.query<{ runId: string; testId: string; identityId: string }>(
+      `SELECT a.run_id::text AS "runId",a.exam_test_id::text AS "testId",a.participant_identity_id::text AS "identityId"
        FROM exam_attempts a WHERE a.id=$1::bigint`, [attemptId],
     );
     const candidate = lookup.rows[0];
@@ -78,6 +81,12 @@ export async function changeRetakePermission(form: FormData): Promise<RetakeActi
         !(await client.query("SELECT id FROM exam_schedule_runs WHERE id=$1::bigint AND exam_test_id=$2::bigint FOR SHARE", [candidate.runId, candidate.testId])).rowCount) {
       throw new RetakeProblem("Jadwal berubah. Muat ulang daftar.");
     }
+    await lockFinalGradePair(client, candidate.testId, candidate.identityId);
+    const finalState = await readFinalGradeState(client, candidate.testId, candidate.identityId);
+    if (operation === "grant" && finalState.finalized) {
+      throw new RetakeProblem("Nilai akhir sudah ditetapkan. Buka kembali nilai sebelum memberikan izin mengulang.");
+    }
+    if (finalState.revision !== expectedFinalRevision) throw new RetakeProblem("Status nilai akhir sudah berubah. Muat ulang dan periksa izin kembali.");
     const locked = await client.query<Attempt>(
       `SELECT id::text AS id,run_id::text AS "runId",participant_identity_id::text AS "identityId",
         completed_at IS NOT NULL AS completed FROM exam_attempts
