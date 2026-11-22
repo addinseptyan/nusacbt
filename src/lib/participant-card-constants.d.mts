@@ -1,0 +1,1 @@
+export const PARTICIPANT_CARD_BATCH_SIZE: 100;

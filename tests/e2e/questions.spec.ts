@@ -42,10 +42,15 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
     await form.getByRole("button", { name: "Simpan soal" }).click();
     await expect(form.getByRole("alert")).toContainText("Isi soal harus berisi teks atau gambar");
     expect((await client.query("SELECT id FROM question_bank WHERE topic_id=$1", [topics[0]])).rowCount).toBe(0);
+    // Editor rich-text dipulihkan setelah transisi validasi; alert dapat muncul
+    // sedikit lebih dahulu daripada contenteditable kembali aktif.
+    await expect(form.getByRole("textbox", { name: "Isi soal", exact: true })).toBeEditable();
     await form.getByRole("textbox", { name: "Isi soal", exact: true }).fill(`  ${prompt}  `);
+    await expect(form.getByLabel("Pilihan B", { exact: true })).toBeEditable();
     await form.getByLabel("Pilihan B", { exact: true }).fill("  ");
     await form.getByRole("button", { name: "Simpan soal" }).click();
     await expect(form.getByRole("alert")).toContainText("Pilihan B harus berisi teks atau gambar");
+    await expect(form.getByLabel("Pilihan B", { exact: true })).toBeEditable();
     await form.getByLabel("Pilihan B", { exact: true }).fill(`Jawaban khusus ${tag}`);
     await form.getByRole("button", { name: "Simpan soal" }).click();
     await expect(form).toBeHidden();

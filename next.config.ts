@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
   experimental: { serverActions: { bodySizeLimit: "8mb" } },
   devIndicators: false,
   async headers() {
-    // Halaman sandi dan bank soal admin dapat berisi data sensitif.
+    // Halaman akun, kartu, dan bank soal admin dapat berisi data sensitif.
     const privateHeaders = [
       { key: "Cache-Control", value: "private, no-store, max-age=0" },
       { key: "Referrer-Policy", value: "no-referrer" },
@@ -30,6 +30,8 @@ const nextConfig: NextConfig = {
       { source: "/data-peserta/identitas", headers: privateHeaders },
       { source: "/data-peserta/sandi", headers: privateHeaders },
       { source: "/data-peserta/akun", headers: privateHeaders },
+      { source: "/data-peserta/kartu", headers: privateHeaders },
+      { source: "/data-peserta/kartu/:path*", headers: privateHeaders },
       { source: "/data-modul/soal", headers: privateHeaders },
       { source: "/data-modul/import-soal", headers: privateHeaders },
       { source: "/data-tes/daftar", headers: privateHeaders },
