@@ -37,7 +37,7 @@ export default async function WorkSettingsPage() {
     <Card className="mt-5 max-w-2xl gap-0 rounded-[22px] p-5 sm:p-7">
       <h2 className="flex items-center gap-2 text-base font-bold"><Award className="size-5 text-indigo-600 dark:text-indigo-300" /> Visibilitas nilai peserta</h2>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">Nilai satu pengerjaan tersedia setelah selesai dan secara awal disamarkan. Pilihan ini berlaku langsung untuk seluruh tes dalam kategori tersebut, termasuk hasil lama.</p>
-      <Alert className="my-5 rounded-xl"><Info className="size-4" /><AlertTitle>Berlaku untuk semua tes</AlertTitle><AlertDescription className="text-xs leading-5">Default ketiga kategori adalah ditampilkan. Hanya pemilik pengerjaan yang sudah selesai dapat menerima nilai. Menyembunyikan mencegah pengiriman berikutnya, tetapi tidak menarik kembali nilai yang sudah dilihat. Samaran visual bukan pembatas keamanan.</AlertDescription></Alert>
+      <Alert className="my-5 rounded-xl"><Info className="size-4" /><AlertTitle>Berlaku untuk semua tes</AlertTitle><AlertDescription className="text-xs leading-5">Default ketiga kategori adalah ditampilkan. Hanya pemilik pengerjaan yang sudah selesai dapat menerima nilai. Nilai akhir yang ditetapkan hanya dibagikan jika semua kategori pengerjaan penyumbangnya ditampilkan. Menyembunyikan mencegah pengiriman berikutnya, tetapi tidak menarik kembali nilai yang sudah dilihat. Samaran visual bukan pembatas keamanan.</AlertDescription></Alert>
       <div className="space-y-3">{categories.map((category) => <ScoreCategoryControl key={`${category.kind}-${category.revision}`} {...category} />)}</div>
     </Card>
   </div>;

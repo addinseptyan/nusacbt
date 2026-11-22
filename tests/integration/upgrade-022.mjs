@@ -218,6 +218,6 @@ try {
   assert.deepEqual((await client.query("SELECT to_jsonb(p) AS row FROM exam_retake_permissions p WHERE id=99020")).rows[0], permissionBefore);
   assert.deepEqual((await client.query("SELECT to_jsonb(o) AS row FROM exam_retake_operations o ORDER BY operation_id")).rows, operationsBefore);
   assert.deepEqual(await snapshot(tables, sequences), before);
-  console.log(`Migrasi 021 → 022: ${tables.length} tabel dan ${sequences.length} sequence lama identik; jawaban, nilai, gambar, sesi, token, sandi dan kebijakan tetap utuh.`);
+  console.log(`Migrasi 021 → terbaru (022–023): ${tables.length} tabel dan ${sequences.length} sequence lama identik; jawaban, nilai, gambar, sesi, token, sandi dan kebijakan tetap utuh.`);
   console.log("Indeks, foreign key, status izin, pagar operasi, satu attempt aktif dan pengulangan migrator diuji pada database fiktif.");
 } finally { key.fill(0); tokenKey.fill(0); await client.end().catch(() => {}); }

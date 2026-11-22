@@ -101,7 +101,7 @@ test("token khusus, snapshot gambar/kunci, resume, penilaian dan perlindungan ri
     expect(await page.content()).not.toContain("correct_count");
     await page.goto("/data-tes/monitoring"); await expect(page).toHaveURL(/\/login$/);
     await admin.goto(`/data-tes/monitoring?tes=${f.login.activeTest}`);
-    const row = admin.getByRole("row").filter({ hasText: f.login.studentAName });
+    const row = admin.getByRole("row").filter({ hasText: f.login.studentAName }).filter({ hasText: "Pengerjaan ke-1" });
     await expect(row).toContainText("Dikumpulkan"); await expect(row).toContainText("2 / 3"); await expect(row).toContainText("33,33");
     expect((await admin.request.get(`/data-tes/monitoring?tes=${f.login.activeTest}`)).headers()["cache-control"]).toContain("no-store");
   } finally { await anonymous.close(); await adminContext.close(); await cleanupAttemptFixture(client, f); await client.end(); }

@@ -16,7 +16,7 @@ const clientReady = () => true;
 const serverReady = () => false;
 
 type Props = {
-  attemptId: string; expectedPermissionId: string | null; mode: "grant" | "revoke";
+  attemptId: string; expectedPermissionId: string | null; expectedFinalRevision: string; mode: "grant" | "revoke";
   student: string; number: string; className: string; period: string; testName: string; label: string;
   attemptNumber: number; deadline: string; zone: string;
 };
@@ -40,7 +40,7 @@ export function RetakeControl(props: Props) {
     }
     const form = new FormData();
     form.set("operation", props.mode); form.set("operationId", record.operationId); form.set("attemptId", props.attemptId);
-    form.set("expectedPermissionId", props.expectedPermissionId ?? "");
+    form.set("expectedPermissionId", props.expectedPermissionId ?? ""); form.set("expectedFinalRevision", props.expectedFinalRevision);
     setError(""); submitting.current = true;
     startTransition(async () => {
       try {

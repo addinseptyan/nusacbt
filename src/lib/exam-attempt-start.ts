@@ -7,6 +7,7 @@ import { EXAM_TOKEN_ADVISORY_LOCK } from "@/lib/exam-token-constants.mjs";
 import { digestSixDigitToken, examTokenKeyVerifier, normalizeSixDigitToken, sameTokenVerifier } from "@/lib/exam-token-crypto.mjs";
 import { readConfiguredTokenKey } from "@/lib/exam-token-key";
 import { snapshotExamQuestions } from "@/lib/exam-attempt-snapshot";
+import { lockFinalGradePair, readFinalGradeState } from "@/lib/exam-final-grade-server";
 import { lockParticipantSession, participantCandidate, participantSessionHash, participantSessionStillActive, type ParticipantCandidate } from "@/lib/participant-session-lock";
 import { getPostgresPool } from "@/lib/postgres";
 
@@ -17,6 +18,8 @@ class StartProblem extends Error {
 const NO_ACCESS = "Jadwal tidak dapat dimulai. Periksa jadwal dan hubungi pengawas.";
 const TOKEN_ERROR = "Token tidak cocok atau akses token sementara terkunci. Hubungi pengawas.";
 const RETAKE_ERROR = "Izin mengulang tidak tersedia, sudah berubah, atau waktu tes telah berakhir. Muat ulang jadwal dan hubungi pengawas.";
+const FINAL_ERROR = "Nilai akhir tes ini sudah ditetapkan. Kesempatan mulai baru ditutup; hubungi pengawas jika perlu dibuka kembali.";
+const FINAL_CHANGED = "Status kesempatan tes sudah berubah. Muat ulang jadwal sebelum mulai.";
 type RetakeRow = { previousId: string; consumedId: string | null; revoked: boolean; completed: boolean; remaining: boolean; latest: boolean };
 
 async function findRetake(client: PoolClient, permissionId: string, runId: string, identityId: string): Promise<RetakeRow | null> {
@@ -54,7 +57,7 @@ async function tokenMatches(client: PoolClient, testId: string, code: string, ke
 }
 
 /** Pemeriksaan awal murah agar token salah tidak memicu penyalinan soal/gambar. */
-async function precheck(client: PoolClient, hash: Buffer, runId: string, code: string, key: Buffer, retakeId: string | null): Promise<StartAttemptResult | { ok: true; ready: true }> {
+async function precheck(client: PoolClient, hash: Buffer, runId: string, code: string, key: Buffer, retakeId: string | null, expectedFinalRevision: string): Promise<StartAttemptResult | { ok: true; ready: true }> {
   await client.query("BEGIN");
   try {
     const candidate = await participantCandidate(client, hash);
@@ -88,6 +91,11 @@ async function precheck(client: PoolClient, hash: Buffer, runId: string, code: s
         await client.query("COMMIT"); return { ok: true, attemptId: existing.rows[0].id };
       }
     }
+    // Hanya optimisasi: keputusan final diulang di bawah kunci pasangan pada
+    // transaksi pembuatan. Membuka kembali attempt lama tidak membuat attempt.
+    const finalState = await readFinalGradeState(client, schedule.rows[0].testId, participant.identityId);
+    if (finalState.finalized) throw new StartProblem(FINAL_ERROR);
+    if (finalState.revision !== expectedFinalRevision) throw new StartProblem(FINAL_CHANGED);
     await client.query("INSERT INTO exam_start_token_attempts(participant_identity_id) VALUES($1::bigint) ON CONFLICT DO NOTHING", [participant.identityId]);
     const failures = await client.query<{ attempts: number; locked: boolean; expired: boolean }>(
       `SELECT failed_attempts AS attempts,COALESCE(locked_until>clock_timestamp(),false) AS locked,
@@ -152,7 +160,7 @@ async function lockSchedule(client: PoolClient, runId: string, candidate: Partic
  * retakeId hanya datang dari tombol "Mulai ulang" yang spesifik pada izin.
  * Form lama/permintaan mulai pertama tidak pernah memakai izin secara diam-diam.
  */
-export async function startExamAttempt(runId: string, rawCode: unknown, retakeId: string | null = null): Promise<StartAttemptResult> {
+export async function startExamAttempt(runId: string, rawCode: unknown, retakeId: string | null, expectedFinalRevision: string): Promise<StartAttemptResult> {
   const hash = await participantSessionHash();
   if (!hash) return { ok: false, error: "Sesi peserta sudah berakhir. Masuk kembali.", login: true };
   const code = normalizeSixDigitToken(rawCode);
@@ -161,7 +169,7 @@ export async function startExamAttempt(runId: string, rawCode: unknown, retakeId
   try {
     key = await readConfiguredTokenKey();
     client = await getPostgresPool().connect();
-    const checked = await precheck(client, hash, runId, code, key, retakeId);
+    const checked = await precheck(client, hash, runId, code, key, retakeId, expectedFinalRevision);
     if (!checked.ok || "attemptId" in checked) return checked;
 
     await client.query("BEGIN"); transactionOpen = true;
@@ -173,8 +181,12 @@ export async function startExamAttempt(runId: string, rawCode: unknown, retakeId
     const roster = await client.query("SELECT 1 FROM exam_schedule_participants WHERE run_id=$1::bigint AND student_id=$2::bigint", [run.id, participant.studentId]);
     if (!roster.rowCount) throw new StartProblem(NO_ACCESS);
 
-    // Menserialkan bahkan dua mulai PERTAMA yang belum mempunyai baris attempt.
-    // Hash bertabrakan hanya mengakibatkan serialisasi tambahan, bukan akses lain.
+    // Berlaku lintas pelaksanaan tes ini, termasuk mulai pertama yang belum
+    // memiliki baris. Penetapan dan pemberian izin memakai kunci yang sama.
+    await lockFinalGradePair(client, test.id, participant.identityId);
+    const finalState = await readFinalGradeState(client, test.id, participant.identityId);
+    // Serialisasi lama per pelaksanaan tetap dipertahankan. Tabrakan hash hanya
+    // menambah serialisasi, tidak memberikan akses ke data orang lain.
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('nusacbt:start:' || $1::text || ':' || $2::text, 0))", [run.id, participant.identityId]);
     let attemptId: string;
     if (!retakeId) {
@@ -186,6 +198,8 @@ export async function startExamAttempt(runId: string, rawCode: unknown, retakeId
         if (!await participantSessionStillActive(client, hash, participant)) throw new StartProblem("Sesi peserta sudah berakhir. Masuk kembali.", true);
         await client.query("COMMIT"); transactionOpen = false; return { ok: true, attemptId: existing.rows[0].id };
       }
+      if (finalState.finalized) throw new StartProblem(FINAL_ERROR);
+      if (finalState.revision !== expectedFinalRevision) throw new StartProblem(FINAL_CHANGED);
       const questions = run.mode === "custom"
         ? await client.query<{ id: string }>("SELECT question_id::text AS id FROM exam_schedule_custom_questions WHERE run_id=$1::bigint ORDER BY position", [run.id])
         : await client.query<{ id: string }>("SELECT question_id::text AS id FROM exam_test_questions WHERE exam_test_id=$1::bigint ORDER BY position", [test.id]);
@@ -214,6 +228,8 @@ export async function startExamAttempt(runId: string, rawCode: unknown, retakeId
     } else {
       const initialPermission = await findRetake(client, retakeId, run.id, participant.identityId);
       if (!initialPermission) throw new StartProblem(RETAKE_ERROR);
+      if (!initialPermission.consumedId && finalState.finalized) throw new StartProblem(FINAL_ERROR);
+      if (!initialPermission.consumedId && finalState.revision !== expectedFinalRevision) throw new StartProblem(FINAL_CHANGED);
       // Admin memakai urutan kunci yang sama: attempt dahulu, kemudian izin.
       const previous = await client.query<{ id: string; completed: boolean; remaining: boolean; questionCount: number }>(
         `SELECT id::text AS id,completed_at IS NOT NULL AS completed,deadline>clock_timestamp() AS remaining,

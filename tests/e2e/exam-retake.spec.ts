@@ -208,7 +208,8 @@ test("permintaan mulai menang atas pencabutan yang bersamaan; tidak ada izin gan
     await waitForBlocked(client, "FROM exam_retake_permissions");
     await rowFor(admin, f, 1).getByRole("button", { name: /Cabut izin ulang/ }).click();
     const dialog = admin.getByRole("dialog", { name: "Cabut izin mengulang?" }); await dialog.getByRole("button", { name: "Ya, cabut izin" }).click();
-    await waitForBlocked(client, "FROM exam_attempts");
+    // Mulai kini memegang kunci tes/identitas sebelum attempt dan izin.
+    await waitForBlocked(client, "nusacbt:final-grade:");
     await blocker.query("COMMIT");
     await expect(page).toHaveURL(/\/pengerjaan\/[1-9]\d*/); const secondId = page.url().match(/\/pengerjaan\/([1-9]\d*)/)![1];
     await expect(dialog.getByRole("alert")).toContainText("sudah dicabut atau digunakan");

@@ -183,6 +183,6 @@ try {
   assert.equal(migrateAgain.status, 0, `Migrasi ulang gagal: ${migrateAgain.stderr}`);
   assert.deepEqual((await client.query("SELECT visible_to_participants AS visible,revision::text AS revision FROM exam_score_category_visibility WHERE kind='regular'")).rows, [{ visible: false, revision: "4" }]);
   assert.deepEqual(await snapshot(tables, sequences), before);
-  console.log(`Migrasi 020 → terbaru (021–022): ${tables.length} tabel dan ${sequences.length} sequence lama identik; sesi, sandi, token, jawaban, nilai, gambar, dan kebijakan lama tetap utuh.`);
+  console.log(`Migrasi 020 → terbaru (021–023): ${tables.length} tabel dan ${sequences.length} sequence lama identik; sesi, sandi, token, jawaban, nilai, gambar, dan kebijakan lama tetap utuh.`);
   console.log("Ketiga kategori dibuka secara default termasuk hasil lama; constraint dan pengulangan yang tidak me-reset kebijakan diuji.");
 } finally { key.fill(0); tokenKey.fill(0); await client.end().catch(() => {}); }

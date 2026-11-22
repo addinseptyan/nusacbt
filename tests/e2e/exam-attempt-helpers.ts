@@ -55,6 +55,9 @@ export async function seedAttemptToken(client: pg.Client, f: AttemptFixture, sco
 
 export async function cleanupAttemptFixture(client: pg.Client, f: AttemptFixture) {
   const periods = [f.login.periodA, f.login.periodB];
+  await client.query("DELETE FROM exam_final_grade_operations WHERE exam_test_id IN (SELECT id FROM exam_tests WHERE period_id=ANY($1::bigint[]))", [periods]);
+  await client.query("DELETE FROM exam_final_grade_state WHERE period_id=ANY($1::bigint[])", [periods]);
+  await client.query("DELETE FROM exam_final_grade_settings WHERE exam_test_id IN (SELECT id FROM exam_tests WHERE period_id=ANY($1::bigint[]))", [periods]);
   await client.query("DELETE FROM exam_retake_operations WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE period_id=ANY($1::bigint[]))", [periods]);
   await client.query("DELETE FROM exam_retake_permissions WHERE run_id IN (SELECT id FROM exam_schedule_runs WHERE period_id=ANY($1::bigint[]))", [periods]);
   await client.query("DELETE FROM exam_attempt_questions WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE period_id=ANY($1::bigint[]))", [periods]);
