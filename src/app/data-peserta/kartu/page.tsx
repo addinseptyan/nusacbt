@@ -5,7 +5,7 @@ import { CircleAlert, IdCard } from "lucide-react";
 import { CardManager } from "@/app/data-peserta/kartu/card-manager";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { requireAdmin } from "@/lib/admin-auth";
-import { CardPageSessionExpired, loadParticipantCardPage } from "@/lib/participant-card-data";
+import { CardPageSessionExpired, CardPeriodChanged, loadParticipantCardPage } from "@/lib/participant-card-data";
 import { parseCardFilters } from "@/lib/participant-card-filter.mjs";
 import type { CardPageData } from "@/lib/participant-card-types";
 import "./card-print.css";
@@ -33,9 +33,10 @@ export default async function ParticipantCardsPage({ searchParams }: { searchPar
   try { data = await loadParticipantCardPage(parsed.filters, parsed.page); }
   catch (error) {
     if (error instanceof CardPageSessionExpired) redirect("/login");
+    if (error instanceof CardPeriodChanged) return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Cetak Kartu Peserta</h1><Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Periode login berubah</AlertTitle><AlertDescription>Muat ulang untuk memakai periode login aktif. <Link href="/data-peserta/kartu" className="underline">Buka kartu</Link>.</AlertDescription></Alert></div>;
     return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Cetak Kartu Peserta</h1>
       <Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Data kartu belum dapat dimuat</AlertTitle>
-        <AlertDescription>Periksa PostgreSQL dan migrasi sampai 023, lalu muat ulang halaman.</AlertDescription></Alert></div>;
+        <AlertDescription>Periksa PostgreSQL dan migrasi sampai 024, lalu muat ulang halaman.</AlertDescription></Alert></div>;
   }
   // Data baru tidak boleh mewarisi pilihan lama secara diam-diam.
   const managerKey = JSON.stringify([data.filters, data.page, data.rows.map((row) => row.candidate?.token ?? row.studentId)]);

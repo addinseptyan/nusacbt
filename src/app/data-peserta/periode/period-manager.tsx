@@ -31,8 +31,10 @@ function PeriodEditor({
   period,
   open,
   onOpenChange,
+  years,
 }: {
   period: ExamPeriod | null;
+  years: Array<{ id: string; name: string }>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -49,7 +51,7 @@ function PeriodEditor({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    if (period) formData.set("id", period.id);
+    if (period) { formData.set("id", period.id); formData.set("expectedRevision", period.revision); }
     setError("");
     startTransition(async () => {
       try {
@@ -76,6 +78,11 @@ function PeriodEditor({
         </DialogHeader>
         <form key={period?.id ?? "baru"} onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error && <Alert variant="destructive" role="alert"><Info className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
+          <div className="space-y-2">
+            <label htmlFor="period-year" className="text-sm font-semibold">Tahun ajaran <span className="text-destructive">*</span></label>
+            {period?.yearId ? <><input type="hidden" name="yearId" value={period.yearId} /><p id="period-year" className="rounded-xl border p-3 text-sm">{period.yearName}</p></> : <select id="period-year" name="yearId" required disabled={pending} defaultValue="" className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="">Pilih tahun ajaran</option>{years.map((year) => <option key={year.id} value={year.id}>{year.name}</option>)}</select>}
+            {period && !period.yearId && <p className="text-xs text-amber-700 dark:text-amber-300">Periode lama belum dipetakan. Siswa aktif periode akan ditambahkan ke tahun ini; konflik kelas/status harus diperiksa dahulu.</p>}
+          </div>
           <div className="space-y-2">
             <label htmlFor="period-name" className="text-sm font-semibold">Nama periode <span className="text-destructive">*</span></label>
             <Input id="period-name" name="name" maxLength={100} defaultValue={period?.name ?? ""} placeholder="Contoh: Ujian Semester Ganjil" required disabled={pending} className="h-11 rounded-xl" />
@@ -186,7 +193,7 @@ function LoginPeriodDialog({ target, activePeriodId, activeRevision, onClose }: 
   </Dialog>;
 }
 
-export function PeriodManager({ periods, activePeriodId, activeRevision }: { periods: ExamPeriod[]; activePeriodId: string | null; activeRevision: string }) {
+export function PeriodManager({ periods, years, activeYearId, activePeriodId, activeRevision }: { periods: ExamPeriod[]; years: Array<{ id: string; name: string }>; activeYearId: string | null; activePeriodId: string | null; activeRevision: string }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<ExamPeriod | null>(null);
   const [deleting, setDeleting] = useState<ExamPeriod | null>(null);
@@ -208,7 +215,7 @@ export function PeriodManager({ periods, activePeriodId, activeRevision }: { per
       <Alert className="mb-6 max-w-4xl rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
         <Info className="size-4 text-[#727fc8] dark:text-indigo-300" />
         <AlertTitle className="text-[12px] font-bold">Identitas peserta per periode</AlertTitle>
-        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Identitas dan sandi tetap terpisah menurut periode. Admin memilih satu periode untuk login peserta; tanggal periode tidak mengubah pilihan ini otomatis.</AlertDescription>
+        <AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Siswa dikelola per tahun ajaran, sedangkan identitas dan sandi tetap per periode. Login hanya dapat diaktifkan untuk periode pada tahun aktif.</AlertDescription>
       </Alert>
 
       <Card className="mb-6 flex flex-col gap-4 rounded-[18px] p-5 ring-1 ring-border sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -220,7 +227,7 @@ export function PeriodManager({ periods, activePeriodId, activeRevision }: { per
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border p-5 sm:px-6">
           <div>
             <div className="flex items-center gap-2.5"><h2 className="text-[15px] font-bold">Daftar periode</h2><Badge variant="secondary" className="rounded-full text-[10px]">{periods.length} periode</Badge></div>
-            <p className="mt-1 text-[12px] text-muted-foreground">Tambah dan kelola rentang periode ujian.</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Tambah periode pada tahun ajaran yang sudah dibuat. Periode lama perlu dipetakan secara eksplisit.</p>
           </div>
           <Button onClick={openCreate} className="h-10 rounded-xl px-4 font-semibold"><Plus className="size-4" /> Tambah periode</Button>
         </div>
@@ -237,14 +244,14 @@ export function PeriodManager({ periods, activePeriodId, activeRevision }: { per
               <li key={period.id} className="flex flex-col gap-4 p-5 sm:px-6 lg:flex-row lg:items-center lg:gap-6">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><CalendarDays className="size-[18px]" /></span>
-                  <div className="min-w-0"><h3 className="break-words text-[13px] font-bold">{period.name}</h3>{period.id === activePeriodId ? <Badge variant="secondary" className="mt-1 rounded-full text-[10px]">Login aktif</Badge> : <p className="mt-1 text-[11px] text-muted-foreground">Periode ujian</p>}</div>
+                  <div className="min-w-0"><h3 className="break-words text-[13px] font-bold">{period.name}</h3>{period.id === activePeriodId ? <Badge variant="secondary" className="mt-1 rounded-full text-[10px]">Login aktif</Badge> : <p className="mt-1 text-[11px] text-muted-foreground">{period.yearName ?? "Belum dipetakan ke tahun ajaran"}</p>}</div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-[12px] sm:max-w-md lg:w-80 lg:shrink-0">
                   <div><p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Mulai</p><p className="mt-1 font-medium">{formatDate(period.startDate)}</p></div>
                   <div><p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Akhir</p><p className="mt-1 font-medium">{period.endDate ? formatDate(period.endDate) : "Tidak ditentukan"}</p></div>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
-                  {period.id !== activePeriodId && <Button variant="outline" size="sm" aria-label={`Aktifkan login ${period.name}`} onClick={() => setLoginChoice({ target: period })} className="rounded-lg"><LogIn className="size-3.5" /> Aktifkan login</Button>}
+                  {period.id !== activePeriodId && <Button variant="outline" size="sm" disabled={!period.yearId || period.yearId !== activeYearId} title={period.yearId !== activeYearId ? "Aktifkan tahun ajaran terkait terlebih dahulu" : undefined} aria-label={`Aktifkan login ${period.name}`} onClick={() => setLoginChoice({ target: period })} className="rounded-lg"><LogIn className="size-3.5" /> Aktifkan login</Button>}
                   <Button variant="outline" size="sm" aria-label={`Ubah periode ${period.name}`} onClick={() => openEdit(period)} className="rounded-lg"><Pencil className="size-3.5" /> Ubah</Button>
                   <Button variant="outline" size="sm" aria-label={`Hapus periode ${period.name}`} onClick={() => setDeleting(period)} className="rounded-lg text-destructive hover:text-destructive"><Trash2 className="size-3.5" /> Hapus</Button>
                 </div>
@@ -253,7 +260,7 @@ export function PeriodManager({ periods, activePeriodId, activeRevision }: { per
           </ul>
         )}
       </Card>
-      <PeriodEditor period={editing} open={editorOpen} onOpenChange={setEditorOpen} />
+      <PeriodEditor period={editing} years={years} open={editorOpen} onOpenChange={setEditorOpen} />
       <DeletePeriodDialog period={deleting} onClose={() => setDeleting(null)} />
       {loginChoice && <LoginPeriodDialog target={loginChoice.target} activePeriodId={activePeriodId} activeRevision={activeRevision} onClose={() => setLoginChoice(null)} />}
     </>

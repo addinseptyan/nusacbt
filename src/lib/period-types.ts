@@ -4,4 +4,6 @@ export type ExamPeriod = {
   startDate: string;
   endDate: string | null;
   revision: string;
+  yearId: string | null;
+  yearName: string | null;
 };

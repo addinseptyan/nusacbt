@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { PoolClient } from "pg";
 
 import { requireAdmin } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
@@ -77,112 +76,13 @@ export async function deleteStudent(formData: FormData): Promise<ActionResult> {
   return { ok: true, message: "Siswa berhasil dihapus." };
 }
 
-export async function savePlacement(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const studentId = validDataId(formData.get("studentId"));
-  const periodId = validDataId(formData.get("periodId"));
-  const classId = validDataId(formData.get("classId"));
-  const rawExpected = formData.get("expectedPlacementId");
-  const expectedId = rawExpected === "" ? null : validDataId(rawExpected);
-  if (!studentId) return { ok: false, error: "Identitas siswa tidak valid." };
-  if (!periodId) return { ok: false, error: "Pilih periode yang valid." };
-  if (!classId) return { ok: false, error: "Pilih kelas yang valid." };
-  if (rawExpected === null || (rawExpected !== "" && !expectedId)) return { ok: false, error: "Data penempatan tidak valid. Muat ulang halaman." };
-
-  let client: PoolClient | undefined;
-  try {
-    client = await getPostgresPool().connect();
-    await client.query("BEGIN");
-    // Kunci siswa agar perubahan penempatan pada siswa yang sama tidak saling menimpa.
-    const student = await client.query("SELECT id FROM school_students WHERE id = $1::bigint FOR UPDATE", [studentId]);
-    if (!student.rowCount) {
-      await client.query("ROLLBACK");
-      return { ok: false, error: "Siswa tidak ditemukan atau sudah dihapus." };
-    }
-    const period = await client.query("SELECT id FROM exam_periods WHERE id = $1::bigint FOR KEY SHARE", [periodId]);
-    if (!period.rowCount) {
-      await client.query("ROLLBACK");
-      return { ok: false, error: "Periode tidak ditemukan atau sudah dihapus. Muat ulang daftar." };
-    }
-    // Lindungi nama kelas yang disalin dari perubahan bersamaan ketika penempatan dibuat.
-    const schoolClass = await client.query<{ label: string }>(
-      `SELECT c.level || ' ' || m.name AS label
-       FROM school_classes c JOIN school_majors m ON m.id = c.major_id
-       WHERE c.id = $1::bigint FOR SHARE OF c, m`,
-      [classId],
-    );
-    if (!schoolClass.rowCount) {
-      await client.query("ROLLBACK");
-      return { ok: false, error: "Kelas tidak ditemukan atau sudah dihapus. Muat ulang daftar." };
-    }
-    const existing = await client.query<{ id: string; classId: string }>(
-      `SELECT id::text AS id, class_id::text AS "classId" FROM student_class_placements
-       WHERE student_id = $1::bigint AND period_id = $2::bigint AND ended_at IS NULL FOR UPDATE`,
-      [studentId, periodId],
-    );
-    const active = existing.rows[0];
-    if ((active?.id ?? null) !== expectedId) {
-      await client.query("ROLLBACK");
-      return { ok: false, error: "Penempatan berubah di sesi lain. Muat ulang daftar sebelum mencoba lagi." };
-    }
-    if (active?.classId === classId) {
-      await client.query("COMMIT");
-      return { ok: true, message: "Penempatan sudah sesuai. Riwayat kelas tetap tersimpan." };
-    }
-    if (active) {
-      await client.query("UPDATE student_class_placements SET ended_at = GREATEST(clock_timestamp(), started_at) WHERE id = $1::bigint", [active.id]);
-    }
-    await client.query(
-      `INSERT INTO student_class_placements (student_id, period_id, class_id, class_name_snapshot, started_at)
-       VALUES ($1::bigint, $2::bigint, $3::bigint, $4, clock_timestamp())`,
-      [studentId, periodId, classId, schoolClass.rows[0].label],
-    );
-    await client.query("COMMIT");
-  } catch (error) {
-    if (client) await client.query("ROLLBACK").catch(() => {});
-    if (hasSqlState(error, "23505") && hasConstraint(error, "student_class_placements_one_active_idx")) {
-      return { ok: false, error: "Penempatan berubah di sesi lain. Muat ulang daftar sebelum mencoba lagi." };
-    }
-    if (hasSqlState(error, "23503")) return { ok: false, error: "Siswa, periode, atau kelas tidak ditemukan. Muat ulang daftar." };
-    return { ok: false, error: "Hasil penyimpanan belum dapat dipastikan. Periksa koneksi, lalu muat ulang daftar sebelum mencoba lagi." };
-  } finally {
-    client?.release();
-  }
-  revalidatePath("/data-peserta/siswa");
-  return { ok: true, message: "Penempatan disimpan; riwayat sebelumnya tetap terjaga." };
+// Penempatan kini bersumber dari roster tahun ajaran. Aksi lama yang mungkin
+// masih terbuka di tab lain ditolak agar tidak membuat kelas per periode berbeda.
+export async function savePlacement(_formData: FormData): Promise<ActionResult> {
+  void _formData; await requireAdmin();
+  return { ok: false, error: "Penempatan sekarang dikelola berdasarkan tahun ajaran. Muat ulang Data Siswa." };
 }
-
-export async function endPlacement(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
-  const studentId = validDataId(formData.get("studentId"));
-  const placementId = validDataId(formData.get("placementId"));
-  if (!studentId || !placementId) return { ok: false, error: "Identitas penempatan tidak valid." };
-
-  let client: PoolClient | undefined;
-  try {
-    client = await getPostgresPool().connect();
-    await client.query("BEGIN");
-    const student = await client.query("SELECT id FROM school_students WHERE id = $1::bigint FOR UPDATE", [studentId]);
-    if (!student.rowCount) {
-      await client.query("ROLLBACK");
-      return { ok: false, error: "Siswa tidak ditemukan atau sudah dihapus." };
-    }
-    const result = await client.query(
-      `UPDATE student_class_placements SET ended_at = GREATEST(clock_timestamp(), started_at)
-       WHERE id = $1::bigint AND student_id = $2::bigint AND ended_at IS NULL RETURNING id`,
-      [placementId, studentId],
-    );
-    if (!result.rowCount) {
-      await client.query("ROLLBACK");
-      return { ok: false, error: "Penempatan sudah berubah atau sudah diakhiri. Muat ulang daftar." };
-    }
-    await client.query("COMMIT");
-  } catch {
-    if (client) await client.query("ROLLBACK").catch(() => {});
-    return { ok: false, error: "Hasil perubahan belum dapat dipastikan. Periksa koneksi, lalu muat ulang daftar sebelum mencoba lagi." };
-  } finally {
-    client?.release();
-  }
-  revalidatePath("/data-peserta/siswa");
-  return { ok: true, message: "Penempatan diakhiri; riwayatnya tetap tersimpan." };
+export async function endPlacement(_formData: FormData): Promise<ActionResult> {
+  void _formData; await requireAdmin();
+  return { ok: false, error: "Status siswa sekarang dikelola berdasarkan tahun ajaran. Muat ulang Data Siswa." };
 }

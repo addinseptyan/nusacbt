@@ -1,75 +1,43 @@
 import { CircleAlert, UsersRound } from "lucide-react";
-
-import { StudentManager } from "@/app/data-peserta/siswa/student-manager";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { requireAdmin } from "@/lib/admin-auth";
+import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
-import type { PlacementClass, PlacementPeriod, Student, StudentPlacement } from "@/lib/student-types";
+import type { Student } from "@/lib/student-types";
+import { YearStudentManager, type YearEnrollment } from "./year-student-manager";
 
 export const metadata = { title: "Data Siswa — NusaCBT" };
+export const dynamic = "force-dynamic";
 
-export default async function StudentsPage() {
+type Search = { tahun?: string | string[] };
+export default async function StudentsPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requireAdmin();
-  let students: Student[];
-  let periods: PlacementPeriod[];
-  let classes: PlacementClass[];
-  let placements: StudentPlacement[];
+  let years: Array<{ id: string; name: string }>; let activeYearId: string | null; let selectedYearId: string | null;
+  let classes: Array<{ id: string; label: string }>; let students: Student[]; let enrollments: YearEnrollment[];
   try {
-    const [studentResult, periodResult, classResult, placementResult] = await Promise.all([
-      getPostgresPool().query<Student>(
-        `SELECT id::text AS id, name, nisn,
-          to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
-         FROM school_students ORDER BY lower(name), nisn, id`,
-      ),
-      getPostgresPool().query<PlacementPeriod>(
-        `SELECT id::text AS id, name, to_char(start_date, 'YYYY-MM-DD') AS "startDate"
-         FROM exam_periods ORDER BY start_date DESC, id DESC`,
-      ),
-      getPostgresPool().query<PlacementClass>(
-        `SELECT c.id::text AS id, c.level || ' ' || m.name AS label
-         FROM school_classes c JOIN school_majors m ON m.id = c.major_id
-         ORDER BY c.level, lower(btrim(m.name)), c.id`,
-      ),
-      getPostgresPool().query<StudentPlacement>(
-        `SELECT p.id::text AS id, p.student_id::text AS "studentId", p.period_id::text AS "periodId",
-          ep.name AS "periodName", to_char(ep.start_date, 'YYYY-MM-DD') AS "periodStart",
-          p.class_id::text AS "classId", p.class_name_snapshot AS "classNameSnapshot",
-          to_char(p.started_at AT TIME ZONE 'UTC', 'DD/MM/YYYY HH24:MI') || ' UTC' AS "startedLabel",
-          CASE WHEN p.ended_at IS NULL THEN NULL
-            ELSE to_char(p.ended_at AT TIME ZONE 'UTC', 'DD/MM/YYYY HH24:MI') || ' UTC' END AS "endedLabel"
-         FROM student_class_placements p JOIN exam_periods ep ON ep.id = p.period_id
-         ORDER BY ep.start_date DESC, p.started_at DESC, p.id DESC`,
-      ),
+    const input = (await searchParams).tahun;
+    if (input !== undefined && !validDataId(input)) throw new Error("Tahun tidak valid.");
+    const pool = getPostgresPool();
+    const [ys, setting, cs, ss] = await Promise.all([
+      pool.query<{ id: string; name: string }>("SELECT id::text AS id,name FROM academic_years ORDER BY name DESC,id DESC"),
+      pool.query<{ id: string | null }>('SELECT active_year_id::text AS id FROM academic_year_settings WHERE id=1'),
+      pool.query<{ id: string; label: string }>("SELECT c.id::text AS id,c.level || ' ' || m.name AS label FROM school_classes c JOIN school_majors m ON m.id=c.major_id ORDER BY c.level,lower(m.name),c.id"),
+      pool.query<Student>(`SELECT id::text AS id,name,nisn,to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version FROM school_students ORDER BY lower(name),nisn,id`),
     ]);
-    students = studentResult.rows;
-    periods = periodResult.rows;
-    classes = classResult.rows;
-    placements = placementResult.rows;
+    years = ys.rows; activeYearId = setting.rows[0]?.id ?? null; classes = cs.rows; students = ss.rows;
+    selectedYearId = typeof input === "string" ? input : activeYearId;
+    if (selectedYearId && !years.some((y) => y.id === selectedYearId)) throw new Error("Tahun tidak ditemukan.");
+    enrollments = selectedYearId ? (await pool.query<YearEnrollment>(
+      `SELECT e.id::text AS id,e.student_id::text AS "studentId",e.class_id::text AS "classId",e.class_name_snapshot AS "className",
+        e.status,e.transition,e.xmin::text AS revision,s.name,s.nisn,
+        to_char(s.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "studentVersion"
+       FROM academic_year_enrollments e JOIN school_students s ON s.id=e.student_id
+       WHERE e.academic_year_id=$1::bigint ORDER BY lower(s.name),s.nisn,s.id`, [selectedYearId],
+    )).rows : [];
   } catch {
-    return (
-      <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9">
-        <p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data peserta</p>
-        <h1 className="mt-2 text-[29px] font-bold tracking-tight">Data Siswa</h1>
-        <Alert variant="destructive" className="mt-6 max-w-2xl">
-          <CircleAlert className="size-4" />
-          <AlertTitle>Data siswa belum dapat dimuat</AlertTitle>
-          <AlertDescription>Pastikan PostgreSQL berjalan dan migrasi terbaru telah dijalankan dengan <code>npm run db:migrate</code>.</AlertDescription>
-        </Alert>
-      </div>
-    );
+    return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Data Siswa</h1><Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Data siswa belum dapat dimuat</AlertTitle><AlertDescription>Periksa tahun ajaran, PostgreSQL dan migrasi terbaru.</AlertDescription></Alert></div>;
   }
-
-  return (
-    <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9">
-      <div className="mb-6 flex items-start gap-3">
-        <span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><UsersRound className="size-5" /></span>
-        <div>
-          <p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data peserta</p>
-          <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Data Siswa</h1>
-          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">Kelola siswa dan penempatan kelas pada setiap periode ujian.</p>
-        </div>
-      </div>
-      <StudentManager students={students} periods={periods} classes={classes} placements={placements} />
-    </div>
-  );
+  return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9"><div className="mb-6 flex items-start gap-3"><span className="flex size-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><UsersRound className="size-5" /></span><div><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data peserta</p><h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Data Siswa</h1><p className="mt-2 text-[13px] text-muted-foreground">Kelola siswa dan kelas berdasarkan tahun ajaran.</p></div></div>
+    <YearStudentManager years={years} selectedYearId={selectedYearId} activeYearId={activeYearId} classes={classes} students={students} enrollments={enrollments} />
+  </div>;
 }

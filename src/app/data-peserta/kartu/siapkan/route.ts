@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       return reply(400, { ok: false, error: "Permintaan kartu tidak valid." });
     }
     const params = new URLSearchParams(body.filters);
-    if ([...params.keys()].some((key) => !["periode", "kelas", "tes", "kategori", "siswa"].includes(key))) {
+    if ([...params.keys()].some((key) => !["periode", "kelas", "siswa"].includes(key))) {
       return reply(400, { ok: false, error: "Filter kartu tidak valid." });
     }
     const parsed = parseCardFilters(params);

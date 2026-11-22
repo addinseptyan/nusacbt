@@ -15,35 +15,48 @@ function newNisn() {
 }
 async function seedSchool(client: pg.Client, suffix: string) {
   const major = `IM${suffix}`;
+  const yearA = `Tahun Impor A ${suffix}`;
+  const yearB = `Tahun Impor B ${suffix}`;
   const periodA = `Periode Impor A ${suffix}`;
   const periodB = `Periode Impor B ${suffix}`;
   const majorId = (await client.query("INSERT INTO school_majors(name) VALUES($1) RETURNING id", [major])).rows[0].id;
   const classes = await client.query<{ id: string; level: string }>(
     "INSERT INTO school_classes(level, major_id) VALUES ('X', $1), ('XI', $1) RETURNING id::text AS id, level", [majorId],
   );
+  const years = await client.query<{ id: string; name: string }>(
+    "INSERT INTO academic_years(name) VALUES ($1),($2) RETURNING id::text AS id, name", [yearA, yearB],
+  );
+  const yearId = (name: string) => years.rows.find((item) => item.name === name)!.id;
   const periods = await client.query<{ id: string; name: string }>(
-    "INSERT INTO exam_periods(name, start_date) VALUES ($1, DATE '2026-01-01'),($2, DATE '2026-07-01') RETURNING id::text AS id, name", [periodA, periodB],
+    "INSERT INTO exam_periods(name, start_date, academic_year_id) VALUES ($1, DATE '2026-01-01', $3),($2, DATE '2026-07-01', $4) RETURNING id::text AS id, name",
+    [periodA, periodB, yearId(yearA), yearId(yearB)],
   );
   return {
-    major, periodA, periodB,
+    major, yearA, yearB, periodA, periodB,
     classId: (level: string) => classes.rows.find((item) => item.level === level)!.id,
+    yearId,
     periodId: (name: string) => periods.rows.find((item) => item.name === name)!.id,
   };
 }
-async function cleanup(client: pg.Client, nisns: string[], major: string, periods: string[]) {
+async function cleanup(client: pg.Client, nisns: string[], major: string, periods: string[], years: string[]) {
   await client.query(
     `DELETE FROM student_class_placements WHERE student_id IN (SELECT id FROM school_students WHERE nisn = ANY($1::text[]))
      OR period_id IN (SELECT id FROM exam_periods WHERE name = ANY($2::text[]))`, [nisns, periods],
+  );
+  await client.query(
+    `DELETE FROM academic_year_enrollments WHERE student_id IN (SELECT id FROM school_students WHERE nisn = ANY($1::text[]))
+     OR academic_year_id IN (SELECT id FROM academic_years WHERE name = ANY($2::text[]))`, [nisns, years],
   );
   await client.query("DELETE FROM school_students WHERE nisn = ANY($1::text[])", [nisns]);
   await client.query("DELETE FROM school_classes WHERE major_id IN (SELECT id FROM school_majors WHERE name=$1)", [major]);
   await client.query("DELETE FROM school_majors WHERE name=$1", [major]);
   await client.query("DELETE FROM exam_periods WHERE name=ANY($1::text[])", [periods]);
+  await client.query("DELETE FROM academic_years WHERE name=ANY($1::text[])", [years]);
 }
-async function prepareImport(page: Page, period: string, buffer: Buffer) {
+async function prepareImport(page: Page, year: string, buffer: Buffer) {
   await page.goto("/data-peserta/import");
-  await page.getByRole("combobox", { name: "Periode" }).click();
-  await page.getByRole("option", { name: period }).click();
+  await page.getByRole("combobox", { name: "Tahun ajaran" }).click();
+  await page.getByRole("option", { name: year }).click();
   await page.getByLabel("File Excel").setInputFiles({ name: "peserta-fiktif.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
   await page.getByRole("button", { name: "Periksa pratinjau" }).click();
   await expect(page.getByRole("heading", { name: "Hasil pratinjau" })).toBeVisible();
@@ -71,6 +84,11 @@ test("impor memperlihatkan rencana, mempertahankan siswa dan riwayat lama, serta
     );
     const existingId = (nisn: string) => existing.rows.find((row) => row.nisn === nisn)!.id;
     await client.query(
+      `INSERT INTO academic_year_enrollments(academic_year_id,student_id,class_id,class_name_snapshot,status)
+       VALUES ($1,$2,$3,$4,'active'),($5,$6,$3,$4,'active')`,
+      [fixture.yearId(fixture.yearB), existingId(nisns[1]), fixture.classId("X"), `X ${fixture.major}`, fixture.yearId(fixture.yearA), existingId(nisns[2])],
+    );
+    await client.query(
       `INSERT INTO student_class_placements(student_id,period_id,class_id,class_name_snapshot)
        VALUES ($1,$2,$3,$4),($5,$6,$3,$4)`,
       [existingId(nisns[1]), fixture.periodId(fixture.periodB), fixture.classId("X"), `X ${fixture.major}`, existingId(nisns[2]), fixture.periodId(fixture.periodA)],
@@ -82,7 +100,7 @@ test("impor memperlihatkan rencana, mempertahankan siswa dan riwayat lama, serta
       { cells: [3, "SS".repeat(51), nisns[2], `X ${fixture.major}`] },
     ] });
     await loginAsAdmin(page);
-    await prepareImport(page, fixture.periodA, workbook);
+    await prepareImport(page, fixture.yearA, workbook);
     await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText("Siswa baru");
     await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText(`BARU ÉKA ${suffix.toUpperCase()}`);
     await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText(`Lama Lintas ${suffix}`);
@@ -95,6 +113,16 @@ test("impor memperlihatkan rencana, mempertahankan siswa dan riwayat lama, serta
     expect((await client.query("SELECT name,nisn FROM school_students WHERE nisn=$1", [nisns[0]])).rows).toEqual([{ name: `BARU ÉKA ${suffix.toUpperCase()}`, nisn: nisns[0] }]);
     const after = await client.query("SELECT id::text,name,nisn,updated_at::text FROM school_students WHERE nisn=ANY($1::text[]) ORDER BY nisn", [[nisns[1], nisns[2]]]);
     expect(after.rows).toEqual(before.rows);
+    const enrollments = await client.query(
+      `SELECT s.nisn, e.academic_year_id::text AS year_id, e.class_name_snapshot, e.status
+       FROM academic_year_enrollments e JOIN school_students s ON s.id=e.student_id
+       WHERE s.nisn=ANY($1::text[]) ORDER BY s.nisn,e.id`, [nisns],
+    );
+    expect(enrollments.rows).toHaveLength(4);
+    expect(enrollments.rows.filter((row) => row.nisn === nisns[1])).toEqual([
+      { nisn: nisns[1], year_id: fixture.yearId(fixture.yearB), class_name_snapshot: `X ${fixture.major}`, status: "active" },
+      { nisn: nisns[1], year_id: fixture.yearId(fixture.yearA), class_name_snapshot: `XI ${fixture.major}`, status: "active" },
+    ]);
     const placements = await client.query(
       `SELECT s.nisn, p.period_id::text, p.class_name_snapshot, p.ended_at IS NULL AS active
        FROM student_class_placements p JOIN school_students s ON s.id=p.student_id
@@ -110,9 +138,10 @@ test("impor memperlihatkan rencana, mempertahankan siswa dan riwayat lama, serta
     await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText("Sudah sesuai");
     await confirmSave(page);
     await expect(page.getByRole("status")).toContainText("0 siswa baru dan 0 penempatan baru disimpan; 3 baris sudah sesuai");
+    expect((await client.query("SELECT count(*)::int AS n FROM academic_year_enrollments e JOIN school_students s ON s.id=e.student_id WHERE s.nisn=ANY($1::text[])", [nisns])).rows[0].n).toBe(4);
     expect((await client.query("SELECT count(*)::int AS n FROM student_class_placements p JOIN school_students s ON s.id=p.student_id WHERE s.nisn=ANY($1::text[])", [nisns])).rows[0].n).toBe(4);
   } finally {
-    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB]);
+    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
     await client.end();
   }
 });
@@ -120,12 +149,17 @@ test("impor memperlihatkan rencana, mempertahankan siswa dan riwayat lama, serta
 test("kesalahan dan konflik ditampilkan bersama tanpa menyimpan satu pun baris", async ({ page }) => {
   test.setTimeout(60_000);
   const suffix = randomBytes(5).toString("hex");
-  const nisns = [newNisn(), newNisn(), newNisn(), newNisn()];
+  const nisns = [newNisn(), newNisn(), newNisn(), newNisn(), newNisn()];
   const client = testDatabase();
   await client.connect();
   const fixture = await seedSchool(client, suffix);
   try {
     const studentId = (await client.query("INSERT INTO school_students(name,nisn) VALUES ($1,$2) RETURNING id", [`Nama Lama ${suffix}`, nisns[3]])).rows[0].id;
+    const gradId = (await client.query("INSERT INTO school_students(name,nisn) VALUES ($1,$2) RETURNING id", [`SUDAH LULUS ${suffix}`, nisns[4]])).rows[0].id;
+    await client.query(
+      "INSERT INTO academic_year_enrollments(academic_year_id,student_id,class_id,class_name_snapshot,status) VALUES ($1,$2,$3,$4,'active'),($1,$5,$3,$4,'graduated')",
+      [fixture.yearId(fixture.yearA), studentId, fixture.classId("X"), `X ${fixture.major}`, gradId],
+    );
     await client.query("INSERT INTO student_class_placements(student_id,period_id,class_id,class_name_snapshot) VALUES ($1,$2,$3,$4)", [studentId, fixture.periodId(fixture.periodA), fixture.classId("X"), `X ${fixture.major}`]);
     const workbook = makeImportWorkbook({ rows: [
       { cells: [1, `Valid ${suffix}`, nisns[0], `X ${fixture.major}`] },
@@ -134,20 +168,23 @@ test("kesalahan dan konflik ditampilkan bersama tanpa menyimpan satu pun baris",
       { cells: [4, `Angka ${suffix}`, 1234567890, `X ${fixture.major}`] },
       { cells: [5, `Nama Beda ${suffix}`, nisns[3], `XI ${fixture.major}`] },
       { cells: [6, `Kelas Salah ${suffix}`, nisns[2], "X TIDAKADA"] },
+      { cells: [7, `SUDAH LULUS ${suffix}`, nisns[4], `X ${fixture.major}`] },
     ] });
     await loginAsAdmin(page);
-    await prepareImport(page, fixture.periodA, workbook);
+    await prepareImport(page, fixture.yearA, workbook);
     const list = page.getByRole("list", { name: "Hasil pratinjau impor" });
     await expect(list).toContainText("NISN muncul lebih dari sekali");
     await expect(list).toContainText("NISN harus disimpan sebagai teks");
     await expect(list).toContainText("Nama berbeda dengan data siswa");
-    await expect(list).toContainText("Kelas aktif di periode ini");
+    await expect(list).toContainText("Kelas aktif pada tahun ajaran ini");
     await expect(list).toContainText("Kelas tidak ditemukan");
+    await expect(list).toContainText("sudah berstatus lulus/keluar pada tahun ini");
     await expect(page.getByRole("button", { name: "Simpan hasil impor" })).toBeDisabled();
-    expect((await client.query("SELECT nisn,name FROM school_students WHERE nisn=ANY($1::text[])", [nisns])).rows).toEqual([{ nisn: nisns[3], name: `Nama Lama ${suffix}` }]);
+    expect((await client.query("SELECT nisn,name FROM school_students WHERE nisn=ANY($1::text[]) ORDER BY nisn", [[nisns[3], nisns[4]]])).rows.map((r) => r.name)).toContain(`Nama Lama ${suffix}`);
+    expect((await client.query("SELECT count(*)::int AS n FROM academic_year_enrollments WHERE student_id=$1", [studentId])).rows[0].n).toBe(1);
     expect((await client.query("SELECT count(*)::int AS n FROM student_class_placements WHERE student_id=$1", [studentId])).rows[0].n).toBe(1);
   } finally {
-    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB]);
+    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
     await client.end();
   }
 });
@@ -165,14 +202,15 @@ test("pratinjau kedaluwarsa dibatalkan seluruhnya bila data siswa berubah", asyn
       { cells: [2, `Lama ${suffix}`, nisns[1], `X ${fixture.major}`] },
     ] });
     await loginAsAdmin(page);
-    await prepareImport(page, fixture.periodA, workbook);
+    await prepareImport(page, fixture.yearA, workbook);
     await client.query("UPDATE school_students SET name=$1, updated_at=updated_at+interval '1 second' WHERE nisn=$2", [`Perubahan lain ${suffix}`, nisns[1]]);
     await confirmSave(page);
     await expect(page.getByRole("alert").filter({ hasText: "Perlu diperiksa" })).toContainText("berubah sejak pratinjau");
     expect((await client.query("SELECT nisn,name FROM school_students WHERE nisn=ANY($1::text[])", [nisns])).rows).toEqual([{ nisn: nisns[1], name: `Perubahan lain ${suffix}` }]);
+    expect((await client.query("SELECT count(*)::int AS n FROM academic_year_enrollments WHERE academic_year_id=$1", [fixture.yearId(fixture.yearA)])).rows[0].n).toBe(0);
     expect((await client.query("SELECT count(*)::int AS n FROM student_class_placements WHERE period_id=$1", [fixture.periodId(fixture.periodA)])).rows[0].n).toBe(0);
   } finally {
-    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB]);
+    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
     await client.end();
   }
 });
@@ -193,15 +231,16 @@ test("kegagalan penempatan membatalkan siswa baru dalam transaksi yang sama", as
       { cells: [2, `Rollback B ${suffix}`, nisns[1], `X ${fixture.major}`] },
     ] });
     await loginAsAdmin(page);
-    await prepareImport(page, fixture.periodA, workbook);
+    await prepareImport(page, fixture.yearA, workbook);
     await confirmSave(page);
     await expect(page.getByRole("alert").filter({ hasText: "Perlu diperiksa" })).toContainText("belum dapat dipastikan");
     expect((await client.query("SELECT 1 FROM school_students WHERE nisn=ANY($1::text[])", [nisns])).rowCount).toBe(0);
+    expect((await client.query("SELECT 1 FROM academic_year_enrollments WHERE academic_year_id=$1", [fixture.yearId(fixture.yearA)])).rowCount).toBe(0);
     expect((await client.query("SELECT 1 FROM student_class_placements WHERE period_id=$1", [fixture.periodId(fixture.periodA)])).rowCount).toBe(0);
   } finally {
     await client.query(`DROP TRIGGER IF EXISTS ${fn} ON student_class_placements`);
     await client.query(`DROP FUNCTION IF EXISTS ${fn}()`);
-    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB]);
+    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
     await client.end();
   }
 });
@@ -219,15 +258,15 @@ test("perubahan penempatan setelah pratinjau tidak ditimpa oleh impor", async ({
       { cells: [2, `Lama ${suffix}`, nisns[1], `X ${fixture.major}`] },
     ] });
     await loginAsAdmin(page);
-    await prepareImport(page, fixture.periodA, workbook);
-    await client.query("INSERT INTO student_class_placements(student_id,period_id,class_id,class_name_snapshot) VALUES($1,$2,$3,$4)", [studentId, fixture.periodId(fixture.periodA), fixture.classId("XI"), `XI ${fixture.major}`]);
+    await prepareImport(page, fixture.yearA, workbook);
+    await client.query("INSERT INTO academic_year_enrollments(academic_year_id,student_id,class_id,class_name_snapshot,status) VALUES($1,$2,$3,$4,'active')", [fixture.yearId(fixture.yearA), studentId, fixture.classId("XI"), `XI ${fixture.major}`]);
     await confirmSave(page);
     await expect(page.getByRole("alert").filter({ hasText: "Perlu diperiksa" })).toContainText("berubah sejak pratinjau");
     expect((await client.query("SELECT 1 FROM school_students WHERE nisn=$1", [nisns[0]])).rowCount).toBe(0);
-    const placements = await client.query("SELECT class_id::text,ended_at FROM student_class_placements WHERE student_id=$1", [studentId]);
-    expect(placements.rows).toEqual([{ class_id: fixture.classId("XI"), ended_at: null }]);
+    const placements = await client.query("SELECT class_id::text,status FROM academic_year_enrollments WHERE student_id=$1", [studentId]);
+    expect(placements.rows).toEqual([{ class_id: fixture.classId("XI"), status: "active" }]);
   } finally {
-    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB]);
+    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
     await client.end();
   }
 });
@@ -248,8 +287,8 @@ test("dua impor bersamaan tidak membuat duplikat atau penyimpanan sebagian", asy
     ] });
     await loginAsAdmin(page);
     await loginAsAdmin(other);
-    await prepareImport(page, fixture.periodA, workbook);
-    await prepareImport(other, fixture.periodA, workbook);
+    await prepareImport(page, fixture.yearA, workbook);
+    await prepareImport(other, fixture.yearA, workbook);
     await page.getByRole("button", { name: "Simpan hasil impor" }).click();
     await other.getByRole("button", { name: "Simpan hasil impor" }).click();
     await Promise.all([
@@ -258,12 +297,14 @@ test("dua impor bersamaan tidak membuat duplikat atau penyimpanan sebagian", asy
     ]);
     await expect.poll(async () => [await page.getByRole("status").count(), await other.getByRole("status").count()].reduce((a, b) => a + b, 0)).toBe(1);
     await expect.poll(async () => [await page.getByRole("alert").filter({ hasText: "Perlu diperiksa" }).count(), await other.getByRole("alert").filter({ hasText: "Perlu diperiksa" }).count()].reduce((a, b) => a + b, 0)).toBe(1);
+    const enrolled = await client.query("SELECT s.nisn, count(e.id)::int AS n FROM school_students s LEFT JOIN academic_year_enrollments e ON e.student_id=s.id WHERE s.nisn=ANY($1::text[]) GROUP BY s.id ORDER BY s.nisn", [nisns]);
+    expect(enrolled.rows).toHaveLength(2);
+    expect(enrolled.rows.map((row) => row.n)).toEqual([1, 1]);
     const result = await client.query("SELECT s.nisn, count(p.id)::int AS n FROM school_students s LEFT JOIN student_class_placements p ON p.student_id=s.id AND p.ended_at IS NULL WHERE s.nisn=ANY($1::text[]) GROUP BY s.id ORDER BY s.nisn", [nisns]);
-    expect(result.rows).toHaveLength(2);
     expect(result.rows.map((row) => row.n)).toEqual([1, 1]);
   } finally {
     await otherContext.close();
-    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB]);
+    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
     await client.end();
   }
 });
@@ -280,8 +321,8 @@ test("impor memerlukan sesi aktif dan menolak Origin lain", async ({ page }) => 
     await expect(page).toHaveURL(/\/login/);
     await loginAsAdmin(page);
     await page.goto("/data-peserta/import");
-    await page.getByRole("combobox", { name: "Periode" }).click();
-    await page.getByRole("option", { name: fixture.periodA }).click();
+    await page.getByRole("combobox", { name: "Tahun ajaran" }).click();
+    await page.getByRole("option", { name: fixture.yearA }).click();
     const buffer = makeImportWorkbook({ rows: [{ cells: [1, `Otentikasi ${suffix}`, nisn, `X ${fixture.major}`] }] });
     await page.getByLabel("File Excel").setInputFiles({ name: "peserta.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
     // Chromium tidak menyediakan postDataBuffer untuk multipart berkas. Salin bentuk FormData
@@ -322,7 +363,7 @@ test("impor memerlukan sesi aktif dan menolak Origin lain", async ({ page }) => 
     await page.goto("/data-peserta/import");
     await expect(page).toHaveURL(/\/login/);
   } finally {
-    await cleanup(client, [nisn], fixture.major, [fixture.periodA, fixture.periodB]);
+    await cleanup(client, [nisn], fixture.major, [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
     await client.end();
   }
 });
@@ -339,16 +380,18 @@ test("batas 1.000 siswa dapat diperiksa dan disimpan dalam satu transaksi", asyn
     const workbook = makeImportWorkbook({ rows: nisns.map((nisn, index) => ({ cells: [index + 1, `Siswa Fiktif ${index + 1}`, nisn, `X ${fixture.major}`] })) });
     expect(workbook.length).toBeLessThan(512 * 1024);
     await loginAsAdmin(page);
-    await prepareImport(page, fixture.periodA, workbook);
+    await prepareImport(page, fixture.yearA, workbook);
     await expect(page.getByText("Menampilkan 1–25 dari 1000 baris")).toBeVisible();
     await page.getByRole("button", { name: "Berikutnya" }).click();
     await expect(page.getByText("Menampilkan 26–50 dari 1000 baris")).toBeVisible();
     await confirmSave(page);
     await expect(page.getByRole("status")).toContainText("1000 siswa baru dan 1000 penempatan baru disimpan");
+    const enrolled = await client.query("SELECT count(*)::int AS n FROM school_students s JOIN academic_year_enrollments e ON e.student_id=s.id WHERE s.nisn=ANY($1::text[])", [nisns]);
+    expect(enrolled.rows[0].n).toBe(1000);
     const result = await client.query("SELECT count(*)::int AS n FROM school_students s JOIN student_class_placements p ON p.student_id=s.id AND p.ended_at IS NULL WHERE s.nisn=ANY($1::text[])", [nisns]);
     expect(result.rows[0].n).toBe(1000);
   } finally {
-    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB]);
+    await cleanup(client, nisns, fixture.major, [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
     await client.end();
   }
 });
@@ -363,7 +406,7 @@ test.describe("impor pada layar kecil", () => {
     const fixture = await seedSchool(client, suffix);
     try {
       await loginAsAdmin(page);
-      await prepareImport(page, fixture.periodA, makeImportWorkbook({ rows: [{ cells: [1, `Siswa Mobile ${suffix}`, nisn, `X ${fixture.major}`] }] }));
+      await prepareImport(page, fixture.yearA, makeImportWorkbook({ rows: [{ cells: [1, `Siswa Mobile ${suffix}`, nisn, `X ${fixture.major}`] }] }));
       await expect(page.getByRole("list", { name: "Hasil pratinjau impor" })).toContainText(nisn);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
       await page.getByRole("button", { name: "Simpan hasil impor" }).click();
@@ -371,7 +414,7 @@ test.describe("impor pada layar kecil", () => {
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
       await page.getByRole("dialog").getByRole("button", { name: "Batal" }).click();
     } finally {
-      await cleanup(client, [nisn], fixture.major, [fixture.periodA, fixture.periodB]);
+      await cleanup(client, [nisn], fixture.major, [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
       await client.end();
     }
   });

@@ -129,3 +129,9 @@ jobs:
           PGDATABASE: nusacbt_upgrade_023_test
           NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_upgrade_023_test
         run: npm run test:upgrade-023
+      # Uji upgrade 023 -> 024 memakai skema sementara di dalam nusacbt_test lalu ROLLBACK.
+      - name: Uji upgrade 023 ke tahun ajaran
+        env:
+          PGDATABASE: nusacbt_test
+          NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_test
+        run: npm run test:upgrade-024

@@ -39,12 +39,13 @@ export const navigation: NavigationSection[] = [
     title: "Data Peserta",
     icon: UsersRound,
     pages: [
-      { title: "Periode Ujian", href: "/data-peserta/periode", description: "Atur periode sebagai dasar pengelolaan peserta dan ujian." },
+      { title: "Tahun Ajaran", href: "/data-peserta/tahun-ajaran", description: "Kelola tahun aktif dan perpindahan siswa." },
+      { title: "Periode Ujian", href: "/data-peserta/periode", description: "Kelola periode ujian di dalam tahun ajaran." },
       { title: "Kelas / Jurusan", href: "/data-peserta/kelas", description: "Kelola kelas, rombongan belajar, dan jurusan." },
-      { title: "Data Siswa", href: "/data-peserta/siswa", description: "Kelola data siswa dan penempatan kelas per periode." },
+      { title: "Data Siswa", href: "/data-peserta/siswa", description: "Kelola data siswa dan penempatan kelas per tahun ajaran." },
       { title: "Akun Peserta", href: "/data-peserta/akun", description: "Kelola identitas, sandi, dan penguncian login peserta per periode." },
-      { title: "Import Data Peserta", href: "/data-peserta/import", description: "Impor siswa dan penempatan per periode dari Excel dengan pratinjau.", template: { href: "/templates/template-peserta-nusacbt.xlsx", label: "Unduh template Excel", detail: "Berisi contoh kolom nomor, nama, NISN sebagai teks, dan kelas." } },
-      { title: "Cetak Kartu Peserta", href: "/data-peserta/kartu", description: "Siapkan kartu login berdasarkan siswa, rombel, atau kategori ujian." },
+      { title: "Import Data Peserta", href: "/data-peserta/import", description: "Impor siswa dan penempatan per tahun ajaran dari Excel dengan pratinjau.", template: { href: "/templates/template-peserta-nusacbt.xlsx", label: "Unduh template Excel", detail: "Berisi contoh kolom nomor, nama, NISN sebagai teks, dan kelas." } },
+      { title: "Cetak Kartu Peserta", href: "/data-peserta/kartu", description: "Siapkan kartu login berdasarkan siswa atau rombel pada periode login aktif." },
     ],
   },
   {
