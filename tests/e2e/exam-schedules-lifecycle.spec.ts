@@ -41,7 +41,7 @@ test("induk dan draf menjaga jumlah soal, durasi, periode; rilis dapat ditarik l
     const admin=(await client.query<{id:string}>("SELECT id::text AS id FROM admin_users WHERE username=$1",[process.env.TEST_ADMIN_USERNAME])).rows[0].id;
     const runs=(await client.query<{id:string;kind:string}>(`INSERT INTO exam_schedule_runs(exam_test_id,period_id,kind,label,starts_at,time_zone,duration_minutes,question_mode,created_by)
       VALUES($1,$2,'makeup','Susulan lifecycle',(date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Jakarta') +
-        CASE WHEN (clock_timestamp() AT TIME ZONE 'Asia/Jakarta')::time < time '12:00' THEN interval '18 hours' ELSE interval '0 hours' END) AT TIME ZONE 'Asia/Jakarta','WIB',60,'inherit',$3),
+        CASE WHEN (clock_timestamp() AT TIME ZONE 'Asia/Jakarta')::time < time '12:00' THEN interval '15 hours' ELSE interval '3 hours' END) AT TIME ZONE 'Asia/Jakarta','WIB',60,'inherit',$3),
         ($1,$2,'remedial','Remidi lifecycle','2040-02-02 00:00Z','WIB',45,'custom',$3)
       RETURNING id::text AS id,kind`,[exam,f.periodA,admin])).rows;
     const makeup=runs.find((r)=>r.kind==="makeup")!.id,remedial=runs.find((r)=>r.kind==="remedial")!.id;
