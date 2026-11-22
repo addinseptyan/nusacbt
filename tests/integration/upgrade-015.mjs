@@ -44,7 +44,8 @@ function encodeIdentifier(value) {
 async function snapshot(tables, sequences) {
   const result = {};
   for (const table of tables) {
-    const rows = await client.query(`SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb) AS rows FROM ${encodeIdentifier(table)} r`);
+    const object = table === "exam_periods" ? "(to_jsonb(r)-'academic_year_id')" : "to_jsonb(r)";
+    const rows = await client.query(`SELECT COALESCE(jsonb_agg(${object} ORDER BY ${object}::text),'[]'::jsonb) AS rows FROM ${encodeIdentifier(table)} r`);
     result[`table:${table}`] = createHash("sha256").update(JSON.stringify(rows.rows[0].rows)).digest("hex");
   }
   const states = (await client.query("SELECT sequencename,last_value FROM pg_sequences WHERE schemaname='public' ORDER BY sequencename")).rows;
@@ -134,7 +135,7 @@ try {
     await client.query("COMMIT");
   } catch (error) { await client.query("ROLLBACK").catch(() => {}); throw error; }
 
-  const tables = (await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name<>'nusacbt_schema_migrations' ORDER BY table_name")).rows.map((row) => row.table_name);
+  const tables = (await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name NOT IN ('nusacbt_schema_migrations','participant_sessions') ORDER BY table_name")).rows.map((row) => row.table_name);
   const sequences = (await client.query("SELECT sequencename FROM pg_sequences WHERE schemaname='public' ORDER BY sequencename")).rows.map((row) => row.sequencename);
   const before = await snapshot(tables, sequences);
   for (let run = 0; run < 2; run += 1) {
@@ -144,7 +145,8 @@ try {
   assert.deepEqual(await snapshot(tables, sequences), before);
   assert.equal((await client.query("SELECT count(*)::int AS n FROM nusacbt_schema_migrations")).rows[0].n, files.length);
   assert.deepEqual((await client.query("SELECT id,period_id FROM participant_login_settings")).rows, [{ id: 1, period_id: null }]);
-  assert.equal((await client.query("SELECT 1 FROM participant_sessions")).rowCount, 1); // Tidak dihapus selama migrasi.
+  assert.equal((await client.query("SELECT 1 FROM participant_sessions")).rowCount, 0); // Dihapus oleh migrasi 024 sampai periode dipetakan.
+  assert.equal((await client.query("SELECT 1 FROM exam_periods WHERE academic_year_id IS NOT NULL")).rowCount, 0);
   const old = (await client.query("SELECT password_hash AS hash,nonce,ciphertext,authentication_tag AS \"authenticationTag\" FROM participant_passwords WHERE participant_identity_id=42")).rows[0];
   assert.equal(await verifyPassword(vector.password, old.hash), true);
   assert.equal(decryptParticipantPassword(old, key, vectorFile.binding), vector.password);
@@ -154,7 +156,7 @@ try {
   assert.deepEqual(token.digest, digestSixDigitToken("654321", tokenKey));
   assert.equal((await client.query("SELECT prompt_text FROM question_bank")).rows[0].prompt_text, "ما قيمة √٤؟ 🧪");
   assert.equal((await client.query("SELECT count(*)::int AS n FROM exam_schedule_runs")).rows[0].n, 0);
-  console.log(`Migrasi 014 → terbaru (015–023) dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
+  console.log(`Migrasi 014 → terbaru (015–024) dua kali: ${tables.length} tabel lama dan ${sequences.length} sequence identik; sandi, token, Unicode dan binding terverifikasi.`);
 
   // Aplikasi baru menggunakan database upgrade dan file kunci fiktif terpisah.
   temp = await mkdtemp(join(tmpdir(), "nusacbt-upgrade-015-"));
@@ -174,10 +176,24 @@ try {
     const adminPage = await admin.newPage(); await adminPage.goto("/login");
     await adminPage.getByLabel("Username admin").fill(adminUsername); await adminPage.getByLabel("Kata sandi").fill(adminPassword);
     await adminPage.getByRole("button", { name: "Masuk ke panel admin" }).click();
-    await adminPage.waitForURL(/\/$/); await adminPage.goto("/data-peserta/periode");
+    await adminPage.waitForURL(/\/$/);
+    await adminPage.goto("/data-peserta/tahun-ajaran");
+    await adminPage.getByLabel("Tahun ajaran baru").fill("2025/2026");
+    await adminPage.getByRole("button", { name: "Tambah tahun" }).click();
+    await adminPage.getByRole("button", { name: "Aktifkan 2025/2026" }).click();
+    await adminPage.getByRole("dialog", { name: "Aktifkan 2025/2026?" }).getByRole("button", { name: "Ya, lanjutkan" }).click();
+    await adminPage.getByRole("dialog", { name: "Aktifkan 2025/2026?" }).waitFor({ state: "hidden" });
+    await adminPage.getByText("Aktif: 2025/2026").waitFor();
+    await adminPage.goto("/data-peserta/periode");
+    await adminPage.getByRole("button", { name: `Ubah periode ${periodName}` }).click();
+    const periodDialog = adminPage.getByRole("dialog", { name: "Ubah periode" });
+    await periodDialog.getByLabel(/Tahun ajaran/).selectOption({ label: "2025/2026" });
+    await periodDialog.getByRole("button", { name: "Simpan periode" }).click();
+    await periodDialog.waitFor({ state: "hidden" });
     await adminPage.getByRole("button", { name: `Aktifkan login ${periodName}` }).click();
     await adminPage.getByRole("dialog", { name: "Aktifkan periode login?" }).getByRole("button", { name: "Ya, aktifkan login" }).click();
     await adminPage.getByRole("dialog", { name: "Aktifkan periode login?" }).waitFor({ state: "hidden" });
+    await adminPage.getByText("Login aktif", { exact: true }).waitFor();
     assert.equal((await client.query("SELECT 1 FROM participant_sessions")).rowCount, 0);
     await page.goto("/peserta"); assert.match(page.url(), /\/peserta\/login\?sesi=berakhir$/); // Cookie lama tidak hidup kembali.
     await page.getByLabel("Username peserta").fill(username); await page.getByLabel("Kata sandi", { exact: true }).fill(vector.password);

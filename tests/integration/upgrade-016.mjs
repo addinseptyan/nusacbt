@@ -31,7 +31,8 @@ function identifier(value) {
 async function snapshot(tables, sequences) {
   const result = {};
   for (const table of tables) {
-    const rows = await client.query(`SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb) AS rows FROM ${identifier(table)} r`);
+    const object = table === "exam_periods" ? "(to_jsonb(r)-'academic_year_id')" : "to_jsonb(r)";
+    const rows = await client.query(`SELECT COALESCE(jsonb_agg(${object} ORDER BY ${object}::text),'[]'::jsonb) AS rows FROM ${identifier(table)} r`);
     result[`table:${table}`] = createHash("sha256").update(JSON.stringify(rows.rows[0].rows)).digest("hex");
   }
   const states = (await client.query("SELECT sequencename,last_value FROM pg_sequences WHERE schemaname='public' ORDER BY sequencename")).rows;
@@ -92,7 +93,7 @@ try {
     assert.deepEqual(sql, participantAttemptBucket(period, username.toLowerCase()));
   }
 
-  const tables = (await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name<>'nusacbt_schema_migrations' ORDER BY table_name")).rows.map((row) => row.table_name);
+  const tables = (await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name NOT IN ('nusacbt_schema_migrations','participant_login_settings','participant_sessions') ORDER BY table_name")).rows.map((row) => row.table_name);
   const sequences = (await client.query("SELECT sequencename FROM pg_sequences WHERE schemaname='public' ORDER BY sequencename")).rows.map((row) => row.sequencename);
   const before = await snapshot(tables, sequences);
   const history = (await client.query("SELECT version,checksum,applied_at FROM nusacbt_schema_migrations ORDER BY version")).rows;
@@ -108,8 +109,9 @@ try {
   const stored = (await client.query("SELECT password_hash AS hash,nonce,ciphertext,authentication_tag AS \"authenticationTag\" FROM participant_passwords WHERE participant_identity_id=42")).rows[0];
   assert.equal(await verifyPassword(vector.password, stored.hash), true);
   assert.equal(decryptParticipantPassword(stored, key, vectorFile.binding), vector.password);
-  assert.equal((await client.query("SELECT period_id::text FROM participant_login_settings WHERE id=1")).rows[0].period_id, "19");
-  assert.equal((await client.query("SELECT 1 FROM participant_sessions WHERE token_hash=$1", [participantSessionDigest(session)])).rowCount, 1);
+  assert.equal((await client.query("SELECT period_id FROM participant_login_settings WHERE id=1")).rows[0].period_id, null);
+  assert.equal((await client.query("SELECT 1 FROM participant_sessions WHERE token_hash=$1", [participantSessionDigest(session)])).rowCount, 0);
+  assert.equal((await client.query("SELECT 1 FROM exam_periods WHERE academic_year_id IS NOT NULL")).rowCount, 0);
   assert.equal((await client.query("SELECT attempts FROM participant_login_global_limit WHERE id=1")).rows[0].attempts, 73);
   assert.equal((await client.query("SELECT failed_attempts FROM participant_login_attempts WHERE bucket_hash=$1 AND locked_until>clock_timestamp()", [participantAttemptBucket("19", "mix.fiktif_042")])).rows[0].failed_attempts, 5);
 
