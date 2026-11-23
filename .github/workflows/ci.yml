@@ -135,3 +135,8 @@ jobs:
           PGDATABASE: nusacbt_test
           NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_test
         run: npm run test:upgrade-024
+      - name: Uji upgrade 024 ke pengaturan aplikasi
+        env:
+          PGDATABASE: nusacbt_test
+          NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_test
+        run: npm run test:upgrade-025

@@ -333,3 +333,64 @@ export function convertOmml(root) {
   const body = isMath(root, "oMathPara") ? xmlChildren(root, "oMath", OMML_NS).flatMap(contents) : contents(root);
   return sanitizeFormula(elem("math", body, isMath(root, "oMathPara") ? { display: "block" } : undefined));
 }
+
+function escapeXmlText(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const STYLE_MAP = { normal: "p", bold: "b", italic: "i", "bold-italic": "bi" };
+
+/** Convert a validated MathML formula tree to Word OMML (<m:oMath>...</m:oMath>). @param {unknown} tree @returns {string} */
+export function mathmlToOmml(tree) {
+  const safe = sanitizeFormula(tree);
+
+  /** @param {Formula} node @param {string | undefined} style @returns {string} */
+  function emit(node, style) {
+    if (TOKEN_TAGS.has(node.t)) {
+      const text = (node.c || []).filter((c) => typeof c === "string").join("");
+      if (!text) return "";
+      const nextStyle = STYLE_MAP[node.a?.mathvariant] || style;
+      const rPr = nextStyle ? `<m:rPr><m:sty m:val="${nextStyle}"/></m:rPr>` : "";
+      return `<m:r>${rPr}<m:t xml:space="preserve">${escapeXmlText(text)}</m:t></m:r>`;
+    }
+    if (node.t === "mspace") {
+      return '<m:r><m:t xml:space="preserve"> </m:t></m:r>';
+    }
+    const items = (node.c || []).filter((c) => typeof c !== "string");
+    if (node.t === "math" || node.t === "mrow") {
+      return items.map((item) => emit(item, style)).join("");
+    }
+    if (node.t === "mstyle") {
+      const nextStyle = STYLE_MAP[node.a?.mathvariant] || style;
+      return items.map((item) => emit(item, nextStyle)).join("");
+    }
+    if (node.t === "mfrac" && items.length === 2) {
+      const fPr = node.a?.linethickness === "0" ? '<m:fPr><m:type m:val="noBar"/></m:fPr>' : "";
+      return `<m:f>${fPr}<m:num>${emit(items[0], style)}</m:num><m:den>${emit(items[1], style)}</m:den></m:f>`;
+    }
+    if (node.t === "msqrt" && items.length >= 1) {
+      return `<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>${items.map((item) => emit(item, style)).join("")}</m:e></m:rad>`;
+    }
+    if (node.t === "mroot" && items.length === 2) {
+      return `<m:rad><m:deg>${emit(items[1], style)}</m:deg><m:e>${emit(items[0], style)}</m:e></m:rad>`;
+    }
+    if (node.t === "msub" && items.length === 2) {
+      return `<m:sSub><m:e>${emit(items[0], style)}</m:e><m:sub>${emit(items[1], style)}</m:sub></m:sSub>`;
+    }
+    if (node.t === "msup" && items.length === 2) {
+      return `<m:sSup><m:e>${emit(items[0], style)}</m:e><m:sup>${emit(items[1], style)}</m:sup></m:sSup>`;
+    }
+    if (node.t === "msubsup" && items.length === 3) {
+      return `<m:sSubSup><m:e>${emit(items[0], style)}</m:e><m:sub>${emit(items[1], style)}</m:sub><m:sup>${emit(items[2], style)}</m:sup></m:sSubSup>`;
+    }
+    const text = mathToText(node);
+    const rPr = style ? `<m:rPr><m:sty m:val="${style}"/></m:rPr>` : "";
+    return `<m:r>${rPr}<m:t xml:space="preserve">${escapeXmlText(text)}</m:t></m:r>`;
+  }
+
+  return `<m:oMath>${emit(safe, undefined)}</m:oMath>`;
+}
