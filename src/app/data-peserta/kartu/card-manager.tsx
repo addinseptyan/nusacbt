@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { ChevronLeft, ChevronRight, CircleAlert, Info, Printer, RefreshCw, ShieldAlert } from "lucide-react";
 
+import { useBranding } from "@/components/branding-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ function wipeVisibleSecrets() {
 }
 
 export function CardManager({ data }: { data: CardPageData }) {
+  const branding = useBranding();
   const { filters, selected, rows } = data;
   const [formClass, setFormClass] = useState(filters.classId ?? "");
   const [formStudent, setFormStudent] = useState(filters.student ?? "");
@@ -228,7 +230,25 @@ export function CardManager({ data }: { data: CardPageData }) {
           <div className="participant-card-preview-toolbar"><div><DialogPrimitive.Title>Pratinjau {preview.result.cards.length} kartu peserta</DialogPrimitive.Title><DialogPrimitive.Description>Disiapkan {preview.result.preparedAt.replace("T", " ").replace(/\.\d{3}Z$/, " UTC")}. {preview.includePassword ? "Sandi terlihat dan bersifat rahasia. " : "Sandi tidak disertakan. "}Pilih A4; gunakan Simpan sebagai PDF bila diperlukan. Pratinjau ditutup setelah dialog cetak atau lima menit.</DialogPrimitive.Description></div>
             <div className="participant-card-preview-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => invalidatePreview("Pratinjau ditutup dan dihapus dari halaman.")}>Tutup</Button><Button type="button" disabled={pending} onClick={() => void printCards()}><Printer className="size-4" /> {pending ? "Memeriksa..." : "Cetak / Simpan PDF"}</Button></div></div>
           <div className="participant-card-sheet-scroll"><p className="participant-card-print-blocked">Gunakan tombol Cetak / Simpan PDF pada pratinjau agar data peserta diperiksa kembali sebelum dicetak.</p><div className="participant-card-print-grid">{preview.result.cards.map((card, index) => <article className="participant-card-paper" data-testid="participant-card" key={`${card.nisn}-${index}`}>
-            <header className="participant-card-paper-head"><div className="participant-card-paper-brand">NusaCBT<small>PLATFORM UJIAN SEKOLAH</small></div><div className="participant-card-paper-label">Kartu<br />peserta</div></header>
+            {branding.hasLetterhead && (
+              <div className="participant-card-paper-letterhead">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/branding/letterhead?v=${branding.revision}`} alt="Kop surat sekolah" />
+              </div>
+            )}
+            <header className="participant-card-paper-head">
+              <div className="participant-card-paper-brand-wrap">
+                {branding.hasLogo && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={`/api/branding/logo?v=${branding.revision}`} alt={`Logo ${branding.schoolName || branding.appName}`} className="participant-card-paper-logo" />
+                )}
+                <div className="participant-card-paper-brand">
+                  {branding.schoolName || branding.appName}
+                  <small>{branding.schoolName ? `${branding.appName} · ${(branding.appDescription || "Platform ujian sekolah").toUpperCase()}` : (branding.appDescription || "PLATFORM UJIAN SEKOLAH").toUpperCase()}</small>
+                </div>
+              </div>
+              <div className="participant-card-paper-label">Kartu<br />peserta</div>
+            </header>
             <h3 dir="auto" className="participant-card-paper-name">{card.studentName}</h3>
             <dl className="participant-card-paper-data"><dt>Periode</dt><dd dir="auto">{preview.result.periodName}</dd><dt>NISN</dt><dd>{card.nisn}</dd><dt>Kelas</dt><dd dir="auto">{card.classLabel}</dd><dt>No. peserta</dt><dd>{card.participantNumber}</dd></dl>
             <div className="participant-card-paper-login"><div><span>USERNAME</span><strong dir="ltr">{card.username}</strong></div><div><span>SANDI</span>{preview.includePassword ? <strong dir="auto" data-participant-card-secret>{card.password}</strong> : <strong>Tidak disertakan</strong>}</div></div>

@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 test("dashboard menampilkan tujuh menu dan modul dapat dibuka", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Selamat datang di NusaCBT/ })).toBeVisible();
-  await expect(page.getByText("Anda sedang melihat pratinjau awal")).toBeVisible();
+  await expect(page.getByText("TERHUBUNG", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Dashboard", exact: true })).toBeVisible();
   for (const label of ["Data Modul", "Data Peserta", "Data Tes", "Laporan", "Tool", "Pengaturan"]) {
     await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
@@ -43,11 +43,11 @@ test("preferensi sistem lama menjadi terang dan tidak lagi mengikuti OS", async 
   await page.emulateMedia({ colorScheme: "light" }); await expect(page.locator("html")).toHaveClass(/\bdark\b/);
 });
 
-test("dialog menjelaskan batas pratinjau dan dapat ditutup", async ({ page }) => {
+test("dialog menjelaskan info sistem dan dapat ditutup", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Tentang tahap ini" }).click();
+  await page.getByRole("button", { name: "Info sistem" }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByText("Belum untuk ujian sungguhan")).toBeVisible();
+  await expect(dialog.getByText("Operasional aman")).toBeVisible();
   await dialog.getByRole("button", { name: "Mengerti" }).click();
   await expect(dialog).toBeHidden();
 });
