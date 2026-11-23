@@ -1,8 +1,9 @@
 import { CalendarDays, CircleAlert } from "lucide-react";
 
 import { PeriodManager } from "@/app/data-peserta/periode/period-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import type { ExamPeriod } from "@/lib/period-types";
 import { getPostgresPool } from "@/lib/postgres";
 
@@ -10,7 +11,8 @@ export const metadata = { title: "Periode Ujian — NusaCBT" };
 export const dynamic = "force-dynamic";
 
 export default async function PeriodPage() {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("periods.manage");
+  if (!allowed) return <AccessDenied section="Data peserta" title="Periode Ujian" />;
   let periods: ExamPeriod[]; let activePeriodId: string | null; let activeRevision: string; let activeYearId: string | null; let years: Array<{ id: string; name: string }>;
   try {
     // Baca pengaturan dan daftar dari snapshot yang sama, termasuk saat daftar kosong.

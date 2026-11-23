@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 
 import { getAdminSession, lockActiveAdminSession } from "@/lib/admin-auth";
+import { adminHasAnyPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import type { QuestionImageSlot } from "@/lib/question-types";
@@ -24,9 +25,13 @@ const securityHeaders = {
 export async function GET(request: Request, { params }: { params: Promise<{ id: string; slot: string }> }) {
   let client: PoolClient | undefined;
   try {
-    // Cepat menolak permintaan anonim. Pemeriksaan kedua di dalam transaksi
+    // Cepat menolak permintaan anonim/tanpa hak akses. Pemeriksaan kedua di dalam transaksi
     // menahan pencabutan sesi dan memeriksa masa berlakunya sebelum gambar dikirim.
-    if (!await getAdminSession()) return new Response(null, { status: 401, headers: securityHeaders });
+    const session = await getAdminSession();
+    if (!session) return new Response(null, { status: 401, headers: securityHeaders });
+    if (!adminHasAnyPermission(session, ["questions.manage", "exams.manage"])) {
+      return new Response(null, { status: 403, headers: securityHeaders });
+    }
     const { id: rawId, slot } = await params;
     const id = validDataId(rawId);
     const versions = new URL(request.url).searchParams.getAll("versi");
@@ -39,6 +44,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!admin) {
       await client.query("ROLLBACK");
       return new Response(null, { status: 401, headers: securityHeaders });
+    }
+    if (!adminHasAnyPermission(admin, ["questions.manage", "exams.manage"])) {
+      await client.query("ROLLBACK");
+      return new Response(null, { status: 403, headers: securityHeaders });
     }
     // Nama kolom hanya berasal dari whitelist, bukan masukan URL. Memeriksa
     // revisi mencegah gambar baru dipasangkan dengan teks soal yang sudah usang.

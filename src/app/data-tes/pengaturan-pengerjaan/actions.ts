@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { examAnswerRevision } from "@/lib/exam-attempt-validation.mjs";
 import { examSubmissionWindowMinutes } from "@/lib/exam-work-settings-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
@@ -12,7 +13,8 @@ export type WorkSettingState = { revision: string; message: string; ok?: boolean
 class SettingProblem extends Error { constructor(message: string, readonly reload = false) { super(message); } }
 
 export async function saveWorkSetting(previous: WorkSettingState, form: FormData): Promise<WorkSettingState> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("exam_controls.manage");
+  if (!allowed) return { revision: previous.revision, message: PERMISSION_DENIED_MESSAGE };
   if (!(form instanceof FormData) || ["minutes", "revision"].some((name) => form.getAll(name).length !== 1)) {
     return { revision: previous.revision, message: "Data pengaturan tidak valid. Muat ulang.", reload: true };
   }
@@ -24,6 +26,7 @@ export async function saveWorkSetting(previous: WorkSettingState, form: FormData
     client = await getPostgresPool().connect(); await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new SettingProblem("Sesi admin berakhir. Masuk kembali, lalu periksa pengaturan.", true);
+    if (!adminHasPermission(admin, "exam_controls.manage")) throw new SettingProblem(PERMISSION_DENIED_MESSAGE);
     const result = await client.query<{ minutes: number; revision: string }>(
       'SELECT submission_window_minutes AS minutes,revision::text AS revision FROM exam_work_settings WHERE id=1 FOR UPDATE',
     );

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import { normalizeQuestionImage, QUESTION_IMAGE_MAX_BYTES } from "@/lib/question-image.mjs";
@@ -128,6 +129,7 @@ async function applyQuestionMutation(mutation: { kind: "save"; id: string | null
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new QuestionProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    if (!adminHasPermission(admin, "questions.manage")) throw new QuestionProblem(PERMISSION_DENIED_MESSAGE);
     if (mutation.kind === "delete") {
       const deleted = await client.query("DELETE FROM question_bank WHERE id=$1::bigint AND xmin::text=$2 RETURNING id", [mutation.id, mutation.revision]);
       if (!deleted.rowCount) throw new QuestionProblem("Soal sudah berubah atau dihapus. Muat ulang daftar sebelum mencoba lagi.", true);
@@ -175,7 +177,8 @@ async function applyQuestionMutation(mutation: { kind: "save"; id: string | null
 }
 
 export async function saveQuestion(formData: FormData): Promise<QuestionActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("questions.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   // Jangan memilih diam-diam salah satu nilai apabila permintaan mengandung
   // lebih dari satu kategori, kunci, versi, teks, atau perubahan gambar.
   const fields = ["id", "revision", "topicId", "prompt", "prompt_rich", "correctOption",
@@ -215,7 +218,8 @@ export async function saveQuestion(formData: FormData): Promise<QuestionActionRe
 }
 
 export async function deleteQuestion(formData: FormData): Promise<QuestionActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("questions.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   if (formData.getAll("id").length !== 1 || formData.getAll("revision").length !== 1) {
     return { ok: false, error: "Identitas atau versi soal tidak valid. Muat ulang daftar.", reload: true };
   }

@@ -1,8 +1,9 @@
 import { CircleAlert, Settings2 } from "lucide-react";
 
 import { AppSettingsManager } from "@/app/pengaturan/aplikasi/app-settings-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { loadAdminAppSettings } from "@/lib/app-settings-service";
 import type { AdminAppSettings } from "@/lib/app-settings-types";
 
@@ -10,7 +11,10 @@ export const metadata = { title: "Pengaturan Aplikasi — NusaCBT" };
 export const dynamic = "force-dynamic";
 
 export default async function AppSettingsPage() {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("app_settings.manage");
+  if (!allowed) {
+    return <AccessDenied section="Pengaturan" title="Pengaturan Aplikasi" />;
+  }
   let settings: AdminAppSettings;
   try {
     settings = await loadAdminAppSettings();

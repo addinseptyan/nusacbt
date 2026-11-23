@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 import { loadDashboardSummary, type DashboardSummary } from "@/lib/dashboard-data";
 
@@ -32,7 +33,8 @@ export const dynamic = "force-dynamic";
 const cardClass = "rounded-[18px] bg-card ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]";
 
 export default async function DashboardPage() {
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const canManageAppSettings = adminHasPermission(admin, "app_settings.manage");
   const [branding, summaryResult] = await Promise.all([
     getPublicAppSettingsSafe(),
     loadDashboardSummary().then(
@@ -142,9 +144,11 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="h-10 rounded-xl bg-card px-4 font-semibold">
-            <Link href="/pengaturan/aplikasi" prefetch={false}><Settings2 className="size-4" /> Pengaturan aplikasi</Link>
-          </Button>
+          {canManageAppSettings && (
+            <Button asChild variant="outline" className="h-10 rounded-xl bg-card px-4 font-semibold">
+              <Link href="/pengaturan/aplikasi" prefetch={false}><Settings2 className="size-4" /> Pengaturan aplikasi</Link>
+            </Button>
+          )}
           <ProjectDialog />
         </div>
       </div>

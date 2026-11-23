@@ -3,11 +3,13 @@ import { ArrowDownToLine, ArrowLeft, Construction, Info } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/admin-auth";
+import { adminHasAnyPermission } from "@/lib/admin-permissions.mjs";
 import { findNavigationPage } from "@/lib/navigation";
 
 type PageProps = { params: Promise<{ slug: string[] }> };
@@ -19,10 +21,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function ModulePage({ params }: PageProps) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const { slug } = await params;
   const page = findNavigationPage(`/${slug.join("/")}`);
   if (!page) notFound();
+  if (page.permissions && !adminHasAnyPermission(admin, page.permissions)) {
+    return <AccessDenied section={page.section} title={page.title} />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-8 sm:px-7 lg:px-9">

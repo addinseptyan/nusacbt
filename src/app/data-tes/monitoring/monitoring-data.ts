@@ -1,6 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { adminHasAnyPermission, adminHasPermission } from "@/lib/admin-permissions.mjs";
 import type { MonitoringFilters, MonitoringKind, MonitoringStatus } from "@/lib/monitoring-filter.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import { loadFinalGradeData, type FinalGradeData } from "./final-grade-data";
@@ -8,6 +9,7 @@ import { loadFinalGradeData, type FinalGradeData } from "./final-grade-data";
 export const MONITOR_PAGE_SIZE = 30;
 export const MONITOR_MAX_EXPORT = 5000;
 export class MonitoringSessionExpired extends Error {}
+export class MonitoringPermissionDenied extends Error {}
 export class MonitoringSizeExceeded extends Error {}
 export type MonitoringRow = {
   id: string | null; studentId: string; runId: string; student: string; number: string | null; nisn: string; className: string;
@@ -94,8 +96,16 @@ export async function withMonitoringSnapshot<T>(f: MonitoringFilters, page: numb
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     const admin = await lockActiveAdminSession(client); if (!admin) throw new MonitoringSessionExpired();
+    const canRead = exporting
+      ? adminHasPermission(admin, "monitoring.view")
+      : adminHasAnyPermission(admin, ["monitoring.view", "grading_overrides.manage"]);
+    if (!canRead) throw new MonitoringPermissionDenied();
     const data = await read(client,f,page,finalPage,exporting); const result = render(data);
     const active = await lockActiveAdminSession(client); if (!active || active.id !== admin.id) throw new MonitoringSessionExpired();
+    const stillAllowed = exporting
+      ? adminHasPermission(active, "monitoring.view")
+      : adminHasAnyPermission(active, ["monitoring.view", "grading_overrides.manage"]);
+    if (!stillAllowed) throw new MonitoringPermissionDenied();
     await client.query("COMMIT"); return result;
   } catch (error) { await client.query("ROLLBACK").catch(() => {}); throw error; } finally { client.release(); }
 }

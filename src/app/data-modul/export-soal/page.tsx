@@ -1,8 +1,9 @@
 import { CircleAlert, FileOutput } from "lucide-react";
 
 import { ExportWordManager, type ExportQuestionSummary } from "@/app/data-modul/export-soal/export-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import type { QuestionLetter, QuestionTopicOption } from "@/lib/question-types";
 
@@ -15,7 +16,10 @@ function singleParam(val: string | string[] | undefined): string {
 }
 
 export default async function ExportWordPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("questions.export");
+  if (!allowed) {
+    return <AccessDenied section="Data modul" title="Export Soal Word" />;
+  }
   const params = await searchParams;
   const rawTopic = singleParam(params.topik);
   const topicId = /^[1-9]\d{0,18}$/.test(rawTopic) ? rawTopic : "";

@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { getAdminSessionSafe } from "@/lib/admin-auth";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 
 export const dynamic = "force-dynamic";
@@ -19,14 +20,19 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const branding = await getPublicAppSettingsSafe();
+  const [branding, adminUser] = await Promise.all([
+    getPublicAppSettingsSafe(),
+    getAdminSessionSafe(),
+  ]);
 
   return (
     <html lang="id" data-palette={branding.colorPalette} suppressHydrationWarning>
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           <TooltipProvider>
-            <AppShell branding={branding}>{children}</AppShell>
+            <AppShell branding={branding} adminUser={adminUser}>
+              {children}
+            </AppShell>
             <Toaster richColors position="bottom-right" />
           </TooltipProvider>
         </ThemeProvider>

@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { CalendarClock, ChartNoAxesCombined, CircleAlert } from "lucide-react";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { AccessDenied } from "@/components/access-denied";
+import { lockActiveAdminSession, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasAnyPermission, adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { loadSessionPlanWithClient, ScheduleSessionExpired } from "@/lib/exam-session-service";
 import type { ExamRun, SessionPlanPage, SessionStudent } from "@/lib/exam-session-types";
@@ -16,6 +18,7 @@ import { ExamRunManager } from "./run-manager";
 
 export const metadata = { title: "Pelaksanaan Tes — NusaCBT", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
+class SchedulePermissionDenied extends Error {}
 type QuestionRow = {
   id:string; revision:string; topicId:string; topicName:string; prompt:string; promptRich:unknown|null; hasPromptImage:boolean;
   a:string;b:string;c:string;d:string;e:string;richA:unknown|null;richB:unknown|null;richC:unknown|null;richD:unknown|null;richE:unknown|null;
@@ -23,7 +26,10 @@ type QuestionRow = {
 };
 
 export default async function ExamRunPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ atur?: string | string[] }> }) {
-  await requireAdmin(); const id=validDataId((await params).id);
+  const { admin: currentAdmin, allowed } = await requireAdminAccess("exams.manage");
+  if (!allowed) return <AccessDenied section="Data tes" title="Pelaksanaan Tes" />;
+  const canOpenMonitoring = adminHasAnyPermission(currentAdmin, ["monitoring.view", "grading_overrides.manage"]);
+  const id=validDataId((await params).id);
   if (!id) return <Failure message="Identitas tes tidak valid." />;
   const initialRunId = validDataId((await searchParams).atur);
   let client: PoolClient | undefined; let test: ExamTest | undefined; let plan: SessionPlanPage | undefined; let runs: ExamRun[]=[]; let questions: Question[]=[];
@@ -31,6 +37,7 @@ export default async function ExamRunPage({ params, searchParams }: { params: Pr
     client=await getPostgresPool().connect(); await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     const admin=await lockActiveAdminSession(client);
     if (!admin) throw new ScheduleSessionExpired();
+    if (!adminHasPermission(admin, "exams.manage")) throw new SchedulePermissionDenied();
     test=(await client.query<ExamTest>(
       `SELECT e.id::text AS id,e.xmin::text AS revision,e.name,e.period_id::text AS "periodId",p.name AS "periodName",
         to_char(e.starts_at AT TIME ZONE (CASE e.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END),'YYYY-MM-DD"T"HH24:MI') AS "startLocal",
@@ -82,9 +89,10 @@ export default async function ExamRunPage({ params, searchParams }: { params: Pr
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(()=>{});
     if (error instanceof ScheduleSessionExpired) redirect("/login");
+    if (error instanceof SchedulePermissionDenied) return <AccessDenied section="Data tes" title="Pelaksanaan Tes" />;
     return <Failure message="Pastikan database berjalan dan migrasi terbaru telah diterapkan." />;
   } finally { client?.release(); }
   if (!test || !plan) return <Failure message="Tes tidak ditemukan atau telah dihapus." />;
-  return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9"><div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><CalendarClock className="size-5" /></span><div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 break-words text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Pelaksanaan Tes</h1><p className="mt-2 break-words text-[13px] leading-6 text-muted-foreground">{test.name} · {test.periodName}</p></div></div><Button asChild variant="outline" className="rounded-xl"><Link href={`/data-tes/monitoring?tes=${test.id}`}><ChartNoAxesCombined className="size-4" /> Hasil / Monitoring</Link></Button></div><ExamRunManager key={`${test.id}-${test.revision}`} test={test} plan={plan} runs={runs} questions={questions} initialRunId={initialRunId} /></div>;
+  return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9"><div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><CalendarClock className="size-5" /></span><div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 break-words text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Pelaksanaan Tes</h1><p className="mt-2 break-words text-[13px] leading-6 text-muted-foreground">{test.name} · {test.periodName}</p></div></div>{canOpenMonitoring && <Button asChild variant="outline" className="rounded-xl"><Link href={`/data-tes/monitoring?tes=${test.id}`}><ChartNoAxesCombined className="size-4" /> Hasil / Monitoring</Link></Button>}</div><ExamRunManager key={`${test.id}-${test.revision}`} test={test} plan={plan} runs={runs} questions={questions} initialRunId={initialRunId} /></div>;
 }
 function Failure({message}:{message:string}) { return <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9"><h1 className="text-[29px] font-bold">Pelaksanaan Tes</h1><Alert variant="destructive" role="alert" className="mt-6 max-w-2xl"><CircleAlert className="size-4" /><AlertTitle>Pelaksanaan belum dapat dimuat</AlertTitle><AlertDescription>{message} <Link href="/data-tes/daftar" className="underline">Kembali ke Daftar Tes</Link>.</AlertDescription></Alert></div>; }

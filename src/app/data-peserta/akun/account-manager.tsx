@@ -55,7 +55,15 @@ function UnlockDialog({ selection, period, onClose }: { selection: UnlockSelecti
   </Dialog>;
 }
 
-export function AccountManager({ data }: { data: AccountPageData }) {
+export function AccountManager({
+  data,
+  canManageAccounts,
+  canManagePasswords,
+}: {
+  data: AccountPageData;
+  canManageAccounts: boolean;
+  canManagePasswords: boolean;
+}) {
   const router = useRouter();
   const [changing, startChanging] = useTransition();
   const [query, setQuery] = useState("");
@@ -87,7 +95,10 @@ export function AccountManager({ data }: { data: AccountPageData }) {
     <Card className="gap-0 rounded-[18px] p-5 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)] sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="w-full min-w-0 max-w-lg space-y-2"><label htmlFor="account-period" className="text-sm font-semibold">Periode <span className="text-destructive">*</span></label><Select value={selected?.id ?? ""} onValueChange={(value) => startChanging(() => router.push(`/data-peserta/akun?periode=${encodeURIComponent(value)}`))} disabled={changing || identities.periods.length === 0}><SelectTrigger id="account-period" aria-required="true" className="h-11! w-full min-w-0 rounded-xl"><SelectValue placeholder="Pilih periode" /></SelectTrigger><SelectContent position="popper">{identities.periods.map((period) => <SelectItem key={period.id} value={period.id}>{period.name} · {period.startDate}</SelectItem>)}</SelectContent></Select></div>
-        <div className="flex w-full flex-wrap gap-2 sm:w-auto"><Button type="button" variant="outline" disabled={changing || !identities.batch} onClick={() => setIdentityGenerateOpen(true)} className="grow rounded-xl sm:grow-0"><Sparkles className="size-4" /> Buat identitas otomatis</Button><Button type="button" disabled={changing || !passwords.batch || !ready} onClick={() => setPasswordGenerateOpen(true)} className="grow rounded-xl sm:grow-0"><KeyRound className="size-4" /> Buat sandi otomatis</Button></div>
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          {canManageAccounts && <Button type="button" variant="outline" disabled={changing || !identities.batch} onClick={() => setIdentityGenerateOpen(true)} className="grow rounded-xl sm:grow-0"><Sparkles className="size-4" /> Buat identitas otomatis</Button>}
+          {canManagePasswords && <Button type="button" disabled={changing || !passwords.batch || !ready} onClick={() => setPasswordGenerateOpen(true)} className="grow rounded-xl sm:grow-0"><KeyRound className="size-4" /> Buat sandi otomatis</Button>}
+        </div>
       </div>
       <p className="mt-3 text-[11px] leading-5 text-muted-foreground">{identities.periods.length ? "Pilih periode untuk menampilkan akun. Pembuatan otomatis hanya mengisi data yang belum ada dan tidak dipengaruhi pencarian." : <>Buat <Link href="/data-peserta/periode" className="font-semibold text-primary underline">periode</Link>, lalu atur <Link href="/data-peserta/siswa" className="font-semibold text-primary underline">penempatan siswa</Link>.</>}</p>
     </Card>
@@ -111,9 +122,9 @@ export function AccountManager({ data }: { data: AccountPageData }) {
               {!row.placementId && <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Identitas dan sandi tetap disimpan. Tempatkan kembali siswa untuk mengubahnya atau masuk.</p>}
             </div></div>
             <div className="flex w-full flex-wrap gap-2 lg:max-w-[440px] lg:justify-end">
-              <Button type="button" variant="outline" size="sm" disabled={changing || !row.placementId} aria-label={`${row.identityId ? "Ubah" : "Atur"} identitas ${row.studentName} ${row.nisn}`} onClick={() => setIdentityEditing(row)} className="grow rounded-lg sm:grow-0"><Pencil className="size-3.5" /> {row.identityId ? "Ubah identitas" : "Atur identitas"}</Button>
-              {password && <><Button type="button" variant="outline" size="sm" disabled={changing || !password.placementId || !password.passwordVersion || !ready} aria-label={`Lihat sandi ${row.studentName} ${row.nisn}`} onClick={() => setRevealing(password)} className="grow rounded-lg sm:grow-0"><Eye className="size-3.5" /> Lihat sandi</Button><Button type="button" variant="outline" size="sm" disabled={changing || !password.placementId || !ready} aria-label={`${password.passwordVersion ? "Reset" : "Buat"} sandi ${row.studentName} ${row.nisn}`} onClick={() => setPasswordEditing(password)} className="grow rounded-lg sm:grow-0"><KeyRound className="size-3.5" /> {password.passwordVersion ? "Reset sandi" : "Buat sandi"}</Button></>}
-              {lock && <Button type="button" variant="outline" size="sm" disabled={changing} aria-label={`Buka kunci login ${row.studentName} ${row.nisn}`} onClick={() => setUnlocking({ row, lock })} className="grow rounded-lg text-amber-800 sm:grow-0 dark:text-amber-300"><UnlockKeyhole className="size-3.5" /> Buka kunci login</Button>}
+              {canManageAccounts && <Button type="button" variant="outline" size="sm" disabled={changing || !row.placementId} aria-label={`${row.identityId ? "Ubah" : "Atur"} identitas ${row.studentName} ${row.nisn}`} onClick={() => setIdentityEditing(row)} className="grow rounded-lg sm:grow-0"><Pencil className="size-3.5" /> {row.identityId ? "Ubah identitas" : "Atur identitas"}</Button>}
+              {canManagePasswords && password && <><Button type="button" variant="outline" size="sm" disabled={changing || !password.placementId || !password.passwordVersion || !ready} aria-label={`Lihat sandi ${row.studentName} ${row.nisn}`} onClick={() => setRevealing(password)} className="grow rounded-lg sm:grow-0"><Eye className="size-3.5" /> Lihat sandi</Button><Button type="button" variant="outline" size="sm" disabled={changing || !password.placementId || !ready} aria-label={`${password.passwordVersion ? "Reset" : "Buat"} sandi ${row.studentName} ${row.nisn}`} onClick={() => setPasswordEditing(password)} className="grow rounded-lg sm:grow-0"><KeyRound className="size-3.5" /> {password.passwordVersion ? "Reset sandi" : "Buat sandi"}</Button></>}
+              {canManageAccounts && lock && <Button type="button" variant="outline" size="sm" disabled={changing} aria-label={`Buka kunci login ${row.studentName} ${row.nisn}`} onClick={() => setUnlocking({ row, lock })} className="grow rounded-lg text-amber-800 sm:grow-0 dark:text-amber-300"><UnlockKeyhole className="size-3.5" /> Buka kunci login</Button>}
             </div>
           </li>;
         })}</ul>}

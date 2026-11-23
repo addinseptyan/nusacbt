@@ -3,6 +3,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { calculateFinalGrade, type FinalGradeMethod } from "@/lib/exam-final-grade.mjs";
 import { gradeExamCounts } from "@/lib/exam-grading.mjs";
 import { getPostgresPool } from "@/lib/postgres";
@@ -12,6 +13,7 @@ export const REPORT_PAGE_SIZE = 25;
 export const REPORT_MAX_EXPORT_PAIRS = 2000;
 export const REPORT_MAX_ATTEMPTS = 10_000;
 export class ReportSessionExpired extends Error {}
+export class ReportPermissionDenied extends Error {}
 export class ReportSizeExceeded extends Error {}
 
 const zones: Record<ReportZone, string> = { WIB: "Asia/Jakarta", WITA: "Asia/Makassar", WIT: "Asia/Jayapura" };
@@ -152,10 +154,12 @@ export async function withReportSnapshot<T>(
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new ReportSessionExpired();
+    if (!adminHasPermission(admin, "reports.view")) throw new ReportPermissionDenied();
     const data = await readReport(client, filters, page, exporting);
     const result = await render(data);
     const active = await lockActiveAdminSession(client);
     if (!active || active.id !== admin.id) throw new ReportSessionExpired();
+    if (!adminHasPermission(active, "reports.view")) throw new ReportPermissionDenied();
     await client.query("COMMIT");
     return result;
   } catch (error) {

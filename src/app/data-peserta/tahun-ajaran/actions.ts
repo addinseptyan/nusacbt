@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { AcademicYearProblem, lockAcademicMutation, syncYearPlacements } from "@/lib/academic-year-service";
 import { parseRolloverChoices, suggestedPromotion, validateAcademicYearName, type AcademicClass } from "@/lib/academic-year.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
@@ -24,7 +25,8 @@ function updatePaths() {
 }
 
 export async function createAcademicYear(form: FormData): Promise<Result> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("academic_years.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const parsed = validateAcademicYearName(form.get("name"));
   if (!parsed.ok) return parsed;
   const client = await getPostgresPool().connect();
@@ -32,6 +34,7 @@ export async function createAcademicYear(form: FormData): Promise<Result> {
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new AcademicYearProblem("Sesi admin berakhir. Masuk kembali.");
+    if (!adminHasPermission(admin, "academic_years.manage")) throw new AcademicYearProblem(PERMISSION_DENIED_MESSAGE);
     await lockAcademicMutation(client);
     await client.query("INSERT INTO academic_years(name) VALUES($1)", [parsed.value]);
     const active = await lockActiveAdminSession(client);
@@ -44,7 +47,8 @@ export async function createAcademicYear(form: FormData): Promise<Result> {
 
 /** Perubahan tahun, pemutusan periode login dan pencabutan sesi bersifat atomik. */
 export async function setActiveAcademicYear(form: FormData): Promise<Result> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("academic_years.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const targetRaw = form.get("yearId"); const expectedRaw = form.get("expectedYearId"); const revision = form.get("revision");
   const target = targetRaw === "" ? null : validDataId(targetRaw);
   const expected = expectedRaw === "" ? null : validDataId(expectedRaw);
@@ -57,6 +61,7 @@ export async function setActiveAcademicYear(form: FormData): Promise<Result> {
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new AcademicYearProblem("Sesi admin berakhir. Masuk kembali.");
+    if (!adminHasPermission(admin, "academic_years.manage")) throw new AcademicYearProblem(PERMISSION_DENIED_MESSAGE);
     await lockAcademicMutation(client);
     const current = await client.query<{ id: string | null; revision: string }>(
       'SELECT active_year_id::text AS id,revision::text AS revision FROM academic_year_settings WHERE id=1 FOR UPDATE',
@@ -109,7 +114,8 @@ async function rolloverPlan(client: PoolClient, sourceId: string, targetId: stri
 }
 
 export async function previewAcademicRollover(source: string, target: string): Promise<{ ok: true; preview: RolloverPreview } | { ok: false; error: string }> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("academic_years.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const sourceId = validDataId(source); const targetId = validDataId(target);
   if (!sourceId || !targetId || sourceId === targetId) return { ok: false, error: "Pilih tahun asal dan tujuan yang berbeda." };
   const client = await getPostgresPool().connect();
@@ -117,6 +123,7 @@ export async function previewAcademicRollover(source: string, target: string): P
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new AcademicYearProblem("Sesi admin berakhir. Masuk kembali.");
+    if (!adminHasPermission(admin, "academic_years.manage")) throw new AcademicYearProblem(PERMISSION_DENIED_MESSAGE);
     const preview = await rolloverPlan(client, sourceId, targetId, false);
     const active = await lockActiveAdminSession(client);
     if (!active || active.id !== admin.id) throw new AcademicYearProblem("Sesi admin berakhir. Masuk kembali.");
@@ -126,7 +133,8 @@ export async function previewAcademicRollover(source: string, target: string): P
 }
 
 export async function applyAcademicRollover(form: FormData): Promise<Result> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("academic_years.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const source = validDataId(form.get("source")); const target = validDataId(form.get("target")); const token = form.get("token");
   const choices = parseRolloverChoices(form.get("choices"));
   if (!source || !target || source === target || typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token) || !choices) return { ok: false, error: "Rencana perpindahan tidak valid. Buat pratinjau ulang." };
@@ -135,6 +143,7 @@ export async function applyAcademicRollover(form: FormData): Promise<Result> {
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new AcademicYearProblem("Sesi admin berakhir. Masuk kembali.");
+    if (!adminHasPermission(admin, "academic_years.manage")) throw new AcademicYearProblem(PERMISSION_DENIED_MESSAGE);
     await lockAcademicMutation(client);
     const plan = await rolloverPlan(client, source, target, true);
     if (plan.token !== token) throw new AcademicYearProblem("Data berubah setelah pratinjau. Tidak ada perubahan; buat pratinjau ulang.");

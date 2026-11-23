@@ -3,8 +3,9 @@ import type { PoolClient } from "pg";
 
 import type { TimelineClock, TimelineItem } from "@/app/data-tes/daftar/exam-timeline";
 import { ExamTestManager } from "@/app/data-tes/daftar/exam-test-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import type { ExamPeriodOption, ExamTest } from "@/lib/exam-test-types";
 import { getPostgresPool } from "@/lib/postgres";
 import type { Question, QuestionLetter, QuestionTopicOption } from "@/lib/question-types";
@@ -20,7 +21,8 @@ type QuestionRow = {
 };
 
 export default async function ExamTestsPage() {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("exams.manage");
+  if (!allowed) return <AccessDenied section="Data tes" title="Daftar Tes" />;
   let periods: ExamPeriodOption[]; let tests: ExamTest[]; let topics: QuestionTopicOption[]; let questions: Question[]; let timeline: TimelineItem[]; let clock: TimelineClock;
   let client: PoolClient | undefined;
   try {

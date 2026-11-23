@@ -2,7 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { revalidatePath } from "next/cache";
 
-import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { LETTERHEAD_MAX_BYTES, LOGO_MAX_BYTES, normalizeBrandingImage } from "@/lib/app-settings-image";
 import type { AdminAppSettings, PublicAppSettings } from "@/lib/app-settings-types";
 import { DEFAULT_APP_SETTINGS, isValidPalette, validateAppSettingsInput } from "@/lib/app-settings-validation.mjs";
@@ -146,6 +147,10 @@ export async function saveAppSettings(formData: FormData): Promise<SaveAppSettin
     if (!admin) {
       await client.query("ROLLBACK");
       return { ok: false, error: "Sesi admin telah berakhir. Silakan masuk kembali.", sessionExpired: true };
+    }
+    if (!adminHasPermission(admin, "app_settings.manage")) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: PERMISSION_DENIED_MESSAGE };
     }
 
     const params: unknown[] = [

@@ -1,12 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/admin-auth";
+import { PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
 import { saveSessionPlanValue } from "@/lib/exam-session-service";
 import type { ScheduleActionResult } from "@/lib/exam-session-types";
 
 export async function saveSessionPlan(form: FormData): Promise<ScheduleActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("exams.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const values = form.getAll("plan");
   if (values.length !== 1 || typeof values[0] !== "string" || values[0].length > 1_000_000) {
     return { ok: false, error: "Data kelompok sesi tidak valid. Muat ulang halaman.", reload: true };

@@ -5,8 +5,10 @@ import type { PoolClient } from "pg";
 import { displayToken, TOKEN_COLUMNS, TOKEN_JOINS, type TokenRow } from "@/app/data-tes/token/token-data";
 import { TokenManager } from "@/app/data-tes/token/token-manager";
 import { TOKEN_SCHEDULE_LATERAL } from "@/app/data-tes/token/token-schedule-sql";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { parseTokenDateFilter, parseTokenZone, tokenDayBounds, tokenPageNumber } from "@/lib/exam-token-date.mjs";
 import { ExamTokenKeyProblem, readConfiguredTokenKey, tokenKeyMessage, tokenKeyStatus } from "@/lib/exam-token-key";
 import type { AccessTokenRecord, AccessTokenTestOption, TokenKeyStatus } from "@/lib/exam-token-types";
@@ -16,11 +18,13 @@ export const metadata = { title: "Token — NusaCBT" };
 export const dynamic = "force-dynamic";
 const TESTS_PER_PAGE = 20;
 class SessionExpired extends Error {}
+class TokenPermissionDenied extends Error {}
 type TestRow = Omit<AccessTokenTestOption, "startsAt" | "endsAt"> & { startsAt: Date; endsAt: Date };
 type QueryParams = { tanggal?: string | string[]; zona?: string | string[]; halaman?: string | string[] };
 
 export default async function TokenPage({ searchParams }: { searchParams: Promise<QueryParams> }) {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("tokens.manage");
+  if (!allowed) return <AccessDenied section="Data tes" title="Token" />;
   const params = await searchParams; const zone = parseTokenZone(params.zona); const rawPage = tokenPageNumber(params.halaman);
   let client: PoolClient | undefined; let key: Buffer | undefined;
   let tests: AccessTokenTestOption[] = []; let current: AccessTokenRecord[] = [];
@@ -33,6 +37,7 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new SessionExpired();
+    if (!adminHasPermission(admin, "tokens.manage")) throw new TokenPermissionDenied();
     if (key) keyStatus = await tokenKeyStatus(client, key);
     const clock = await client.query<{ now: Date }>("SELECT clock_timestamp() AS now");
     const now = clock.rows[0].now; filter = parseTokenDateFilter(params.tanggal, now, zone);
@@ -66,6 +71,7 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     if (error instanceof SessionExpired) redirect("/login");
+    if (error instanceof TokenPermissionDenied) return <AccessDenied section="Data tes" title="Token" />;
     return <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-2 text-[29px] font-bold tracking-tight">Token</h1><Alert variant="destructive" role="alert" className="mt-6 max-w-2xl"><CircleAlert className="size-4" /><AlertTitle>Data token belum dapat dimuat</AlertTitle><AlertDescription>Pastikan PostgreSQL berjalan dan migrasi terbaru telah dijalankan dengan <code>npm run db:migrate</code>.</AlertDescription></Alert></div>;
   } finally { key?.fill(0); client?.release(); }
 

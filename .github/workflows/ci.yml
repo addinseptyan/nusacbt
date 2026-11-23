@@ -140,3 +140,8 @@ jobs:
           PGDATABASE: nusacbt_test
           NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_test
         run: npm run test:upgrade-025
+      - name: Uji upgrade 025 ke pengguna dan hak akses RBAC
+        env:
+          PGDATABASE: nusacbt_test
+          NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_test
+        run: npm run test:upgrade-026

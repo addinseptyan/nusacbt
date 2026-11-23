@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { getAdminSession, lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { examAnswerRevision } from "@/lib/exam-attempt-validation.mjs";
 import { calculateFinalGrade, type FinalGradeMethod } from "@/lib/exam-final-grade.mjs";
@@ -45,6 +46,10 @@ function actionTarget(form: FormData) {
  * mulai pertama, pengulangan, izin, dan penetapan di seluruh pelaksanaan.
  */
 export async function changeFinalGrade(form: FormData): Promise<FinalGradeResult> {
+  const session = await getAdminSession();
+  if (session && !adminHasPermission(session, "grading_overrides.manage")) {
+    return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+  }
   if (!(form instanceof FormData)) return { ok: false, error: "Data nilai tidak valid. Muat ulang." };
   const target = actionTarget(form);
   if (!target || ["expectedRevision", "expectedMethodRevision", "expectedDigest", "targetMethod"].some((field) => form.getAll(field).length !== 1)) {
@@ -65,6 +70,11 @@ export async function changeFinalGrade(form: FormData): Promise<FinalGradeResult
     client = await getPostgresPool().connect(); await client.query("BEGIN"); transactionOpen = true;
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new GradeProblem("Sesi admin berakhir. Masuk kembali dan muat ulang.");
+    if (!adminHasPermission(admin, "grading_overrides.manage")) {
+      await client.query("ROLLBACK");
+      transactionOpen = false;
+      return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+    }
     await lockOperation(client, operationId);
     await client.query("SAVEPOINT final_decision"); operationLocked = true;
     const prior = await readOperation(client, operationId);
@@ -164,7 +174,9 @@ export async function changeFinalGrade(form: FormData): Promise<FinalGradeResult
         "Nilai dibuka kembali dan menjadi sementara. Izin yang pernah dicabut tidak otomatis dipulihkan.";
     }
     const active = await lockActiveAdminSession(client);
-    if (!active || active.id !== admin.id) throw new GradeProblem("Sesi admin berakhir. Masuk kembali dan muat ulang.");
+    if (!active || active.id !== admin.id || !adminHasPermission(active, "grading_overrides.manage")) {
+      throw new GradeProblem("Sesi admin berakhir. Masuk kembali dan muat ulang.");
+    }
     await client.query("COMMIT"); transactionOpen = false;
     revalidatePath("/data-tes/monitoring"); revalidatePath("/peserta"); revalidatePath("/peserta/nilai");
     return { ok: true, message };
@@ -191,6 +203,10 @@ export async function changeFinalGrade(form: FormData): Promise<FinalGradeResult
 
 /** Memagari request terlambat, atau melaporkan operasi yang sudah commit. */
 export async function resolveFinalGradeOperation(form: FormData): Promise<FinalGradeResolveResult> {
+  const session = await getAdminSession();
+  if (session && !adminHasPermission(session, "grading_overrides.manage")) {
+    return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+  }
   const target = form instanceof FormData ? actionTarget(form) : null;
   if (!target) return { ok: false, error: "Identitas permintaan tidak valid. Jangan mengubah nilai sebelum memeriksanya." };
   const { operationId, testId, identityId, operation } = target;
@@ -199,6 +215,7 @@ export async function resolveFinalGradeOperation(form: FormData): Promise<FinalG
     client = await getPostgresPool().connect(); await client.query("BEGIN"); transactionOpen = true;
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new GradeProblem("Sesi admin berakhir. Masuk kembali di tab ini.");
+    if (!adminHasPermission(admin, "grading_overrides.manage")) throw new GradeProblem(PERMISSION_DENIED_MESSAGE);
     await lockOperation(client, operationId);
     const prior = await readOperation(client, operationId);
     if (prior && (prior.testId !== testId || prior.identityId !== identityId || prior.action !== operation)) throw new GradeProblem("Identitas permintaan tidak cocok. Hubungi pengelola.");

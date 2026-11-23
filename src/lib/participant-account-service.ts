@@ -1,6 +1,7 @@
 import "server-only";
 
-import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import type { AccountPageData, LoginLock } from "@/lib/participant-account-types";
 import { loadIdentityPageWithClient } from "@/lib/participant-identity-service";
@@ -86,6 +87,7 @@ export async function unlockParticipantLogin(form: FormData): Promise<string> {
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new UnlockProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    if (!adminHasPermission(admin, "participant_accounts.manage")) throw new UnlockProblem(PERMISSION_DENIED_MESSAGE);
 
     // Login menahan bucket sebelum siswa/periode/identitas. Urutan yang sama
     // mencegah kebuntuan dan memastikan login yang bersamaan tidak hilang.

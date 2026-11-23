@@ -1,7 +1,8 @@
 import "server-only";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validateSessionPlan } from "@/lib/exam-session-validation.mjs";
 import type { ScheduleActionResult, SessionGroup, SessionPeriod, SessionPlanPage, SessionStudent } from "@/lib/exam-session-types";
 import { getPostgresPool } from "@/lib/postgres";
@@ -78,6 +79,7 @@ export async function saveSessionPlanValue(raw: unknown): Promise<ScheduleAction
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new SessionPlanProblem("Sesi admin berakhir. Masuk kembali sebelum menyimpan.");
+    if (!adminHasPermission(admin, "exams.manage")) throw new SessionPlanProblem(PERMISSION_DENIED_MESSAGE);
     // Mutasi rencana/jadwal per periode diserialkan dengan advisory lock,
     // tanpa berbenturan dengan lock periode pada impor dan penempatan siswa.
     if (!await lockSchedulePeriod(client, periodId)) throw new SessionPlanProblem("Periode sudah dihapus. Muat ulang halaman.", true);

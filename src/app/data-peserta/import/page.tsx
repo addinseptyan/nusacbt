@@ -2,15 +2,17 @@ import Link from "next/link";
 import { CircleAlert, FileSpreadsheet } from "lucide-react";
 
 import { ImportManager } from "@/app/data-peserta/import/import-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import type { PlacementPeriod } from "@/lib/student-types";
 
 export const metadata = { title: "Import Data Peserta — NusaCBT" };
 
 export default async function ImportPage() {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("students.manage");
+  if (!allowed) return <AccessDenied section="Data peserta" title="Import Data Peserta" />;
   let periods: PlacementPeriod[];
   let classCount: number;
   try {

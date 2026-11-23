@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { examAnswerRevision } from "@/lib/exam-attempt-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 
@@ -12,7 +13,8 @@ class VisibilityProblem extends Error { constructor(message: string, readonly re
 
 /** Kebijakan satu kategori berlaku untuk semua tes dan riwayat yang selesai. */
 export async function saveScoreCategoryVisibility(form: FormData): Promise<ScoreVisibilityResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("exam_controls.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   if (!(form instanceof FormData) || ["kind", "revision", "visible"].some((name) => form.getAll(name).length !== 1)) {
     return { ok: false, error: "Data pengaturan tidak valid. Muat ulang halaman.", reload: true };
   }
@@ -29,6 +31,7 @@ export async function saveScoreCategoryVisibility(form: FormData): Promise<Score
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new VisibilityProblem("Sesi admin berakhir. Masuk kembali dan periksa pengaturan.", true);
+    if (!adminHasPermission(admin, "exam_controls.manage")) throw new VisibilityProblem(PERMISSION_DENIED_MESSAGE);
     const row = (await client.query<{ visible: boolean; revision: string }>(
       "SELECT visible_to_participants AS visible,revision::text AS revision FROM exam_score_category_visibility WHERE kind=$1 FOR UPDATE", [kind],
     )).rows[0];

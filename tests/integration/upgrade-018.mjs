@@ -26,7 +26,11 @@ function identifier(value) { if (!/^[a-z_][a-z0-9_]*$/.test(value)) throw new Er
 async function snapshot(tables, sequences) {
   const result = {};
   for (const table of tables) {
-    const object = table === "exam_periods" ? "(to_jsonb(r)-'academic_year_id')" : "to_jsonb(r)";
+    const object = table === "exam_periods"
+      ? "(to_jsonb(r)-'academic_year_id')"
+      : table === "admin_users"
+        ? "(to_jsonb(r)-'full_name'-'is_superuser'-'is_active'-'role_id'-'updated_at'-'last_login_at')"
+        : "to_jsonb(r)";
     const rows = await client.query(`SELECT COALESCE(jsonb_agg(${object} ORDER BY ${object}::text),'[]'::jsonb) AS rows FROM ${identifier(table)} r`);
     result[`table:${table}`] = createHash("sha256").update(JSON.stringify(rows.rows[0].rows)).digest("hex");
   }
@@ -110,6 +114,7 @@ try {
     assert.equal(result.status, 0, `Migrasi uji gagal: ${result.stderr}`);
   }
   assert.deepEqual(await snapshot(tables, sequences), before);
+  assert.equal((await client.query("SELECT count(*)::int AS n FROM admin_users WHERE NOT (is_superuser AND is_active AND full_name = username AND role_id IS NULL)")).rows[0].n, 0);
   const afterHistory = (await client.query("SELECT version,checksum,applied_at FROM nusacbt_schema_migrations ORDER BY version")).rows;
   assert.deepEqual(afterHistory.slice(0, 17), history); assert.equal(afterHistory.length, files.length);
   assert.equal(afterHistory[17].version, "018_exam_attempts.sql");

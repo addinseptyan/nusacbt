@@ -1,8 +1,9 @@
 import { BookOpenText, CircleAlert } from "lucide-react";
 
 import { TopicManager } from "@/app/data-modul/topik/topic-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import type { QuestionTopic } from "@/lib/topic-types";
 
@@ -10,7 +11,10 @@ export const metadata = { title: "Topik / Mata Pelajaran — NusaCBT" };
 export const dynamic = "force-dynamic";
 
 export default async function TopicsPage() {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("topics.manage");
+  if (!allowed) {
+    return <AccessDenied section="Data modul" title="Topik / Mata Pelajaran" />;
+  }
   let topics: QuestionTopic[];
   try {
     const result = await getPostgresPool().query<QuestionTopic>(

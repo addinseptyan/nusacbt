@@ -3,7 +3,8 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import { MAX_DOCX_BYTES, QuestionDocxError, readQuestionDocx } from "@/lib/question-docx.mjs";
@@ -83,6 +84,7 @@ export async function applyQuestionImport(form: FormData, adminId: string) {
     await client.query("BEGIN");
     const active = await lockActiveAdminSession(client);
     if (!active || active.id !== adminId) throw new ImportProblem("Sesi admin sudah berakhir. Masuk kembali dan periksa ulang file.");
+    if (!adminHasPermission(active, "questions.import")) throw new ImportProblem(PERMISSION_DENIED_MESSAGE);
     if (requestHash(adminId, upload, operationId) !== expected) throw new ImportProblem("File atau kategori berbeda dari pratinjau. Jika pernah menekan Simpan, periksa Manajemen Soal sebelum membuat pratinjau baru.");
     async function previousResult() {
       const previous = await client.query<{ request_hash: string; admin_id: string | null; question_count: number }>(

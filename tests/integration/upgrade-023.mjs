@@ -26,7 +26,11 @@ function identifier(value) { if (!/^[a-z_][a-z0-9_]*$/.test(value)) throw new Er
 async function snapshot(tables, sequences) {
   const result = {};
   for (const table of tables) {
-    const object = table === "exam_periods" ? "(to_jsonb(r)-'academic_year_id')" : "to_jsonb(r)";
+    const object = table === "exam_periods"
+      ? "(to_jsonb(r)-'academic_year_id')"
+      : table === "admin_users"
+        ? "(to_jsonb(r)-'full_name'-'is_superuser'-'is_active'-'role_id'-'updated_at'-'last_login_at')"
+        : "to_jsonb(r)";
     const rows = await client.query(`SELECT COALESCE(jsonb_agg(${object} ORDER BY ${object}::text),'[]'::jsonb) AS rows FROM ${identifier(table)} r`);
     result[`table:${table}`] = createHash("sha256").update(JSON.stringify(rows.rows[0].rows)).digest("hex");
   }
@@ -124,6 +128,7 @@ try {
   const history = (await client.query("SELECT version,checksum,applied_at FROM nusacbt_schema_migrations ORDER BY version")).rows;
   assert.equal(history.length, 22); migrate(); migrate();
   assert.deepEqual(await snapshot(tables, sequences), before, "Semua tabel dan sequence 022 harus identik.");
+  assert.equal((await client.query("SELECT count(*)::int AS n FROM admin_users WHERE NOT (is_superuser AND is_active AND full_name = username AND role_id IS NULL)")).rows[0].n, 0);
   const afterHistory = (await client.query("SELECT version,checksum,applied_at FROM nusacbt_schema_migrations ORDER BY version")).rows;
   assert.deepEqual(afterHistory.slice(0, 22), history); assert.equal(afterHistory.length, files.length); assert.equal(afterHistory[22].version, "023_exam_final_grades.sql");
   for (const table of ["exam_final_grade_settings", "exam_final_grade_state", "exam_final_grade_operations"]) assert.equal((await client.query(`SELECT count(*)::int AS n FROM ${table}`)).rows[0].n, 0);

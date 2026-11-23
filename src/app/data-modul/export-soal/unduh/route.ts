@@ -1,4 +1,5 @@
-import { getAdminSession } from "@/lib/admin-auth";
+import { getAdminSession, lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { exportRequestIsSameOrigin } from "@/lib/export-origin.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import { MAX_DOCX_QUESTIONS } from "@/lib/question-docx.mjs";
@@ -69,8 +70,12 @@ export async function POST(request: Request) {
     if (!exportRequestIsSameOrigin(request.headers)) {
       return fail(403, "Permintaan harus berasal dari halaman aplikasi yang sama.");
     }
-    if (!(await getAdminSession())) {
+    const session = await getAdminSession();
+    if (!session) {
       return fail(401, "Sesi admin diperlukan.");
+    }
+    if (!adminHasPermission(session, "questions.export")) {
+      return fail(403, PERMISSION_DENIED_MESSAGE);
     }
 
     const rawText = await request.text();
@@ -109,7 +114,16 @@ export async function POST(request: Request) {
     const client = await getPostgresPool().connect();
     let rows: ExportDbRow[];
     try {
-      await client.query("BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ");
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+      const active = await lockActiveAdminSession(client);
+      if (!active) {
+        await client.query("ROLLBACK");
+        return fail(401, "Sesi admin diperlukan.");
+      }
+      if (!adminHasPermission(active, "questions.export")) {
+        await client.query("ROLLBACK");
+        return fail(403, PERMISSION_DENIED_MESSAGE);
+      }
       const result = await client.query<ExportDbRow>(
         `SELECT q.id::text AS id,
           t.name AS "topicName",
@@ -127,6 +141,15 @@ export async function POST(request: Request) {
         [uniqueIds],
       );
       rows = result.rows;
+      const stillActive = await lockActiveAdminSession(client);
+      if (!stillActive || stillActive.id !== active.id) {
+        await client.query("ROLLBACK");
+        return fail(401, "Sesi admin diperlukan.");
+      }
+      if (!adminHasPermission(stillActive, "questions.export")) {
+        await client.query("ROLLBACK");
+        return fail(403, PERMISSION_DENIED_MESSAGE);
+      }
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});

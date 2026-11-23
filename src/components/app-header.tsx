@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { logoutAction } from "@/app/login/actions";
+import { useCurrentAdminUser } from "@/components/admin-user-context";
 import { useBranding } from "@/components/branding-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,15 @@ import { findNavigationPage } from "@/lib/navigation";
 export function AppHeader() {
   const pathname = usePathname();
   const branding = useBranding();
+  const currentUser = useCurrentAdminUser();
   const page = findNavigationPage(pathname);
+  const displayName = currentUser?.fullName || currentUser?.username || "Admin";
+  const roleLabel = currentUser
+    ? currentUser.isSuperuser
+      ? "Superadmin"
+      : currentUser.roleName || "Operator"
+    : branding.appName;
+  const initial = displayName.slice(0, 1).toUpperCase() || "A";
 
   return (
     <header className="sticky top-0 z-10 flex h-[72px] shrink-0 items-center justify-between gap-3 border-b border-border bg-card/95 px-4 backdrop-blur-md sm:px-7 lg:px-9">
@@ -36,9 +45,12 @@ export function AppHeader() {
         </span>
         <ThemeToggle />
         <Separator orientation="vertical" className="hidden h-8! sm:block" />
-        <div className="hidden items-center gap-2.5 sm:flex">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-[#e9eefb] text-xs font-bold text-[#6677bd] dark:bg-indigo-950 dark:text-indigo-300">A</span>
-          <span className="flex flex-col gap-0.5 leading-none"><span className="text-[12px] font-semibold text-foreground">Admin</span><span className="text-[10px] text-muted-foreground">{branding.appName}</span></span>
+        <div className="hidden items-center gap-2.5 sm:flex" data-testid="header-user-info">
+          <span className="flex size-9 items-center justify-center rounded-xl bg-[#e9eefb] text-xs font-bold text-[#6677bd] dark:bg-indigo-950 dark:text-indigo-300">{initial}</span>
+          <span className="flex min-w-0 max-w-48 flex-col gap-0.5 leading-none">
+            <span className="truncate text-[12px] font-semibold text-foreground">{displayName}</span>
+            <span className="truncate text-[10px] text-muted-foreground">{roleLabel} · {branding.appName}</span>
+          </span>
         </div>
         <form action={logoutAction}>
           <Button type="submit" variant="ghost" size="sm" aria-label="Keluar" className="rounded-lg px-2 text-muted-foreground">
