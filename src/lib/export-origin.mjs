@@ -1,18 +1,15 @@
 /** @param {Headers} headers @returns {boolean} */
-export function exportRequestIsSameOrigin(headers) {
+function requestOriginMatchesHost(headers) {
   const origin = headers.get("origin");
   const host = headers.get("x-forwarded-host") ?? headers.get("host");
   const proto = headers.get("x-forwarded-proto");
   const site = headers.get("sec-fetch-site");
-  const contentType = headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
   if (
     !origin ||
     !host ||
     /[\s,\/\\]/.test(host) ||
     (proto && !/^(http|https)$/.test(proto)) ||
-    (site && site !== "same-origin") ||
-    contentType !== "application/json" ||
-    headers.get("x-nusacbt-export") !== "1"
+    (site && site !== "same-origin")
   ) {
     return false;
   }
@@ -27,4 +24,24 @@ export function exportRequestIsSameOrigin(headers) {
   } catch {
     return false;
   }
+}
+
+/** @param {Headers} headers @returns {boolean} */
+export function exportRequestIsSameOrigin(headers) {
+  const contentType = headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  return (
+    contentType === "application/json" &&
+    headers.get("x-nusacbt-export") === "1" &&
+    requestOriginMatchesHost(headers)
+  );
+}
+
+/** @param {Headers} headers @returns {boolean} */
+export function toolMultipartRequestIsSameOrigin(headers) {
+  const contentType = headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  return (
+    contentType === "multipart/form-data" &&
+    headers.get("x-nusacbt-tool") === "1" &&
+    requestOriginMatchesHost(headers)
+  );
 }

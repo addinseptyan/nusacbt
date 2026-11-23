@@ -239,6 +239,16 @@ export async function requireAdminAccess(...required: AdminPermission[]): Promis
   };
 }
 
+export async function getCurrentAdminSessionTokenHash(): Promise<string | null> {
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!token || !TOKEN_FORMAT.test(token)) return null;
+  return digestToken(token);
+}
+
+export async function clearAdminSessionCookie() {
+  (await cookies()).delete(COOKIE_NAME);
+}
+
 export async function endAdminSession() {
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;

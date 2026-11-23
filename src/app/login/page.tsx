@@ -10,7 +10,7 @@ import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Masuk Admin — NusaCBT" };
 
-type LoginPageProps = { searchParams: Promise<{ error?: string }> };
+type LoginPageProps = { searchParams: Promise<{ error?: string; sesi?: string }> };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const [params, branding] = await Promise.all([searchParams, getPublicAppSettingsSafe()]);
@@ -38,6 +38,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <h1 className="mt-5 text-[25px] font-bold tracking-tight">Selamat datang kembali</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Masuk dengan akun admin yang dibuat saat penyiapan {branding.appName}.</p>
           {params.error === "database" && <Alert variant="destructive" className="mt-5" role="alert"><AlertDescription>Database tidak dapat dihubungi. Periksa koneksi dan pengaturan server.</AlertDescription></Alert>}
+          {params.sesi === "pemulihan" && (
+            <Alert className="mt-5" role="status">
+              <AlertDescription>
+                Pemulihan database selesai. Masuk kembali menggunakan akun admin yang terdapat pada cadangan tersebut.
+              </AlertDescription>
+            </Alert>
+          )}
           <LoginForm />
         </Card>
         <div className="mt-6 flex items-start justify-center gap-2 text-center text-xs leading-5 text-muted-foreground"><ShieldCheck className="mt-0.5 size-4 shrink-0" /><span>Gunakan HTTPS tepercaya untuk menjaga kredensial di jaringan sekolah.</span></div>
