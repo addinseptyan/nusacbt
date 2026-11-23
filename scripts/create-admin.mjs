@@ -35,8 +35,11 @@ try {
     // Hanya untuk bootstrap: jangan menimpa atau menambah akun bila admin sudah ada.
     await client.query("SELECT pg_advisory_xact_lock($1)", [2026111702]);
     const existing = await client.query("SELECT 1 FROM admin_users LIMIT 1");
-    if (existing.rowCount) throw new Error("Admin sudah ada. Pembuatan akun tambahan belum tersedia pada tahap ini.");
-    await client.query("INSERT INTO admin_users (username, password_hash) VALUES ($1, $2)", [username, passwordHash]);
+    if (existing.rowCount) throw new Error("Admin awal sudah ada. Gunakan menu Pengaturan User untuk menambah akun lain.");
+    await client.query(
+      "INSERT INTO admin_users (username, password_hash, full_name, is_superuser, is_active) VALUES ($1, $2, $3, true, true)",
+      [username, passwordHash, username],
+    );
     await client.query("COMMIT");
     console.log(`Akun admin ${username} berhasil dibuat.`);
   } catch (error) {

@@ -1,14 +1,15 @@
 import { BarChart3, ChevronLeft, ChevronRight, CircleAlert, Download, Info, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { formatFinalGrade } from "@/lib/exam-final-grade.mjs";
 import { matrixSearchParams, parseMatrixFilters, type MatrixFilters } from "@/lib/matrix-report-filter.mjs";
-import { MATRIX_MAX_ATTEMPTS, MATRIX_MAX_STUDENTS, MATRIX_MAX_TESTS, MATRIX_PAGE_SIZE, MatrixSessionExpired, withMatrixSnapshot, type MatrixData } from "./matrix-data";
+import { MATRIX_MAX_ATTEMPTS, MATRIX_MAX_STUDENTS, MATRIX_MAX_TESTS, MATRIX_PAGE_SIZE, MatrixPermissionDenied, MatrixSessionExpired, withMatrixSnapshot, type MatrixData } from "./matrix-data";
 import { MatrixKindFilter } from "./matrix-kind-filter";
 
 export const metadata = { title:"Rekap Hasil Tes — NusaCBT",robots:{index:false,follow:false} };
@@ -19,11 +20,13 @@ function pageUrl(f:MatrixFilters,page:number) { const p=matrixSearchParams(f,pag
 const field="h-10 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm";
 
 export default async function ReportPage({searchParams}:{searchParams:Promise<Search>}) {
-  await requireAdmin(); const parsed=parseMatrixFilters(paramsOf(await searchParams));
+  const { allowed } = await requireAdminAccess("reports.view");
+  if (!allowed) return <AccessDenied section="Laporan" title="Rekap Hasil Tes" />;
+  const parsed=parseMatrixFilters(paramsOf(await searchParams));
   if(!parsed.ok) return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Rekap Hasil Tes</h1><Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Filter tidak valid</AlertTitle><AlertDescription>{parsed.error} <Link href="/laporan/rekap" className="underline">Atur ulang filter</Link>.</AlertDescription></Alert></div>;
   const {filters:f}=parsed; let data:MatrixData;
   try { data=await withMatrixSnapshot(f,parsed.page,false,(result)=>result); }
-  catch(error) {if(error instanceof MatrixSessionExpired)redirect("/login");return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Rekap Hasil Tes</h1><Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Rekap belum dapat dimuat</AlertTitle><AlertDescription>Periksa PostgreSQL dan migrasi terbaru.</AlertDescription></Alert></div>;}
+  catch(error) {if(error instanceof MatrixSessionExpired)redirect("/login");if(error instanceof MatrixPermissionDenied)return <AccessDenied section="Laporan" title="Rekap Hasil Tes" />;return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Rekap Hasil Tes</h1><Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Rekap belum dapat dimuat</AlertTitle><AlertDescription>Periksa PostgreSQL dan migrasi terbaru.</AlertDescription></Alert></div>;}
   const opts=data.options!; const unknownYear=f.yearId && !opts.years.some((x)=>x.id===f.yearId),unknownPeriod=f.periodId && !opts.periods.some((x)=>x.id===f.periodId),unknownTest=f.testId && !opts.tests.some((x)=>x.id===f.testId),unknownClass=f.className && !opts.classes.includes(f.className);
   const exportUrl=`/laporan/rekap/unduh?${matrixSearchParams(f)}`;
   return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9"><div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><BarChart3 className="size-5" /></span><div><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Laporan</p><h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Rekap Hasil Tes</h1><p className="mt-2 text-[13px] text-muted-foreground">Siswa sebagai baris, tes sebagai kolom.</p></div></div>{data.total>0 && !data.warning ? <Button asChild><a href={exportUrl}><Download className="size-4" /> Unduh Excel</a></Button> : <Button disabled><Download className="size-4" /> Unduh Excel</Button>}</div>

@@ -1,8 +1,9 @@
 import { BookOpenCheck, CircleAlert } from "lucide-react";
 
 import { QuestionManager } from "@/app/data-modul/soal/question-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import type { Question, QuestionLetter, QuestionTopicOption } from "@/lib/question-types";
 
@@ -18,7 +19,10 @@ type QuestionRow = {
 };
 
 export default async function QuestionsPage() {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("questions.manage");
+  if (!allowed) {
+    return <AccessDenied section="Data modul" title="Manajemen Soal" />;
+  }
   let topics: QuestionTopicOption[];
   let questions: Question[];
   try {

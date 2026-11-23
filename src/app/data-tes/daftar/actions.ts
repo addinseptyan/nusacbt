@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { EXAM_TEST_FORM_VERSION, validateExamTestDraft } from "@/lib/exam-test-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
@@ -28,6 +29,7 @@ async function mutate(mutation: Mutation): Promise<ActionResult> {
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new TestProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    if (!adminHasPermission(admin, "exams.manage")) throw new TestProblem(PERMISSION_DENIED_MESSAGE);
 
     if (mutation.kind === "delete") {
       const result = await client.query("DELETE FROM exam_tests WHERE id=$1::bigint AND xmin::text=$2 RETURNING id", [mutation.id, mutation.revision]);
@@ -116,7 +118,8 @@ async function mutate(mutation: Mutation): Promise<ActionResult> {
 }
 
 export async function saveExamTest(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("exams.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   // Identitas, versi dan pengaturan tunggal tidak boleh dipilih diam-diam jika
   // pengirim menyertakan beberapa nilai berbeda. Soal adalah daftar berurutan.
   const fields = ["formVersion", "id", "revision", "name", "periodId", "startLocal", "timeZone", "durationMinutes", "shuffleQuestions", "shuffleOptions"];
@@ -138,7 +141,8 @@ export async function saveExamTest(formData: FormData): Promise<ActionResult> {
 }
 
 export async function deleteExamTest(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("exams.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   if (formData.getAll("id").length !== 1 || formData.getAll("revision").length !== 1) return { ok: false, error: "Identitas atau versi tes tidak valid. Muat ulang daftar.", reload: true };
   const id = validDataId(formData.get("id"));
   const revision = validTopicRevision(formData.get("revision"));

@@ -3,9 +3,11 @@ import { redirect } from "next/navigation";
 import { CircleAlert, IdCard } from "lucide-react";
 
 import { CardManager } from "@/app/data-peserta/kartu/card-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
-import { CardPageSessionExpired, CardPeriodChanged, loadParticipantCardPage } from "@/lib/participant-card-data";
+import { requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
+import { CardPagePermissionDenied, CardPageSessionExpired, CardPeriodChanged, loadParticipantCardPage } from "@/lib/participant-card-data";
 import { parseCardFilters } from "@/lib/participant-card-filter.mjs";
 import type { CardPageData } from "@/lib/participant-card-types";
 import "./card-print.css";
@@ -24,7 +26,9 @@ function searchValues(input: Search) {
 }
 
 export default async function ParticipantCardsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin();
+  const { admin, allowed } = await requireAdminAccess("participant_cards.print");
+  if (!allowed) return <AccessDenied section="Data peserta" title="Cetak Kartu Peserta" />;
+  const canIncludePassword = adminHasPermission(admin, "participant_passwords.manage");
   const parsed = parseCardFilters(searchValues(await searchParams));
   if (!parsed.ok) return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Cetak Kartu Peserta</h1>
     <Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Filter tidak valid</AlertTitle>
@@ -33,6 +37,7 @@ export default async function ParticipantCardsPage({ searchParams }: { searchPar
   try { data = await loadParticipantCardPage(parsed.filters, parsed.page); }
   catch (error) {
     if (error instanceof CardPageSessionExpired) redirect("/login");
+    if (error instanceof CardPagePermissionDenied) return <AccessDenied section="Data peserta" title="Cetak Kartu Peserta" />;
     if (error instanceof CardPeriodChanged) return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Cetak Kartu Peserta</h1><Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Periode login berubah</AlertTitle><AlertDescription>Muat ulang untuk memakai periode login aktif. <Link href="/data-peserta/kartu" className="underline">Buka kartu</Link>.</AlertDescription></Alert></div>;
     return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Cetak Kartu Peserta</h1>
       <Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Data kartu belum dapat dimuat</AlertTitle>
@@ -47,6 +52,6 @@ export default async function ParticipantCardsPage({ searchParams }: { searchPar
         <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Cetak Kartu Peserta</h1>
         <p className="mt-2 text-[13px] leading-6 text-muted-foreground">Pilih peserta, periksa pratinjau, lalu cetak pada kertas A4 atau simpan sebagai PDF.</p></div>
     </div>
-    <CardManager key={managerKey} data={data} />
+    <CardManager key={managerKey} data={data} canIncludePassword={canIncludePassword} />
   </div>;
 }

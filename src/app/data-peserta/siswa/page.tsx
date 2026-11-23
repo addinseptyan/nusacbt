@@ -1,6 +1,7 @@
 import { CircleAlert, UsersRound } from "lucide-react";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import type { Student } from "@/lib/student-types";
@@ -11,7 +12,8 @@ export const dynamic = "force-dynamic";
 
 type Search = { tahun?: string | string[] };
 export default async function StudentsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("students.manage");
+  if (!allowed) return <AccessDenied section="Data peserta" title="Data Siswa" />;
   let years: Array<{ id: string; name: string }>; let activeYearId: string | null; let selectedYearId: string | null;
   let classes: Array<{ id: string; label: string }>; let students: Student[]; let enrollments: YearEnrollment[];
   try {

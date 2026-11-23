@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/admin-auth";
+import { PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
 import { unlockErrorMessage, unlockParticipantLogin } from "@/lib/participant-account-service";
 import type { UnlockActionResult } from "@/lib/participant-account-types";
 
 export async function unlockLogin(form: FormData): Promise<UnlockActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("participant_accounts.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   try {
     const message = await unlockParticipantLogin(form);
     revalidatePath("/data-peserta/akun");

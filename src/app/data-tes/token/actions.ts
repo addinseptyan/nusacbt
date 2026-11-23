@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
 import { TOKEN_TEST_ELIGIBLE } from "@/app/data-tes/token/token-schedule-sql";
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { EXAM_TOKEN_ADVISORY_LOCK } from "@/lib/exam-token-constants.mjs";
 import { digestSixDigitToken, encryptSixDigitToken, generateSixDigitToken } from "@/lib/exam-token-crypto.mjs";
@@ -30,7 +31,8 @@ async function lockUnusedTokenOperation(client: PoolClient, operationId: string)
 }
 
 export async function issueExamToken(formData: FormData): Promise<IssueTokenResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("tokens.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const fields = ["operationId", "formVersion", "scope", "testId", "testRevision", "durationMinutes", "expectedTokenId", "replaceConfirmed"];
   if (fields.some((field) => formData.getAll(field).length > 1)) return { ok: false, error: "Data token mengandung nilai ganda. Periksa formulir dan coba lagi." };
   if (formData.get("formVersion") !== EXAM_TOKEN_FORM_VERSION) return { ok: false, error: "Versi formulir tidak sesuai. Muat ulang daftar.", reload: true };
@@ -49,6 +51,7 @@ export async function issueExamToken(formData: FormData): Promise<IssueTokenResu
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new TokenProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    if (!adminHasPermission(admin, "tokens.manage")) throw new TokenProblem(PERMISSION_DENIED_MESSAGE);
     let testName: string | null = null;
     if (draft.scope === "test") {
       // Kunci tes sebelum advisory token, sama seperti mulai attempt. Baris
@@ -127,7 +130,8 @@ export async function issueExamToken(formData: FormData): Promise<IssueTokenResu
 // pembatalan di bawah kunci yang sama: request lama yang datang terlambat
 // tidak boleh membuat token. Operasi ini boleh diulang bila respons hilang.
 export async function resolveUncertainTokenIssue(formData: FormData): Promise<ResolveTokenIssueResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("tokens.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const operationId = formData.getAll("operationId").length === 1 ? validTokenOperationId(formData.get("operationId")) : null;
   if (!operationId) return { ok: false, error: "Identitas permintaan tidak valid; jangan membuat token lain sebelum memeriksa status." };
   let client: PoolClient | undefined;
@@ -137,6 +141,7 @@ export async function resolveUncertainTokenIssue(formData: FormData): Promise<Re
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new TokenProblem("Sesi admin sudah berakhir. Masuk kembali untuk memeriksa permintaan.");
+    if (!adminHasPermission(admin, "tokens.manage")) throw new TokenProblem(PERMISSION_DENIED_MESSAGE);
     await client.query("SELECT pg_advisory_xact_lock($1)", [EXAM_TOKEN_ADVISORY_LOCK]);
     await client.query("INSERT INTO exam_token_issue_operations(operation_id,result) VALUES($1::uuid,'cancelled') ON CONFLICT (operation_id) DO NOTHING", [operationId]);
     const result = await client.query<{ outcome: "issued" | "cancelled"; tokenId: string | null }>(
@@ -156,7 +161,8 @@ export async function resolveUncertainTokenIssue(formData: FormData): Promise<Re
 }
 
 export async function revokeExamToken(formData: FormData): Promise<RevokeTokenResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("tokens.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   if (["id", "revision", "confirmed"].some((field) => formData.getAll(field).length !== 1) || formData.get("confirmed") !== "1") {
     return { ok: false, error: "Identitas atau konfirmasi token tidak valid. Muat ulang daftar.", reload: true };
   }
@@ -169,6 +175,7 @@ export async function revokeExamToken(formData: FormData): Promise<RevokeTokenRe
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new TokenProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    if (!adminHasPermission(admin, "tokens.manage")) throw new TokenProblem(PERMISSION_DENIED_MESSAGE);
     await client.query("SELECT pg_advisory_xact_lock($1)", [EXAM_TOKEN_ADVISORY_LOCK]);
     const result = await client.query<{ revision: string; active: boolean; scope: "global" | "test"; testId: string | null; revokedAt: Date | null }>(
       `SELECT xmin::text AS revision, expires_at > clock_timestamp() AS active, scope, exam_test_id::text AS "testId", revoked_at AS "revokedAt"

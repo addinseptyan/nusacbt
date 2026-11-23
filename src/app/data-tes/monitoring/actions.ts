@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { getAdminSession, lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { examAnswerRevision } from "@/lib/exam-attempt-validation.mjs";
 import { validTokenOperationId } from "@/lib/exam-token-validation.mjs";
@@ -36,6 +37,10 @@ async function readOperation(client: PoolClient, operationId: string): Promise<O
  * sumber otorisasi atau status; seluruh aturan diperiksa ulang di database.
  */
 export async function changeRetakePermission(form: FormData): Promise<RetakeActionResult> {
+  const session = await getAdminSession();
+  if (session && !adminHasPermission(session, "grading_overrides.manage")) {
+    return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+  }
   if (!(form instanceof FormData) || ["operation", "operationId", "attemptId", "expectedPermissionId", "expectedFinalRevision"].some((field) => form.getAll(field).length !== 1)) {
     return { ok: false, error: "Data izin tidak valid. Muat ulang halaman." };
   }
@@ -56,6 +61,11 @@ export async function changeRetakePermission(form: FormData): Promise<RetakeActi
     await client.query("BEGIN"); transactionOpen = true;
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new RetakeProblem("Sesi admin berakhir. Masuk kembali dan muat ulang.");
+    if (!adminHasPermission(admin, "grading_overrides.manage")) {
+      await client.query("ROLLBACK");
+      transactionOpen = false;
+      return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+    }
     // Lock per UUID diambil sebelum lock tes/attempt. Pemeriksaan pemulihan
     // memakai lock yang sama dan dapat memagari request yang tiba terlambat.
     await lockOperation(client, operationId);
@@ -139,7 +149,9 @@ export async function changeRetakePermission(form: FormData): Promise<RetakeActi
        VALUES($1::uuid,$2::bigint,$3,'applied',$4::bigint)`, [operationId, attempt.id, operation, permissionId],
     );
     const stillActive = await lockActiveAdminSession(client);
-    if (!stillActive || stillActive.id !== admin.id) throw new RetakeProblem("Sesi admin berakhir. Masuk kembali dan muat ulang.");
+    if (!stillActive || stillActive.id !== admin.id || !adminHasPermission(stillActive, "grading_overrides.manage")) {
+      throw new RetakeProblem("Sesi admin berakhir. Masuk kembali dan muat ulang.");
+    }
     await client.query("COMMIT"); transactionOpen = false;
     revalidatePath("/data-tes/monitoring");
     revalidatePath("/peserta");
@@ -175,6 +187,10 @@ export async function changeRetakePermission(form: FormData): Promise<RetakeActi
  * mengubah izin. Aman diulang jika respons pemeriksaan juga hilang.
  */
 export async function resolveRetakeOperation(form: FormData): Promise<RetakeResolveResult> {
+  const session = await getAdminSession();
+  if (session && !adminHasPermission(session, "grading_overrides.manage")) {
+    return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+  }
   if (!(form instanceof FormData) || ["operationId", "attemptId", "operation"].some((field) => form.getAll(field).length !== 1)) {
     return { ok: false, error: "Identitas permintaan tidak valid. Jangan mengubah izin sebelum memeriksanya." };
   }
@@ -189,6 +205,7 @@ export async function resolveRetakeOperation(form: FormData): Promise<RetakeReso
     client = await getPostgresPool().connect(); await client.query("BEGIN"); transactionOpen = true;
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new RetakeProblem("Sesi admin berakhir. Masuk kembali di tab ini untuk memeriksa permintaan.");
+    if (!adminHasPermission(admin, "grading_overrides.manage")) throw new RetakeProblem(PERMISSION_DENIED_MESSAGE);
     await lockOperation(client, operationId);
     const previous = await readOperation(client, operationId);
     if (previous && (previous.attemptId !== attemptId || previous.action !== action)) throw new RetakeProblem("Identitas permintaan tidak cocok. Hubungi pengelola sebelum melanjutkan.");

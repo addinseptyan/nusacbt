@@ -2,8 +2,9 @@ import Link from "next/link";
 import { CircleAlert, KeyRound } from "lucide-react";
 
 import { PasswordManager } from "@/app/data-peserta/sandi/password-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { loadPasswordPage } from "@/lib/participant-password-service";
 import type { PasswordPageData } from "@/lib/participant-password-types";
@@ -12,7 +13,8 @@ export const metadata = { title: "Sandi Peserta — NusaCBT" };
 export const dynamic = "force-dynamic";
 
 export default async function PasswordPage({ searchParams }: { searchParams: Promise<{ periode?: string | string[] }> }) {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("participant_passwords.manage");
+  if (!allowed) return <AccessDenied section="Data peserta" title="Sandi Peserta" />;
   const params = await searchParams;
   const supplied = params.periode !== undefined;
   const periodId = validDataId(params.periode);

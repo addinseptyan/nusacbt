@@ -3,6 +3,8 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import {
@@ -172,6 +174,9 @@ export async function saveParticipantIdentity(formData: FormData): Promise<strin
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN");
+    const admin = await lockActiveAdminSession(client);
+    if (!admin) throw new IdentityProblem("Sesi admin berakhir. Masuk kembali.");
+    if (!adminHasPermission(admin, "participant_accounts.manage")) throw new IdentityProblem(PERMISSION_DENIED_MESSAGE);
     // Urutan sama dengan penempatan manual: siswa, periode, penempatan, identitas.
     const student = await client.query<Student>(
       `SELECT id::text AS id, name, nisn,
@@ -226,6 +231,8 @@ export async function saveParticipantIdentity(formData: FormData): Promise<strin
       );
       message = "Identitas peserta berhasil ditambahkan.";
     }
+    const stillActive = await lockActiveAdminSession(client);
+    if (!stillActive || stillActive.id !== admin.id) throw new IdentityProblem("Sesi admin berakhir. Masuk kembali.");
     await client.query("COMMIT");
     return message;
   } catch (error) {
@@ -257,6 +264,9 @@ export async function generateParticipantIdentities(formData: FormData): Promise
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN");
+    const admin = await lockActiveAdminSession(client);
+    if (!admin) throw new IdentityProblem("Sesi admin berakhir. Masuk kembali.");
+    if (!adminHasPermission(admin, "participant_accounts.manage")) throw new IdentityProblem(PERMISSION_DENIED_MESSAGE);
     // Kunci dengan urutan ID agar tidak saling menimpa penempatan atau identitas manual.
     const students = await client.query<Student>(
       `SELECT id::text AS id, name, nisn,
@@ -313,6 +323,8 @@ export async function generateParticipantIdentities(formData: FormData): Promise
       [periodId, candidates.map((row) => row.studentId), plan.values.map((row) => row.number), plan.values.map((row) => row.username)],
     );
     if (inserted.rowCount !== candidates.length) throw new Error("Jumlah identitas yang disimpan tidak sesuai.");
+    const stillActive = await lockActiveAdminSession(client);
+    if (!stillActive || stillActive.id !== admin.id) throw new IdentityProblem("Sesi admin berakhir. Masuk kembali.");
     await client.query("COMMIT");
     return `${candidates.length} identitas baru dibuat. Identitas yang sudah ada tidak diubah.`;
   } catch (error) {

@@ -1,12 +1,14 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import type { MatrixFilters } from "@/lib/matrix-report-filter.mjs";
 import { buildResultMatrix, type MatrixAttempt, type MatrixColumn, type MatrixRow } from "@/lib/matrix-report.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 
 export const MATRIX_PAGE_SIZE = 30, MATRIX_MAX_STUDENTS = 2000, MATRIX_MAX_TESTS = 59, MATRIX_MAX_ATTEMPTS = 10000;
 export class MatrixSessionExpired extends Error {}
+export class MatrixPermissionDenied extends Error {}
 export class MatrixSizeExceeded extends Error {}
 export type MatrixOptions = { years:Array<{id:string;name:string}>; periods:Array<{id:string;name:string;year:string|null}>; tests:Array<{id:string;name:string;period:string}>; classes:string[] };
 export type MatrixData = { columns:MatrixColumn[]; rows:MatrixRow[]; total:number; page:number; pages:number; attempts:number; attemptRows:MatrixAttempt[]; options:MatrixOptions|null; warning:string|null };
@@ -45,7 +47,10 @@ async function read(client:PoolClient,f:MatrixFilters,requestedPage:number,expor
 export async function withMatrixSnapshot<T>(f:MatrixFilters,page:number,exporting:boolean,render:(data:MatrixData)=>T):Promise<T> {
   const client = await getPostgresPool().connect();
   try { await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ"); const admin = await lockActiveAdminSession(client); if(!admin) throw new MatrixSessionExpired();
+    if(!adminHasPermission(admin,"reports.view")) throw new MatrixPermissionDenied();
     const data = await read(client,f,page,exporting); const result = render(data); const active = await lockActiveAdminSession(client);
-    if(!active || active.id!==admin.id) throw new MatrixSessionExpired(); await client.query("COMMIT"); return result;
+    if(!active || active.id!==admin.id) throw new MatrixSessionExpired();
+    if(!adminHasPermission(active,"reports.view")) throw new MatrixPermissionDenied();
+    await client.query("COMMIT"); return result;
   } catch(error) { await client.query("ROLLBACK").catch(()=>{}); throw error; } finally { client.release(); }
 }

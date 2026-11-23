@@ -2,8 +2,9 @@ import Link from "next/link";
 import { CircleAlert, FileText } from "lucide-react";
 
 import { QuestionWordImportManager } from "@/app/data-modul/import-soal/question-word-import-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import type { QuestionTopicOption } from "@/lib/question-types";
 
@@ -11,7 +12,10 @@ export const metadata = { title: "Import Soal Word — NusaCBT" };
 export const dynamic = "force-dynamic";
 
 export default async function ImportQuestionPage() {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("questions.import");
+  if (!allowed) {
+    return <AccessDenied section="Data modul" title="Import Soal Word" />;
+  }
   let topics: QuestionTopicOption[];
   try {
     const result = await getPostgresPool().query<QuestionTopicOption>("SELECT id::text AS id, name FROM question_topics ORDER BY lower(name), name, id");

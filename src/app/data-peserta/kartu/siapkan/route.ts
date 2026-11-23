@@ -1,7 +1,8 @@
-import { getAdminSession } from "@/lib/admin-auth";
+import { getAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { parseCardFilters } from "@/lib/participant-card-filter.mjs";
 import { cardRequestIsSameOrigin } from "@/lib/participant-card-origin.mjs";
-import { PasswordProblem, PasswordSessionExpired, passwordErrorMessage, prepareParticipantCards } from "@/lib/participant-password-service";
+import { PasswordPermissionProblem, PasswordProblem, PasswordSessionExpired, passwordErrorMessage, prepareParticipantCards } from "@/lib/participant-password-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -45,7 +46,9 @@ async function readJson(request: Request): Promise<unknown> {
 export async function POST(request: Request) {
   try {
     if (!cardRequestIsSameOrigin(request.headers)) return reply(403, { ok: false, error: "Permintaan harus berasal dari halaman aplikasi yang sama." });
-    if (!await getAdminSession()) return reply(401, { ok: false, error: "Sesi admin diperlukan." });
+    const session = await getAdminSession();
+    if (!session) return reply(401, { ok: false, error: "Sesi admin diperlukan." });
+    if (!adminHasPermission(session, "participant_cards.print")) return reply(403, { ok: false, error: PERMISSION_DENIED_MESSAGE });
     let input: unknown;
     try { input = await readJson(request); }
     catch (error) { return reply(error instanceof BodyTooLarge ? 413 : 400, { ok: false, error: "Permintaan kartu tidak valid atau terlalu besar." }); }
@@ -55,6 +58,9 @@ export async function POST(request: Request) {
         (body.mode !== "prepare" && body.mode !== "verify") || typeof body.filters !== "string" || body.filters.length > 2048 ||
         !Array.isArray(body.candidates) || typeof body.includePassword !== "boolean" || (body.mode === "verify" && body.includePassword)) {
       return reply(400, { ok: false, error: "Permintaan kartu tidak valid." });
+    }
+    if (body.includePassword && !adminHasPermission(session, "participant_passwords.manage")) {
+      return reply(403, { ok: false, error: "Anda tidak memiliki hak akses untuk menyertakan sandi peserta pada kartu." });
     }
     const params = new URLSearchParams(body.filters);
     if ([...params.keys()].some((key) => !["periode", "kelas", "siswa"].includes(key))) {
@@ -71,6 +77,7 @@ export async function POST(request: Request) {
     return reply(200, body.mode === "verify" ? { ok: true } : { ok: true, result });
   } catch (error) {
     if (error instanceof PasswordSessionExpired) return reply(401, { ok: false, error: passwordErrorMessage(error) });
+    if (error instanceof PasswordPermissionProblem) return reply(403, { ok: false, error: passwordErrorMessage(error) });
     if (error instanceof PasswordProblem) return reply(409, { ok: false, error: passwordErrorMessage(error) });
     return reply(503, { ok: false, error: "Kartu belum dapat disiapkan. Periksa koneksi dan sesi, lalu muat ulang daftar." });
   }

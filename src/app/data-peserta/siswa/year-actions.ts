@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { AcademicYearProblem, lockAcademicMutation, syncYearPlacements } from "@/lib/academic-year-service";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
@@ -12,7 +13,8 @@ import { validTopicRevision } from "@/lib/topic-validation.mjs";
 type Result = { ok: true; message: string } | { ok: false; error: string };
 
 export async function saveYearStudent(form: FormData): Promise<Result> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("students.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const mode = form.get("mode"); const yearId = validDataId(form.get("yearId")); const classId = validDataId(form.get("classId"));
   const studentId = mode === "new" ? null : validDataId(form.get("studentId"));
   const status = form.get("status");
@@ -29,6 +31,7 @@ export async function saveYearStudent(form: FormData): Promise<Result> {
   try {
     client = await getPostgresPool().connect(); await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client); if (!admin) throw new AcademicYearProblem("Sesi admin berakhir. Masuk kembali.");
+    if (!adminHasPermission(admin, "students.manage")) throw new AcademicYearProblem(PERMISSION_DENIED_MESSAGE);
     await lockAcademicMutation(client);
     const year = await client.query("SELECT id FROM academic_years WHERE id=$1::bigint FOR UPDATE", [yearId]);
     if (!year.rowCount) throw new AcademicYearProblem("Tahun ajaran tidak ditemukan.");

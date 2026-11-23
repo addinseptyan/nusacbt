@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import type { TopicActionResult } from "@/lib/topic-types";
@@ -34,6 +35,7 @@ async function applyMutation(mutation: Mutation): Promise<TopicActionResult> {
     // Sesi dikunci bersama transaksi; expiry juga diperiksa tepat sebelum commit.
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new TopicProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    if (!adminHasPermission(admin, "topics.manage")) throw new TopicProblem(PERMISSION_DENIED_MESSAGE);
     if (mutation.kind === "create") {
       await client.query("INSERT INTO question_topics(name) VALUES ($1)", [mutation.name]);
     } else {
@@ -68,7 +70,8 @@ async function applyMutation(mutation: Mutation): Promise<TopicActionResult> {
 }
 
 export async function saveTopic(formData: FormData): Promise<TopicActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("topics.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const rawId = formData.get("id");
   const id = rawId === null || rawId === "" ? null : validDataId(rawId);
   if (rawId !== null && rawId !== "" && !id) return { ok: false, error: "Identitas topik tidak valid." };
@@ -81,7 +84,8 @@ export async function saveTopic(formData: FormData): Promise<TopicActionResult> 
 }
 
 export async function deleteTopic(formData: FormData): Promise<TopicActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("topics.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const id = validDataId(formData.get("id"));
   const revision = validTopicRevision(formData.get("revision"));
   if (!id || !revision) return { ok: false, error: "Identitas atau versi data tidak valid. Muat ulang daftar." };

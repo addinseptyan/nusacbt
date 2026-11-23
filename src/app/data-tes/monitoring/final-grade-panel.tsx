@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatFinalGrade } from "@/lib/exam-final-grade.mjs";
 
-type Props = { test: { id: string; name: string; period: string }; data: FinalGradeData; attemptPage: number; filterQuery?: string };
+type Props = { test: { id: string; name: string; period: string }; data: FinalGradeData; attemptPage: number; filterQuery?: string; canOverrideGrades: boolean };
 const kindName = (kind: "regular" | "makeup" | "remedial") => kind === "regular" ? "Reguler" : kind === "makeup" ? "Susulan" : "Remidi";
 const methodName = (method: string) => method === "highest" ? "Tertinggi" : "Rata-rata";
 function pageUrl(test: string, finalPage: number, attemptPage: number, filterQuery = "") {
@@ -19,13 +19,13 @@ function pageUrl(test: string, finalPage: number, attemptPage: number, filterQue
   return `/data-tes/monitoring?${params.toString()}#nilai-akhir`;
 }
 
-export function FinalGradePanel({ test, data, attemptPage, filterQuery }: Props) {
+export function FinalGradePanel({ test, data, attemptPage, filterQuery, canOverrideGrades }: Props) {
   return <Card id="nilai-akhir" className="mb-5 gap-0 overflow-hidden rounded-[20px] py-0">
     <div className="flex flex-wrap items-start justify-between gap-4 border-b p-5"><div>
       <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Tes dan peserta</p>
       <h2 className="mt-1 text-lg font-bold">Nilai akhir · {test.name}</h2><p className="mt-1 text-xs text-muted-foreground">{test.period} · {data.total} peserta memiliki pengerjaan</p>
       <p className="mt-3 text-sm">Metode tes: <strong>{methodName(data.method)}</strong>{data.methodRevision === "0" && <span className="text-xs text-muted-foreground"> (awal)</span>}</p>
-    </div><FinalGradeControl mode="method" testId={test.id} testName={test.name} period={test.period} method={data.method} methodRevision={data.methodRevision} /></div>
+    </div>{canOverrideGrades && <FinalGradeControl mode="method" testId={test.id} testName={test.name} period={test.period} method={data.method} methodRevision={data.methodRevision} />}</div>
     <Alert role="note" className="m-5 mb-0 max-w-5xl rounded-xl"><Info className="size-4" /><AlertTitle>Pilih dengan sengaja sebelum menetapkan</AlertTitle><AlertDescription className="text-xs leading-5">Semua pengerjaan selesai pada Reguler, Susulan, Remidi dan pengulangan dihitung per peserta. Rata-rata berbobot sama per pengerjaan; hasil akhir dibulatkan dua desimal. Penetapan ditolak selama ada pengerjaan belum selesai, termasuk yang menunggu penyelesaian otomatis. Nilai akhir hanya dibagikan jika semua kategori penyumbang dibuka.</AlertDescription></Alert>
     {!data.rows.length ? <p className="p-7 text-sm text-muted-foreground">Belum ada pengerjaan pada tes ini.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[960px] text-left text-sm"><thead className="bg-muted/40 text-xs text-muted-foreground"><tr><th scope="col" className="p-4">Peserta</th><th scope="col" className="p-4">Pengerjaan penyumbang</th><th scope="col" className="p-4">Nilai</th><th scope="col" className="p-4">Status / pembagian</th><th scope="col" className="p-4">Tindakan</th></tr></thead>
       <tbody>{data.rows.map((row) => <tr key={row.identityId} data-testid="final-grade-row" className="border-t align-top">
@@ -33,9 +33,9 @@ export function FinalGradePanel({ test, data, attemptPage, filterQuery }: Props)
         <td className="p-4"><p>{row.finished} selesai{row.unfinished > 0 && ` · ${row.unfinished} belum selesai`}</p><p className="mt-1 text-xs text-muted-foreground">{row.kinds.length ? row.kinds.map(kindName).join(", ") : "Belum ada penyumbang selesai"}</p>{row.pendingPermissions > 0 && <p className="mt-1 text-xs text-muted-foreground">{row.pendingPermissions} izin belum digunakan</p>}</td>
         <td className="p-4 font-bold tabular-nums">{row.score ?? "—"}</td>
         <td className="min-w-[190px] p-4"><Badge variant={row.finalized ? "default" : "secondary"}>{row.finalized ? "Ditetapkan" : "Sementara"}</Badge><p className="mt-1 text-xs leading-5 text-muted-foreground">{!row.finalized ? "Nilai akhir belum dibagikan." : row.hiddenKinds.length ? `Belum dibagikan: kategori ${row.hiddenKinds.map(kindName).join(", ")} ditutup.` : "Dapat dibagikan kepada peserta."}</p></td>
-        <td className="p-4"><FinalGradeControl mode={row.finalized ? "reopen" : "finalize"} testId={test.id} testName={test.name} period={test.period}
+        <td className="p-4">{canOverrideGrades ? <FinalGradeControl mode={row.finalized ? "reopen" : "finalize"} testId={test.id} testName={test.name} period={test.period}
           method={data.method} methodRevision={data.methodRevision} identityId={row.identityId} student={row.student} number={row.number} className={row.className}
-          stateRevision={row.revision} digest={row.digest} score={row.score} finished={row.finished} unfinished={row.unfinished} pendingPermissions={row.pendingPermissions} />
+          stateRevision={row.revision} digest={row.digest} score={row.score} finished={row.finished} unfinished={row.unfinished} pendingPermissions={row.pendingPermissions} /> : <span className="text-xs text-muted-foreground">Hanya baca</span>}
           {!row.finalized && row.unfinished > 0 && <p className="mt-1 max-w-[190px] text-xs text-muted-foreground">Tunggu semua pengerjaan selesai.</p>}
           {!row.finalized && row.finished === 0 && <p className="mt-1 max-w-[190px] text-xs text-muted-foreground">Perlu setidaknya satu pengerjaan selesai.</p>}</td>
       </tr>)}</tbody></table></div>}

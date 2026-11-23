@@ -2,16 +2,18 @@ import { Award, CircleAlert, Clock3, Info } from "lucide-react";
 
 import { ScoreCategoryControl, type ScoreCategory } from "@/app/data-tes/pengaturan-pengerjaan/score-category-control";
 import { SettingForm } from "@/app/data-tes/pengaturan-pengerjaan/setting-form";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 
 export const metadata = { title: "Pengaturan Pengerjaan — NusaCBT", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function WorkSettingsPage() {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("exam_controls.manage");
+  if (!allowed) return <AccessDenied section="Data tes" title="Pengaturan Pengerjaan" />;
   let data: { minutes: number; revision: string }; let categories: ScoreCategory[];
   try {
     const result = await getPostgresPool().query<{ minutes: number; revision: string }>(

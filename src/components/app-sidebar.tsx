@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import { useCurrentAdminUser } from "@/components/admin-user-context";
 import { useBranding } from "@/components/branding-context";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -23,19 +24,49 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { adminHasAnyPermission, adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { navigation, navigationPageContains } from "@/lib/navigation";
 
 export function AppSidebar() {
   const pathname = usePathname();
   const branding = useBranding();
+  const currentUser = useCurrentAdminUser();
   const { isMobile, setOpenMobile } = useSidebar();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const containsPage = (href: string) => navigationPageContains(href, pathname);
   const initialLetter = branding.appName.slice(0, 1).toUpperCase() || "N";
 
+  const visibleSections = navigation
+    .map((section) => {
+      if (!section.pages) return section;
+      if (!currentUser) return null;
+      const pages = section.pages.filter((page) =>
+        !page.permissions || adminHasAnyPermission(currentUser, page.permissions),
+      );
+      if (pages.length === 0) return null;
+      return { ...section, pages };
+    })
+    .filter((section): section is NonNullable<typeof section> => section !== null);
+
+  const canManageAppSettings = adminHasPermission(currentUser, "app_settings.manage");
+
   function closeMobile() {
     if (isMobile) setOpenMobile(false);
   }
+
+  const footerCardContent = (
+    <>
+      <div className="flex items-center gap-2 text-[12px] font-semibold text-accent-foreground">
+        <span className="flex size-7 items-center justify-center rounded-lg bg-card text-primary shadow-xs">
+          <Settings2 className="size-3.5" />
+        </span>
+        <span className="truncate">{branding.schoolName || "Identitas sekolah"}</span>
+      </div>
+      <p className="mt-2 truncate text-[11px] leading-[1.5] text-muted-foreground">
+        {branding.appDescription || "Atur nama sekolah, logo, kop & warna."}
+      </p>
+    </>
+  );
 
   return (
     <Sidebar collapsible="offcanvas" className="border-r border-sidebar-border">
@@ -63,7 +94,7 @@ export function AppSidebar() {
           <SidebarGroupLabel className="px-3 text-[10px] font-bold tracking-[0.13em] text-muted-foreground/80">MENU UTAMA</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {navigation.map((section) => {
+              {visibleSections.map((section) => {
                 const Icon = section.icon;
                 const active = section.href === pathname || Boolean(section.pages?.some((page) => containsPage(page.href)));
                 const buttonClass = "h-11 gap-3 rounded-xl px-3 text-[13px] font-medium text-sidebar-foreground transition-colors data-active:bg-sidebar-accent data-active:font-semibold data-active:text-sidebar-accent-foreground";
@@ -120,13 +151,15 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="px-4 pb-5 pt-4">
-        <Link href="/pengaturan/aplikasi" prefetch={false} onClick={closeMobile} className="block rounded-2xl border border-border bg-accent/55 p-3.5 transition-colors hover:bg-accent">
-          <div className="flex items-center gap-2 text-[12px] font-semibold text-accent-foreground">
-            <span className="flex size-7 items-center justify-center rounded-lg bg-card text-primary shadow-xs"><Settings2 className="size-3.5" /></span>
-            <span className="truncate">{branding.schoolName || "Identitas sekolah"}</span>
+        {canManageAppSettings ? (
+          <Link href="/pengaturan/aplikasi" prefetch={false} onClick={closeMobile} className="block rounded-2xl border border-border bg-accent/55 p-3.5 transition-colors hover:bg-accent">
+            {footerCardContent}
+          </Link>
+        ) : (
+          <div className="block rounded-2xl border border-border bg-accent/55 p-3.5">
+            {footerCardContent}
           </div>
-          <p className="mt-2 truncate text-[11px] leading-[1.5] text-muted-foreground">{branding.appDescription || "Atur nama sekolah, logo, kop & warna."}</p>
-        </Link>
+        )}
         <div className="flex items-center gap-1.5 px-1 pt-2 text-[10px] font-medium text-muted-foreground/75"><Code2 className="size-3" /> {branding.appName} · v0.1.0</div>
       </SidebarFooter>
     </Sidebar>

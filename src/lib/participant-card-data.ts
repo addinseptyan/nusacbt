@@ -2,6 +2,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { PARTICIPANT_CARD_BATCH_SIZE } from "@/lib/participant-card-constants.mjs";
 import type { CardFilters } from "@/lib/participant-card-filter.mjs";
 import { cardFilterCondition, cardFilterValues } from "@/lib/participant-card-sql";
@@ -12,6 +13,7 @@ import type { PasswordRow } from "@/lib/participant-password-types";
 import { getPostgresPool } from "@/lib/postgres";
 
 export class CardPageSessionExpired extends Error {}
+export class CardPagePermissionDenied extends Error {}
 export class CardPeriodChanged extends Error {}
 
 type CardDatabaseRow = Omit<PasswordRow, "identityId" | "participantNumber" | "username" | "identityVersion" | "placementId" | "classId" | "classLabel"> & {
@@ -88,9 +90,11 @@ export async function loadParticipantCardPage(filters: CardFilters, page: number
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new CardPageSessionExpired();
+    if (!adminHasPermission(admin, "participant_cards.print")) throw new CardPagePermissionDenied();
     const result = await readPage(client, filters, page);
     const active = await lockActiveAdminSession(client);
     if (!active || active.id !== admin.id) throw new CardPageSessionExpired();
+    if (!adminHasPermission(active, "participant_cards.print")) throw new CardPagePermissionDenied();
     await client.query("COMMIT");
     return result;
   } catch (error) {

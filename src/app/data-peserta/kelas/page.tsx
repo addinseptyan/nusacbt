@@ -1,15 +1,17 @@
 import { CircleAlert, GraduationCap } from "lucide-react";
 
 import { ClassManager } from "@/app/data-peserta/kelas/class-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import type { SchoolClass, SchoolMajor } from "@/lib/class-types";
 import { getPostgresPool } from "@/lib/postgres";
 
 export const metadata = { title: "Kelas / Jurusan — NusaCBT" };
 
 export default async function ClassesPage() {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("classes.manage");
+  if (!allowed) return <AccessDenied section="Data peserta" title="Kelas / Jurusan" />;
   let classes: SchoolClass[];
   let majors: SchoolMajor[];
   try {

@@ -5,7 +5,8 @@ import type { PoolClient } from "pg";
 
 import { validDataId } from "@/lib/class-validation.mjs";
 import { lockAcademicMutation, syncYearPlacements } from "@/lib/academic-year-service";
-import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import { planStudentImport } from "@/lib/student-import-validation.mjs";
 import { ImportFileError, MAX_IMPORT_BYTES, readStudentWorkbook } from "@/lib/student-import-xlsx.mjs";
@@ -136,6 +137,7 @@ export async function applyImport(formData: FormData, adminId: string): Promise<
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin || admin.id !== adminId) throw new ImportProblem("Sesi admin berakhir. Masuk kembali.");
+    if (!adminHasPermission(admin, "students.manage")) throw new ImportProblem(PERMISSION_DENIED_MESSAGE);
     await lockAcademicMutation(client);
     const plan = await makePlan(client, upload, adminId, true);
     if (!plan.token || plan.token !== expected) {

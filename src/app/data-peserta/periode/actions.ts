@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { AcademicYearProblem, attachPeriodToYear, lockAcademicMutation, syncYearPlacements } from "@/lib/academic-year-service";
 import { lockSchedulePeriod } from "@/lib/exam-session-service";
 import { getPostgresPool } from "@/lib/postgres";
@@ -13,7 +14,8 @@ import { validTopicRevision as validRowRevision } from "@/lib/topic-validation.m
 type ActionResult = { ok: true; message: string } | { ok: false; error: string };
 
 export async function savePeriod(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("periods.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const rawId = formData.get("id");
   const id = rawId === null || rawId === "" ? null : validPeriodId(rawId);
   const yearId = validPeriodId(formData.get("yearId"));
@@ -27,6 +29,7 @@ export async function savePeriod(formData: FormData): Promise<ActionResult> {
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new AcademicYearProblem("Sesi admin berakhir. Masuk kembali.");
+    if (!adminHasPermission(admin, "periods.manage")) throw new AcademicYearProblem(PERMISSION_DENIED_MESSAGE);
     await lockAcademicMutation(client);
     const year = await client.query("SELECT id FROM academic_years WHERE id=$1::bigint FOR UPDATE", [yearId]);
     if (!year.rowCount) throw new AcademicYearProblem("Tahun ajaran tidak ditemukan.");
@@ -54,7 +57,8 @@ export async function savePeriod(formData: FormData): Promise<ActionResult> {
 class PeriodDeleteProblem extends Error {}
 
 export async function deletePeriod(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("periods.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const id = validPeriodId(formData.get("id"));
   if (!id || formData.getAll("id").length !== 1) return { ok: false, error: "Identitas periode tidak valid." };
   let client: PoolClient | undefined;
@@ -63,6 +67,7 @@ export async function deletePeriod(formData: FormData): Promise<ActionResult> {
     await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new PeriodDeleteProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    if (!adminHasPermission(admin, "periods.manage")) throw new PeriodDeleteProblem(PERMISSION_DENIED_MESSAGE);
     // Satu pagar dengan perubahan kelompok/jadwal. Rencana kosong boleh
     // dibersihkan hanya bersamaan dengan penghapusan periodenya; kalau ada
     // referensi lain, seluruh transaksi termasuk pembersihan di-rollback.
@@ -99,7 +104,8 @@ class LoginPeriodProblem extends Error {}
 // lock SHARE pada baris yang sama sampai sesi terbit, sehingga sesi dari
 // periode lama tidak dapat lolos ketika admin mengganti periode bersamaan.
 export async function setActiveLoginPeriod(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("periods.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   const targets = formData.getAll("periodId");
   const expectedValues = formData.getAll("expectedPeriodId");
   const revisions = formData.getAll("expectedRevision");
@@ -122,6 +128,7 @@ export async function setActiveLoginPeriod(formData: FormData): Promise<ActionRe
       await client.query("BEGIN");
       const admin = await lockActiveAdminSession(client);
       if (!admin) throw new LoginPeriodProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+      if (!adminHasPermission(admin, "periods.manage")) throw new LoginPeriodProblem(PERMISSION_DENIED_MESSAGE);
       const result = await client.query<{ periodId: string | null; revision: string }>(
         'SELECT period_id::text AS "periodId", xmin::text AS revision FROM participant_login_settings WHERE id = 1 FOR UPDATE',
       );

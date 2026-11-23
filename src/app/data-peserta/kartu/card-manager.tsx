@@ -30,7 +30,7 @@ function wipeVisibleSecrets() {
   document.querySelectorAll("[data-participant-card-secret]").forEach((node) => { node.textContent = ""; });
 }
 
-export function CardManager({ data }: { data: CardPageData }) {
+export function CardManager({ data, canIncludePassword }: { data: CardPageData; canIncludePassword: boolean }) {
   const branding = useBranding();
   const { filters, selected, rows } = data;
   const [formClass, setFormClass] = useState(filters.classId ?? "");
@@ -156,6 +156,7 @@ export function CardManager({ data }: { data: CardPageData }) {
 
   async function prepare(showPasswords: boolean) {
     if (!selected || dirty || pending || !selectedRows.length) return;
+    if (showPasswords && !canIncludePassword) { setConfirmOpen(false); setError("Anda tidak memiliki hak akses untuk menyertakan sandi peserta pada kartu."); return; }
     if (showPasswords && missingPassword) { setConfirmOpen(false); setError("Ada peserta terpilih yang belum memiliki sandi. Buat sandi dahulu atau siapkan tanpa sandi."); return; }
     const selection: Selection = { filters: cardSearchParams(filters, 1, true).toString(), candidates: selectedRows.map((row) => row.candidate!) };
     const reply = await post(selection, "prepare", showPasswords);
@@ -210,9 +211,15 @@ export function CardManager({ data }: { data: CardPageData }) {
           <div className="flex gap-2">{data.page > 1 ? <Button asChild variant="outline" size="sm"><Link href={pageUrl(data, data.page - 1)} prefetch={false}><ChevronLeft className="size-4" /> Sebelumnya</Link></Button> : <Button disabled variant="outline" size="sm"><ChevronLeft className="size-4" /> Sebelumnya</Button>}
             {data.page < data.pages ? <Button asChild variant="outline" size="sm"><Link href={pageUrl(data, data.page + 1)} prefetch={false}>Berikutnya <ChevronRight className="size-4" /></Link></Button> : <Button disabled variant="outline" size="sm">Berikutnya <ChevronRight className="size-4" /></Button>}</div></div>}
       </Card>
-      <Card className="gap-0 rounded-[20px] p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="font-bold">Siapkan kartu</h2><p className="mt-1 text-xs leading-5 text-muted-foreground"><strong>{selectedRows.length}</strong> peserta dipilih pada halaman ini. Maksimal {PARTICIPANT_CARD_BATCH_SIZE} kartu per batch; untuk lebih banyak, cetak halaman berikutnya.</p></div><Button type="button" disabled={dirty || pending || !selectedRows.length || (includePassword && missingPassword > 0)} onClick={() => includePassword ? setConfirmOpen(true) : void prepare(false)} className="rounded-xl"><Printer className="size-4" /> {pending ? "Menyiapkan..." : "Pratinjau kartu"}</Button></div>
-        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/25"><input type="checkbox" className="mt-1 size-4 accent-primary" checked={includePassword} disabled={dirty || pending || !selectedRows.length} onChange={(event) => setIncludePassword(event.target.checked)} /><span><strong>Sertakan sandi pada kartu</strong><span className="mt-1 block text-xs leading-5 text-muted-foreground">Opsional dan awalnya tidak dicentang. Sandi hanya diminta setelah konfirmasi; setiap sandi yang berhasil disiapkan dicatat. Kartu dan PDF yang memuatnya harus dijaga rahasia.</span></span></label>
-        {missingPassword > 0 && <p role="status" className="mt-3 text-xs leading-5 text-amber-700 dark:text-amber-300">{missingPassword} peserta terpilih belum bersandi. Anda dapat mencetak tanpa sandi atau membuatnya di <Link href="/data-peserta/akun" className="font-semibold underline">Akun Peserta</Link>, lalu muat ulang.</p>}
+      <Card className="gap-0 rounded-[20px] p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="font-bold">Siapkan kartu</h2><p className="mt-1 text-xs leading-5 text-muted-foreground"><strong>{selectedRows.length}</strong> peserta dipilih pada halaman ini. Maksimal {PARTICIPANT_CARD_BATCH_SIZE} kartu per batch; untuk lebih banyak, cetak halaman berikutnya.</p></div><Button type="button" disabled={dirty || pending || !selectedRows.length || (canIncludePassword && includePassword && missingPassword > 0)} onClick={() => (canIncludePassword && includePassword) ? setConfirmOpen(true) : void prepare(false)} className="rounded-xl"><Printer className="size-4" /> {pending ? "Menyiapkan..." : "Pratinjau kartu"}</Button></div>
+        {canIncludePassword ? (
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/25"><input type="checkbox" className="mt-1 size-4 accent-primary" checked={includePassword} disabled={dirty || pending || !selectedRows.length} onChange={(event) => setIncludePassword(event.target.checked)} /><span><strong>Sertakan sandi pada kartu</strong><span className="mt-1 block text-xs leading-5 text-muted-foreground">Opsional dan awalnya tidak dicentang. Sandi hanya diminta setelah konfirmasi; setiap sandi yang berhasil disiapkan dicatat. Kartu dan PDF yang memuatnya harus dijaga rahasia.</span></span></label>
+        ) : (
+          <div className="mt-4 rounded-xl border border-border bg-muted/40 p-4 text-xs leading-5 text-muted-foreground">
+            <strong>Cetak kartu tanpa sandi</strong>: akun Anda tidak memiliki hak akses <em>Sandi Peserta</em>, sehingga kartu disiapkan tanpa menampilkan sandi peserta.
+          </div>
+        )}
+        {canIncludePassword && missingPassword > 0 && <p role="status" className="mt-3 text-xs leading-5 text-amber-700 dark:text-amber-300">{missingPassword} peserta terpilih belum bersandi. Anda dapat mencetak tanpa sandi atau membuatnya di <Link href="/data-peserta/akun" className="font-semibold underline">Akun Peserta</Link>, lalu muat ulang.</p>}
         <p className="mt-3 text-xs leading-5 text-muted-foreground">Data diperiksa kembali sebelum dialog cetak. Gunakan tombol cetak pada pratinjau, bukan Ctrl+P. Perubahan setelah pemeriksaan tetap dapat membuat hasil usang.</p>
       </Card>
     </>}

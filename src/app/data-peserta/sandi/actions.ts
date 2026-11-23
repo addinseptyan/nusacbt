@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/admin-auth";
+import { PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
 import { passwordErrorMessage, revealParticipantPassword, saveParticipantPasswords } from "@/lib/participant-password-service";
 import type { PasswordActionResult, PasswordRevealResult } from "@/lib/participant-password-types";
 
 export async function savePasswords(formData: FormData): Promise<PasswordActionResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("participant_passwords.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   try {
     const message = await saveParticipantPasswords(formData);
     revalidatePath("/data-peserta/sandi");
@@ -19,7 +20,8 @@ export async function savePasswords(formData: FormData): Promise<PasswordActionR
 }
 
 export async function revealPassword(formData: FormData): Promise<PasswordRevealResult> {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("participant_passwords.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   try {
     const password = await revealParticipantPassword(formData);
     revalidatePath("/data-peserta/akun");

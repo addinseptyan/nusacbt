@@ -2,8 +2,9 @@ import Link from "next/link";
 import { CircleAlert, IdCard } from "lucide-react";
 
 import { IdentityManager } from "@/app/data-peserta/identitas/identity-manager";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { loadIdentityPage } from "@/lib/participant-identity-service";
 import type { IdentityPageData } from "@/lib/participant-identity-types";
@@ -11,7 +12,8 @@ import type { IdentityPageData } from "@/lib/participant-identity-types";
 export const metadata = { title: "Identitas Peserta — NusaCBT" };
 
 export default async function IdentityPage({ searchParams }: { searchParams: Promise<{ periode?: string | string[] }> }) {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("participant_accounts.manage");
+  if (!allowed) return <AccessDenied section="Data peserta" title="Identitas Peserta" />;
   const params = await searchParams;
   const supplied = params.periode !== undefined;
   const periodId = validDataId(params.periode);

@@ -5,8 +5,10 @@ import type { PoolClient } from "pg";
 import { displayToken, TOKEN_COLUMNS, TOKEN_JOINS, type TokenRow } from "@/app/data-tes/token/token-data";
 import { TokenHistory } from "@/app/data-tes/token/token-history";
 import type { DateFilter } from "@/app/data-tes/token/token-links";
+import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { lockActiveAdminSession, requireAdmin } from "@/lib/admin-auth";
+import { lockActiveAdminSession, requireAdminAccess } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { parseTokenDateFilter, parseTokenZone, tokenPageNumber } from "@/lib/exam-token-date.mjs";
 import { ExamTokenKeyProblem, readConfiguredTokenKey, tokenKeyMessage, tokenKeyStatus } from "@/lib/exam-token-key";
 import type { AccessTokenRecord, TokenKeyStatus } from "@/lib/exam-token-types";
@@ -16,11 +18,13 @@ export const metadata = { title: "Riwayat Token — NusaCBT" };
 export const dynamic = "force-dynamic";
 const HISTORY_SIZE = 20;
 class SessionExpired extends Error {}
+class TokenPermissionDenied extends Error {}
 
 type QueryParams = { tanggal?: string | string[]; zona?: string | string[]; asal?: string | string[]; halaman?: string | string[] };
 
 export default async function TokenHistoryPage({ searchParams }: { searchParams: Promise<QueryParams> }) {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("tokens.manage");
+  if (!allowed) return <AccessDenied section="Data tes · Token" title="Riwayat token" />;
   const params = await searchParams;
   const zone = parseTokenZone(params.zona); const fromPage = tokenPageNumber(params.asal); const rawPage = tokenPageNumber(params.halaman);
   let client: PoolClient | undefined; let key: Buffer | undefined;
@@ -34,6 +38,7 @@ export default async function TokenHistoryPage({ searchParams }: { searchParams:
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new SessionExpired();
+    if (!adminHasPermission(admin, "tokens.manage")) throw new TokenPermissionDenied();
     if (key) keyStatus = await tokenKeyStatus(client, key);
     const clock = await client.query<{ now: Date }>("SELECT clock_timestamp() AS now");
     filter = parseTokenDateFilter(params.tanggal, clock.rows[0].now, zone);
@@ -51,6 +56,7 @@ export default async function TokenHistoryPage({ searchParams }: { searchParams:
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     if (error instanceof SessionExpired) redirect("/login");
+    if (error instanceof TokenPermissionDenied) return <AccessDenied section="Data tes · Token" title="Riwayat token" />;
     return <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9"><h1 className="text-[29px] font-bold tracking-tight">Riwayat token</h1><Alert variant="destructive" role="alert" className="mt-6 max-w-2xl"><CircleAlert className="size-4" /><AlertTitle>Riwayat belum dapat dimuat</AlertTitle><AlertDescription>Pastikan PostgreSQL berjalan dan migrasi terbaru telah dijalankan.</AlertDescription></Alert></div>;
   } finally { key?.fill(0); client?.release(); }
 

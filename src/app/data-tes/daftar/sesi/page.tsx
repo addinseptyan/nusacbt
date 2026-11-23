@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarRange, CircleAlert } from "lucide-react";
-import { requireAdmin } from "@/lib/admin-auth";
+import { AccessDenied } from "@/components/access-denied";
+import { requireAdminAccess } from "@/lib/admin-auth";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { loadSessionPlan, ScheduleSessionExpired } from "@/lib/exam-session-service";
 import type { SessionPlanPage as SessionPlanData } from "@/lib/exam-session-types";
@@ -12,7 +13,8 @@ export const metadata = { title: "Kelompok Sesi — NusaCBT", robots: { index: f
 export const dynamic = "force-dynamic";
 
 export default async function SessionPlanPage({ searchParams }: { searchParams: Promise<{ periode?: string | string[] }> }) {
-  await requireAdmin();
+  const { allowed } = await requireAdminAccess("exams.manage");
+  if (!allowed) return <AccessDenied section="Data tes" title="Kelompok Sesi" />;
   const params = await searchParams; const periodId = validDataId(params.periode);
   let data: SessionPlanData;
   try {

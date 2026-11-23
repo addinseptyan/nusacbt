@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
 import type { PoolClient } from "pg";
 
-import { lockActiveAdminSession } from "@/lib/admin-auth";
+import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { PARTICIPANT_CARD_BATCH_SIZE } from "@/lib/participant-card-constants.mjs";
 import type { CardFilters } from "@/lib/participant-card-filter.mjs";
@@ -27,6 +28,7 @@ import { hashParticipantPassword } from "@/lib/password.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 
 export class PasswordProblem extends Error {}
+export class PasswordPermissionProblem extends PasswordProblem {}
 
 type Student = { id: string; name: string; nisn: string; version: string };
 type Placement = { id: string; studentId: string; classId: string; classLabel: string };
@@ -312,6 +314,7 @@ export async function saveParticipantPasswords(formData: FormData): Promise<stri
     try {
       await client.query("BEGIN");
       const admin = await requireActiveSession(client);
+      if (!adminHasPermission(admin, "participant_passwords.manage")) throw new PasswordPermissionProblem(PERMISSION_DENIED_MESSAGE);
       await lockKeyBinding(client, key, operation === "create");
       const rows = await lockedRows(client, periodId, candidates);
       if (rows.some(({ password }) => operation === "create" ? password !== null : password === null)) {
@@ -357,6 +360,7 @@ export async function revealParticipantPassword(formData: FormData): Promise<str
     try {
       await client.query("BEGIN");
       const admin = await requireActiveSession(client);
+      if (!adminHasPermission(admin, "participant_passwords.manage")) throw new PasswordPermissionProblem(PERMISSION_DENIED_MESSAGE);
       await lockKeyBinding(client, key, false);
       const [{ row, password }] = await lockedRows(client, periodId, candidates);
       if (!password) throw new PasswordProblem("Sandi belum tersedia. Muat ulang halaman.");
@@ -393,6 +397,10 @@ export async function prepareParticipantCards(formData: FormData, filters: CardF
     try {
       await client.query("BEGIN");
       const admin = await requireActiveSession(client);
+      if (!adminHasPermission(admin, "participant_cards.print")) throw new PasswordPermissionProblem(PERMISSION_DENIED_MESSAGE);
+      if (includePassword && !adminHasPermission(admin, "participant_passwords.manage")) {
+        throw new PasswordPermissionProblem("Anda tidak memiliki hak akses untuk menyertakan sandi peserta pada kartu.");
+      }
       if (key) await lockKeyBinding(client, key, false);
       // Lock pengaturan yang sama dengan pergantian tahun/periode dan login.
       // Kartu dari tab lama tidak boleh disiapkan atau dicetak setelah periode berubah.
