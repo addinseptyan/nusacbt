@@ -278,6 +278,18 @@ Cadangkan file kunci secara aman dan **terpisah** dari database, dan uji pemulih
 
 Hash scrypt digunakan untuk verifikasi login peserta; salinan terpisah dienkripsi AES-256-GCM dengan kunci tersebut. Sandi tidak dikirim ke halaman daftar awal, URL, atau catatan audit. Sandi manual dikirim ke server saat disimpan dan sandi yang dibuka dikirim ke browser; gunakan HTTPS tepercaya, perangkat admin yang aman, dan konfigurasi proxy yang tidak mencatat isi permintaan/respons. Jangan gunakan data asli sampai keamanan dan operasional diuji. Sesi admin saat ini cukup untuk melihat sandi; belum ada autentikasi ulang khusus untuk setiap penampilan.
 
+### Tool — Backup & Pemulihan Database
+
+Menu **Tool** (`Backup Database` di `/tool/backup` dan `Upload Database` di `/tool/pemulihan`, memerlukan izin `tools.manage` serta migrasi `027_database_backup_audit.sql`) memungkinkan admin mencadangkan seluruh isi database dan memulihkannya secara atomik tanpa bergantung pada utilitas eksternal `pg_dump`/`pg_restore` maupun hak superuser PostgreSQL.
+
+1. **Format arsip terverifikasi (`.zip`):** berisi `manifest.json` (katalog versi migrasi `nusacbt_schema_migrations`, metadata pengikat kunci, urutan sequence, dan ringkasan), seluruh tabel domain terurut topologi pada `tables/<table>.json`, serta berkas biner terdeduplikasi (`bytea` gambar bank soal, gambar snapshot pengerjaan, logo, dan kop surat) pada `blobs/<sha256>.bin`. Setiap entri diverifikasi melalui CRC32 dan checksum SHA-256.
+2. **Pemisahan rahasia server:** file kunci `NUSACBT_PARTICIPANT_KEY_FILE`, `NUSACBT_EXAM_TOKEN_KEY_FILE`, dan `.env.local` **tidak pernah** disertakan di dalam arsip `.zip`. Simpan dan cadangkan kedua file kunci secara terpisah.
+3. **Pratinjau & pagar keamanan pemulihan (batas maksimal unggahan 64 MiB):**
+   - Arsip diperiksa untuk batas ukuran/dekompresi, path traversal, symlink, file tambahan tak dikenal, kecocokan SHA-256 tiap entri, kecocokan persis seluruh migrasi skema `nusacbt_schema_migrations`, dan kecocokan pengikat kunci server saat ini.
+   - Pemulihan **diblokir secara tegas** apabila masih terdapat pengerjaan ujian aktif yang belum selesai (`completed_at IS NULL AND deadline > clock_timestamp()`), apabila skema tidak cocok, atau apabila kunci server berbeda dengan pengikat cadangan.
+   - Eksekusi membutuhkan pengetikan konfirmasi `PULIHKAN` dan berjalan dalam satu transaksi PostgreSQL (`TRUNCATE ... RESTART IDENTITY CASCADE`, penyisipan bertipe terparameterisasi `OVERRIDING SYSTEM VALUE`, penanganan dua tahap `admin_roles.updated_by`, pemulihan seluruh `sequence`, pengosongan `participant_sessions`, serta pencatatan di `database_backup_audit`). Jika sesi admin saat ini tidak terdapat di cadangan, sesi dibersihkan dan admin diarahkan masuk ulang.
+   - Selalu uji cadangan di lingkungan uji (`nusacbt_test`) sebelum dipakai pada data sekolah asli.
+
 ## Verifikasi
 
 ```bash
@@ -287,7 +299,7 @@ npm run test:unit
 npm run build
 ```
 
-Tes browser dan tes upgrade (`npm run test:upgrade-024`, `npm run test:upgrade-025`, `npm run test:upgrade-026`) membutuhkan **database pengujian terpisah** bernama `nusacbt_test`, akun dan kunci fiktif. Jangan arahkan tes ke data sekolah; lihat [petunjuk pengujian](docs/penyiapan-database.md#pengujian-browser). Workflow GitHub Actions menyiapkan PostgreSQL uji dan menjalankan migrasi, pemeriksaan kode, unit test, build, Playwright, serta tes upgrade pada database terpisah. Workflow baru tetap perlu diverifikasi pada PR. Tes lokal mencakup simulasi 30 sesi fiktif memulai dan menyimpan serentak melalui HTTP untuk satu soal; sesi tersebut dibuat sebagai fixture, bukan 30 browser atau login serentak. Ini **bukan** jaminan kapasitas produksi, uji Windows, atau jaringan LAN sekolah.
+Tes browser dan tes upgrade (`npm run test:upgrade-024`, `npm run test:upgrade-025`, `npm run test:upgrade-026`, `npm run test:upgrade-027`) membutuhkan **database pengujian terpisah** bernama `nusacbt_test`, akun dan kunci fiktif. Jangan arahkan tes ke data sekolah; lihat [petunjuk pengujian](docs/penyiapan-database.md#pengujian-browser). Workflow GitHub Actions menyiapkan PostgreSQL uji dan menjalankan migrasi, pemeriksaan kode, unit test, build, Playwright, serta tes upgrade pada database terpisah. Workflow baru tetap perlu diverifikasi pada PR. Tes lokal mencakup simulasi 30 sesi fiktif memulai dan menyimpan serentak melalui HTTP untuk satu soal; sesi tersebut dibuat sebagai fixture, bukan 30 browser atau login serentak. Ini **bukan** jaminan kapasitas produksi, uji Windows, atau jaringan LAN sekolah.
 
 ## Keamanan dan privasi
 

@@ -45,6 +45,10 @@ const nextConfig: NextConfig = {
       { source: "/data-tes/pengaturan-pengerjaan", headers: privateHeaders },
       { source: "/data-tes/token", headers: privateHeaders },
       { source: "/data-tes/token/riwayat", headers: privateHeaders },
+      { source: "/tool", headers: privateHeaders },
+      { source: "/tool/:path*", headers: privateHeaders },
+      { source: "/pengaturan", headers: privateHeaders },
+      { source: "/pengaturan/:path*", headers: privateHeaders },
     ];
   },
 };
