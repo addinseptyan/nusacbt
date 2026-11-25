@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
+import { toast } from "sonner";
 
+import { saveTimelineDefaultDays } from "@/app/data-tes/daftar/actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -66,8 +69,11 @@ function ItemTarget({ item, onEditBase, ready, className, style, label, tooltip 
 }
 
 export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { items: TimelineItem[]; clock: TimelineClock; defaultDays?: number; onEditBase: (id: string) => void }) {
+  const router = useRouter();
   const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
   const initialDays = Number.isInteger(defaultDays) && defaultDays >= 1 && defaultDays <= 7 ? defaultDays : 7;
+  const [maxDays, setMaxDays] = useState<number>(initialDays);
+  const [savingMaxDays, startSavingMaxDays] = useTransition();
   const [range, setRange] = useState<DateRange>(() => ({ start: clock.WIB, end: endFor(clock.WIB, initialDays) }));
   const [draft, setDraft] = useState<DateRange>(range);
   const [zone, setZone] = useState<ExamTimeZone>("WIB");
@@ -110,8 +116,8 @@ export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { it
     return () => { window.cancelAnimationFrame(frame); observer.disconnect(); };
   }, []);
 
-  const count = timelineRangeLength(range.start, range.end) ?? 1;
-  const draftCount = timelineRangeLength(draft.start, draft.end);
+  const count = timelineRangeLength(range.start, range.end, maxDays) ?? 1;
+  const draftCount = timelineRangeLength(draft.start, draft.end, maxDays);
   const days = useMemo(() => Array.from({ length: count }, (_, index) => {
     const date = shiftTimelineDate(range.start, index)!;
     const events = layoutTimelineDay(items, date, zone, hourWidth);
@@ -133,9 +139,30 @@ export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { it
   const nearestDate = nearest && timelineLocal(nearest.startUtc, zone)?.slice(0, 10);
 
   function chooseRange(nextRange: DateRange) {
-    if (!timelineRangeLength(nextRange.start, nextRange.end)) return;
+    if (!timelineRangeLength(nextRange.start, nextRange.end, maxDays)) return;
     setRange(nextRange); setDraft(nextRange);
     if (scroll.current) scroll.current.scrollTop = 0;
+  }
+  function handleMaxDaysChange(nextDays: number) {
+    if (!Number.isInteger(nextDays) || nextDays < 1 || nextDays > 7) return;
+    setMaxDays(nextDays);
+    const nextRange = { start: range.start, end: endFor(range.start, nextDays) };
+    setRange(nextRange);
+    setDraft(nextRange);
+    if (scroll.current) scroll.current.scrollTop = 0;
+    startSavingMaxDays(async () => {
+      try {
+        const result = await saveTimelineDefaultDays(nextDays);
+        if (!result.ok) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success(result.message);
+        router.refresh();
+      } catch {
+        toast.error("Pengaturan maksimal hari timeline belum dapat disimpan.");
+      }
+    });
   }
   function chooseToday() {
     const anchor = clockAnchor.current;
@@ -150,7 +177,8 @@ export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { it
         <p className="mt-2 max-w-xl text-xs leading-5 text-muted-foreground">Lihat jadwal per hari. Draf, jadwal dirilis, dan rancangan yang belum memiliki pelaksanaan tetap ditampilkan.</p></div>
       <div className="flex flex-wrap items-end gap-2">
         <div><label htmlFor="timeline-zone" className="mb-1 block text-xs font-semibold">Zona tampilan</label><select id="timeline-zone" disabled={!ready} value={zone} onChange={(event) => setZone(event.target.value as ExamTimeZone)} className="h-9 rounded-lg border bg-background px-2 text-sm"><option>WIB</option><option>WITA</option><option>WIT</option></select></div>
-        <fieldset className="min-w-0"><legend className="mb-1 text-xs font-semibold">Rentang tanggal · maksimal 7 hari</legend><div className="flex flex-wrap items-center gap-1.5">
+        <div><label htmlFor="timeline-max-days" className="mb-1 block text-xs font-semibold">Maksimal hari</label><select id="timeline-max-days" aria-label="Maksimal hari timeline" disabled={!ready || savingMaxDays} value={maxDays} onChange={(event) => handleMaxDaysChange(Number(event.target.value))} className="h-9 rounded-lg border bg-background px-2 text-sm">{[1, 2, 3, 4, 5, 6, 7].map((daysOption) => <option key={daysOption} value={daysOption}>{daysOption} hari</option>)}</select></div>
+        <fieldset className="min-w-0"><legend className="mb-1 text-xs font-semibold">Rentang tanggal · maksimal {maxDays} hari</legend><div className="flex flex-wrap items-center gap-1.5">
           <label className="sr-only" htmlFor="timeline-from">Tanggal mulai</label><input id="timeline-from" type="date" disabled={!ready} min="2000-01-01" max="2100-12-31" value={draft.start} onChange={(event) => setDraft((value) => ({ ...value, start: event.target.value }))} aria-invalid={draftCount === null} aria-describedby={draftCount === null ? "timeline-range-error" : undefined} className="h-9 max-w-[9.5rem] min-w-0 rounded-lg border bg-background px-2 text-xs sm:text-sm" />
           <span aria-hidden="true" className="text-xs text-muted-foreground">–</span>
           <label className="sr-only" htmlFor="timeline-to">Tanggal akhir</label><input id="timeline-to" type="date" disabled={!ready} min="2000-01-01" max="2100-12-31" value={draft.end} onChange={(event) => setDraft((value) => ({ ...value, end: event.target.value }))} aria-invalid={draftCount === null} aria-describedby={draftCount === null ? "timeline-range-error" : undefined} className="h-9 max-w-[9.5rem] min-w-0 rounded-lg border bg-background px-2 text-xs sm:text-sm" />
@@ -159,7 +187,7 @@ export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { it
         <div className="flex gap-1"><Button type="button" size="sm" variant="outline" aria-label="Rentang sebelumnya" disabled={!ready || !previous || !previousEnd} onClick={() => previous && previousEnd && chooseRange({ start: previous, end: previousEnd })}><ChevronLeft className="size-4" /></Button>
           <Button type="button" size="sm" variant="outline" disabled={!ready} onClick={chooseToday}>Hari ini</Button>
           <Button type="button" size="sm" variant="outline" aria-label="Rentang berikutnya" disabled={!ready || !next || !nextEnd} onClick={() => next && nextEnd && chooseRange({ start: next, end: nextEnd })}><ChevronRight className="size-4" /></Button></div>
-        {draftCount === null && <p id="timeline-range-error" role="alert" className="w-full text-xs text-destructive">Pilih tanggal awal dan akhir yang valid, dengan rentang 1–7 hari.</p>}
+        {draftCount === null && <p id="timeline-range-error" role="alert" className="w-full text-xs text-destructive">Pilih tanggal awal dan akhir yang valid, dengan rentang 1–{maxDays} hari.</p>}
       </div>
     </div>
     <div className="flex flex-wrap items-center gap-2 border-b px-5 py-3 sm:px-6" aria-label="Sorot kategori">

@@ -53,6 +53,7 @@ export default async function MonitoringPage({ searchParams }: { searchParams: P
   }
   const f = data.effectiveFilters;
   const opts = data.options!; const selectedTest = opts.tests.find((t) => t.id === f.testId);
+  const selectedYear = opts.years.find((y) => y.id === f.yearId);
   const unknownYear = f.yearId && !opts.years.some((y) => y.id === f.yearId);
   const unknownClass = f.className && !opts.classes.includes(f.className);
   const exportUrl = `/data-tes/monitoring/unduh?${monitoringSearchParams({ ...f, showAll: false })}`;
@@ -64,11 +65,11 @@ export default async function MonitoringPage({ searchParams }: { searchParams: P
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="font-bold">Filter monitoring</h2>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">Rentang tanggal berdasarkan waktu mulai <strong>jadwal pelaksanaan</strong> dalam zona yang dipilih, termasuk peserta yang belum mulai. Pilih tes dari saran pencarian; kosongkan untuk semua tes.</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">Rentang tanggal berdasarkan waktu mulai <strong>jadwal pelaksanaan</strong> dalam zona yang dipilih, termasuk peserta yang belum mulai. Pilih tes dari combobox atau biarkan Semua tes.</p>
         </div>
         {data.defaultApplied && (
           <Badge variant="secondary" className="rounded-full text-[10px]">
-            Filter otomatis: {selectedTest ? `${selectedTest.name}` : "Tahun ajaran aktif"}
+            Filter otomatis: {[selectedTest ? selectedTest.name : "Semua tes", selectedYear?.name, f.from ? `Hari ini (${f.from})` : null].filter(Boolean).join(" · ")}
           </Badge>
         )}
       </div>

@@ -133,7 +133,7 @@ export async function loadPasswordPageWithClient(
       to_char(a.occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS "UTC"') AS "occurredAt"
      FROM participant_password_audit a JOIN participant_identities i ON i.id = a.participant_identity_id
      JOIN school_students s ON s.id = i.student_id JOIN admin_users u ON u.id = a.admin_id
-     WHERE i.period_id = $1::bigint ORDER BY a.id DESC LIMIT 20`,
+     WHERE i.period_id = $1::bigint ORDER BY a.id DESC LIMIT 200`,
     [selected.id],
   );
   return { periods: periods.rows, selected, rows, batch, audit: audit.rows, keyStatus, selectionMissing: false };

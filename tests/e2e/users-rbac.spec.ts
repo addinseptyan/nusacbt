@@ -186,8 +186,9 @@ test("RBAC penuh: manajemen peran & pengguna, pembatasan modul & unduhan, anti-e
       await expect(opPage.getByTestId("header-user-info")).toContainText("Petugas Ujian E2E");
       await expect(opPage.getByTestId("header-user-info")).toContainText(updatedRoleName);
 
-      // Tautan Pengaturan aplikasi tidak boleh tampil bagi non-superadmin tanpa izin app_settings.manage
+      // Tautan Pengaturan aplikasi dan tabel Token Live tidak boleh tampil tanpa izinnya
       await expect(opPage.getByRole("link", { name: "Pengaturan aplikasi" })).toHaveCount(0);
+      await expect(opPage.getByRole("heading", { name: "Token Live" })).toHaveCount(0);
 
       // Sidebar hanya memuat grup dan tautan yang diizinkan
       const sidebar = opPage.locator('[data-sidebar="sidebar"]');
@@ -202,6 +203,7 @@ test("RBAC penuh: manajemen peran & pengguna, pembatasan modul & unduhan, anti-e
       await expect(sidebar.getByRole("link", { name: "Data Siswa" })).toHaveCount(0);
 
       await sidebar.getByRole("button", { name: "Data Tes" }).click();
+      await expect(sidebar.getByRole("link", { name: "Akun Peserta" })).toBeHidden();
       await expect(sidebar.getByRole("link", { name: "Hasil / Monitoring Tes" })).toBeVisible();
       await expect(sidebar.getByRole("link", { name: "Daftar Tes" })).toHaveCount(0);
       await expect(sidebar.getByRole("link", { name: "Token" })).toHaveCount(0);

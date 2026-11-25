@@ -21,6 +21,7 @@ import type { IdentityPeriod, ParticipantIdentityRow } from "@/lib/participant-i
 import type { PasswordDisplayRow } from "@/lib/participant-password-types";
 
 const PAGE_SIZE = 25;
+const AUDIT_PAGE_SIZE = 5;
 
 type UnlockSelection = { row: ParticipantIdentityRow; lock: LoginLock };
 
@@ -68,6 +69,7 @@ export function AccountManager({
   const [changing, startChanging] = useTransition();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
+  const [auditPageState, setAuditPageState] = useState<{ periodId: string | null; page: number }>({ periodId: null, page: 0 });
   const [identityEditing, setIdentityEditing] = useState<ParticipantIdentityRow | null>(null);
   const [passwordEditing, setPasswordEditing] = useState<PasswordDisplayRow | null>(null);
   const [revealing, setRevealing] = useState<PasswordDisplayRow | null>(null);
@@ -87,6 +89,10 @@ export function AccountManager({
   const active = rows.filter((row) => row.placementId).length;
   const assigned = rows.filter((row) => row.placementId && row.identityId).length;
   const withPassword = passwords.rows.filter((row) => row.placementId && row.passwordVersion).length;
+  const auditPageCount = Math.max(1, Math.ceil(passwords.audit.length / AUDIT_PAGE_SIZE));
+  const rawAuditPage = auditPageState.periodId === (selected?.id ?? null) ? auditPageState.page : 0;
+  const safeAuditPage = Math.min(Math.max(0, rawAuditPage), auditPageCount - 1);
+  const currentAudit = passwords.audit.slice(safeAuditPage * AUDIT_PAGE_SIZE, (safeAuditPage + 1) * AUDIT_PAGE_SIZE);
 
   return <div className="max-w-6xl space-y-5">
     <Alert className="rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200"><Info className="size-4 text-[#727fc8] dark:text-indigo-300" /><AlertTitle className="text-[12px] font-bold">Akun peserta per periode</AlertTitle><AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Atur identitas, sandi, dan buka kunci login dari daftar yang sama. Periode login dipilih terpisah oleh admin di <Link href="/data-peserta/periode" className="font-semibold underline">Periode Ujian</Link>. Mengubah identitas atau reset sandi mengakhiri sesi peserta; membuka kunci tidak.</AlertDescription></Alert>
@@ -130,7 +136,16 @@ export function AccountManager({
         })}</ul>}
         {visible.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-4 sm:px-6"><p className="text-[11px] text-muted-foreground">Menampilkan {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, visible.length)} dari {visible.length} peserta</p><div className="flex gap-2"><Button type="button" size="sm" variant="outline" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>Sebelumnya</Button><Button type="button" size="sm" variant="outline" disabled={safePage + 1 >= pageCount} onClick={() => setPage(safePage + 1)}>Berikutnya</Button></div></div>}
       </Card>
-      <Card className="gap-0 rounded-[18px] p-5 ring-1 ring-border sm:p-6"><div className="flex items-start gap-3"><History className="mt-0.5 size-5 shrink-0 text-primary" /><div className="min-w-0 flex-1"><h2 className="text-[15px] font-bold">Riwayat tindakan akun</h2><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Maksimal 20 tindakan sandi atau buka kunci terbaru di periode ini, waktu UTC. Catatan tidak berisi sandi dan belum kebal-ubah terhadap pengelola database.</p>{passwords.audit.length ? <ul aria-label="Riwayat tindakan akun" className="mt-3 divide-y divide-border">{passwords.audit.map((entry) => <li key={entry.id} className="break-words py-2 text-[11px] leading-5"><strong>{auditLabels[entry.event]}</strong> · {entry.studentName} · NISN {entry.nisn}<span className="block text-muted-foreground">Admin {entry.adminUsername} · {entry.occurredAt}</span></li>)}</ul> : <p className="mt-3 text-[11px] text-muted-foreground">Belum ada tindakan akun pada periode ini.</p>}</div></div></Card>
+      <Card className="gap-0 rounded-[18px] p-5 ring-1 ring-border sm:p-6"><div className="flex items-start gap-3"><History className="mt-0.5 size-5 shrink-0 text-primary" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-[15px] font-bold">Riwayat tindakan akun</h2>{passwords.audit.length > 0 && <Badge variant="secondary" className="rounded-full text-[10px]">{passwords.audit.length} tindakan</Badge>}</div><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Hingga 200 tindakan sandi atau buka kunci terbaru di periode ini, waktu UTC. Catatan tidak berisi sandi dan belum kebal-ubah terhadap pengelola database.</p>{passwords.audit.length ? <>
+        <ul aria-label="Riwayat tindakan akun" className="mt-3 divide-y divide-border">{currentAudit.map((entry) => <li key={entry.id} className="break-words py-2 text-[11px] leading-5"><strong>{auditLabels[entry.event]}</strong> · {entry.studentName} · NISN {entry.nisn}<span className="block text-muted-foreground">Admin {entry.adminUsername} · {entry.occurredAt}</span></li>)}</ul>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+          <p className="text-[11px] text-muted-foreground">Menampilkan {safeAuditPage * AUDIT_PAGE_SIZE + 1}–{Math.min((safeAuditPage + 1) * AUDIT_PAGE_SIZE, passwords.audit.length)} dari {passwords.audit.length} tindakan (hal. {safeAuditPage + 1}/{auditPageCount})</p>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" variant="outline" disabled={safeAuditPage === 0} onClick={() => setAuditPageState({ periodId: selected.id, page: safeAuditPage - 1 })}>Sebelumnya</Button>
+            <Button type="button" size="sm" variant="outline" disabled={safeAuditPage + 1 >= auditPageCount} onClick={() => setAuditPageState({ periodId: selected.id, page: safeAuditPage + 1 })}>Berikutnya</Button>
+          </div>
+        </div>
+      </> : <p className="mt-3 text-[11px] text-muted-foreground">Belum ada tindakan akun pada periode ini.</p>}</div></div></Card>
     </>}
     {identityEditing && selected && <IdentityEditor row={identityEditing} period={selected} onClose={() => setIdentityEditing(null)} />}
     {passwordEditing && selected && <PasswordEditor key={`${passwordEditing.identityId}-${passwordEditing.passwordVersion ?? "new"}`} row={passwordEditing} period={selected} onClose={() => setPasswordEditing(null)} />}

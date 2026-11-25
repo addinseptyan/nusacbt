@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { DashboardLiveTokens } from "@/components/dashboard-live-tokens";
 import { ProjectDialog } from "@/components/project-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +27,7 @@ import { Card } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/admin-auth";
 import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
-import { loadDashboardSummary, type DashboardSummary } from "@/lib/dashboard-data";
+import { loadDashboardLiveTokens, loadDashboardSummary, type DashboardLiveTokenData, type DashboardSummary } from "@/lib/dashboard-data";
 
 export const dynamic = "force-dynamic";
 
@@ -35,15 +36,23 @@ const cardClass = "rounded-[18px] bg-card ring-1 ring-border shadow-[0_8px_30px_
 export default async function DashboardPage() {
   const admin = await requireAdmin();
   const canManageAppSettings = adminHasPermission(admin, "app_settings.manage");
-  const [branding, summaryResult] = await Promise.all([
+  const canManageTokens = adminHasPermission(admin, "tokens.manage");
+  const [branding, summaryResult, liveTokenResult] = await Promise.all([
     getPublicAppSettingsSafe(),
     loadDashboardSummary().then(
       (data) => ({ ok: true as const, data }),
       () => ({ ok: false as const }),
     ),
+    canManageTokens
+      ? loadDashboardLiveTokens().then(
+          (data) => ({ ok: true as const, data }),
+          () => ({ ok: false as const }),
+        )
+      : Promise.resolve(null),
   ]);
 
   const data: DashboardSummary | null = summaryResult.ok ? summaryResult.data : null;
+  const liveTokenData: DashboardLiveTokenData | null = liveTokenResult?.ok ? liveTokenResult.data : null;
 
   const summaryCards = [
     {
@@ -210,6 +219,14 @@ export default async function DashboardPage() {
           );
         })}
       </div>
+
+      {canManageTokens && liveTokenData && (
+        <DashboardLiveTokens
+          tokens={liveTokenData.tokens}
+          serverNow={liveTokenData.serverNow}
+          keyStatus={liveTokenData.keyStatus}
+        />
+      )}
 
       <div className="mt-6 grid items-start gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(310px,0.9fr)]">
         <Card className={`${cardClass} gap-0 p-5 sm:p-6`}>

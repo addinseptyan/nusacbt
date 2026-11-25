@@ -14,6 +14,16 @@ function dateUtc(value, offset) {
   if (day.getUTCFullYear() !== y || day.getUTCMonth() !== mo - 1 || day.getUTCDate() !== d) return null;
   return day.getTime() - offset * 3600_000;
 }
+/** @param {string} dateString @param {'WIB'|'WITA'|'WIT'} [zone] */
+export function monitoringDayBounds(dateString, zone = 'WIB') {
+  if (!Object.hasOwn(zones, zone)) return null;
+  const utcStart = dateUtc(dateString, zones[zone]);
+  if (utcStart === null) return null;
+  return {
+    fromUtc: new Date(utcStart).toISOString(),
+    toUtcExclusive: new Date(utcStart + 86400_000).toISOString(),
+  };
+}
 /** @param {URLSearchParams} p @returns {{ok:true, filters:import('./monitoring-filter.mjs').MonitoringFilters,page:number,finalPage:number}|{ok:false,error:string}} */
 export function parseMonitoringFilters(p) {
   if (!(p instanceof URLSearchParams)) return { ok:false, error:'Filter monitoring tidak valid.' };

@@ -32,15 +32,17 @@ export default async function WorkSettingsPage() {
   }
   return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9">
     <div className="mb-6 flex items-start gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><Clock3 className="size-5" /></span><div><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Pengaturan Pengerjaan</h1><p className="mt-2 text-[13px] leading-6 text-muted-foreground">Atur pengumpulan manual dan visibilitas nilai per kategori.</p></div></div>
-    <Card className="max-w-2xl gap-0 rounded-[22px] p-5 sm:p-7"><h2 className="text-base font-bold">Pengumpulan tes</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Peserta dapat menekan tombol selesai kapan saja, tetapi baru dapat mengumpulkan pada sejumlah menit terakhir sebelum batas jadwal. Waktu habis tetap dikumpulkan otomatis.</p>
-      <Alert className="my-5 rounded-xl"><Info className="size-4" /><AlertTitle>Berlaku untuk semua tes</AlertTitle><AlertDescription className="text-xs leading-5">Perubahan langsung berlaku juga bagi pengerjaan yang sedang berlangsung. Jika batas lebih besar daripada sisa durasi, peserta dapat mengumpulkan segera. Keputusan mengikuti jam server, bukan jam perangkat siswa.</AlertDescription></Alert>
-      <SettingForm key={data.revision} minutes={data.minutes} revision={data.revision} />
-    </Card>
-    <Card className="mt-5 max-w-2xl gap-0 rounded-[22px] p-5 sm:p-7">
-      <h2 className="flex items-center gap-2 text-base font-bold"><Award className="size-5 text-indigo-600 dark:text-indigo-300" /> Visibilitas nilai peserta</h2>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">Nilai satu pengerjaan tersedia setelah selesai dan secara awal disamarkan. Pilihan ini berlaku langsung untuk seluruh tes dalam kategori tersebut, termasuk hasil lama.</p>
-      <Alert className="my-5 rounded-xl"><Info className="size-4" /><AlertTitle>Berlaku untuk semua tes</AlertTitle><AlertDescription className="text-xs leading-5">Default ketiga kategori adalah ditampilkan. Hanya pemilik pengerjaan yang sudah selesai dapat menerima nilai. Nilai akhir yang ditetapkan hanya dibagikan jika semua kategori pengerjaan penyumbangnya ditampilkan. Menyembunyikan mencegah pengiriman berikutnya, tetapi tidak menarik kembali nilai yang sudah dilihat. Samaran visual bukan pembatas keamanan.</AlertDescription></Alert>
-      <div className="space-y-3">{categories.map((category) => <ScoreCategoryControl key={`${category.kind}-${category.revision}`} {...category} />)}</div>
-    </Card>
+    <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
+      <Card className="min-w-0 gap-0 rounded-[22px] p-5 sm:p-6"><h2 className="text-base font-bold">Pengumpulan tes</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Peserta dapat menekan tombol selesai kapan saja, tetapi baru dapat mengumpulkan pada sejumlah menit terakhir sebelum batas jadwal. Waktu habis tetap dikumpulkan otomatis.</p>
+        <Alert className="my-5 rounded-xl"><Info className="size-4" /><AlertTitle>Berlaku untuk semua tes</AlertTitle><AlertDescription className="text-xs leading-5">Perubahan langsung berlaku juga bagi pengerjaan yang sedang berlangsung. Jika batas lebih besar daripada sisa durasi, peserta dapat mengumpulkan segera. Keputusan mengikuti jam server, bukan jam perangkat siswa.</AlertDescription></Alert>
+        <SettingForm key={data.revision} minutes={data.minutes} revision={data.revision} />
+      </Card>
+      <Card className="min-w-0 gap-0 rounded-[22px] p-5 sm:p-6">
+        <h2 className="flex items-center gap-2 text-base font-bold"><Award className="size-5 text-indigo-600 dark:text-indigo-300" /> Visibilitas nilai peserta</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Nilai satu pengerjaan tersedia setelah selesai dan secara awal disamarkan. Pilihan ini berlaku langsung untuk seluruh tes dalam kategori tersebut, termasuk hasil lama.</p>
+        <Alert className="my-5 rounded-xl"><Info className="size-4" /><AlertTitle>Berlaku untuk semua tes</AlertTitle><AlertDescription className="text-xs leading-5">Default ketiga kategori adalah ditampilkan. Hanya pemilik pengerjaan yang sudah selesai dapat menerima nilai. Nilai akhir yang ditetapkan hanya dibagikan jika semua kategori pengerjaan penyumbangnya ditampilkan. Menyembunyikan mencegah pengiriman berikutnya, tetapi tidak menarik kembali nilai yang sudah dilihat. Samaran visual bukan pembatas keamanan.</AlertDescription></Alert>
+        <div className="space-y-3">{categories.map((category) => <ScoreCategoryControl key={`${category.kind}-${category.revision}`} {...category} />)}</div>
+      </Card>
+    </div>
   </div>;
 }

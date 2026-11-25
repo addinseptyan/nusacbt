@@ -516,7 +516,7 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
           </Card>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-5 xl:sticky xl:top-24 xl:max-h-[calc(100dvh-7rem)] xl:overflow-y-auto">
           <Card className="gap-0 rounded-[20px] p-5 sm:p-6">
             <h2 className="text-base font-bold">Ringkasan Tampilan</h2>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">

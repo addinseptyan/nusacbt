@@ -1,6 +1,15 @@
 import "server-only";
 
+import { displayToken, TOKEN_COLUMNS, TOKEN_JOINS, type TokenRow } from "@/app/data-tes/token/token-data";
+import { ExamTokenKeyProblem, readConfiguredTokenKey, tokenKeyStatus } from "@/lib/exam-token-key";
+import type { AccessTokenRecord, TokenKeyStatus } from "@/lib/exam-token-types";
 import { getPostgresPool } from "@/lib/postgres";
+
+export type DashboardLiveTokenData = {
+  tokens: AccessTokenRecord[];
+  serverNow: string;
+  keyStatus: TokenKeyStatus;
+};
 
 export type DashboardScheduleItem = {
   runId: string;
@@ -157,6 +166,47 @@ export async function loadDashboardSummary(): Promise<DashboardSummary> {
     await client.query("ROLLBACK").catch(() => {});
     throw error;
   } finally {
+    client.release();
+  }
+}
+
+export async function loadDashboardLiveTokens(): Promise<DashboardLiveTokenData> {
+  let key: Buffer | undefined;
+  let keyStatus: TokenKeyStatus = "missing";
+  try {
+    key = await readConfiguredTokenKey();
+  } catch (error) {
+    keyStatus = error instanceof ExamTokenKeyProblem ? error.status : "invalid";
+  }
+
+  const client = await getPostgresPool().connect();
+  try {
+    await client.query("BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ");
+    if (key) {
+      keyStatus = await tokenKeyStatus(client, key);
+    }
+    const nowRow = await client.query<{ now: Date }>("SELECT clock_timestamp() AS now");
+    const now = nowRow.rows[0].now;
+    const rows = (
+      await client.query<TokenRow>(
+        `SELECT ${TOKEN_COLUMNS} ${TOKEN_JOINS}
+         WHERE k.revoked_at IS NULL
+           AND k.expires_at > clock_timestamp()
+         ORDER BY (k.scope = 'global') DESC, k.expires_at ASC, k.id DESC
+         LIMIT 20`,
+      )
+    ).rows;
+    await client.query("COMMIT");
+    return {
+      tokens: rows.map((row) => displayToken(row, key, keyStatus)),
+      serverNow: now.toISOString(),
+      keyStatus,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    key?.fill(0);
     client.release();
   }
 }
