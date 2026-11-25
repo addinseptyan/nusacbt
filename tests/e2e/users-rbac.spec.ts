@@ -39,22 +39,37 @@ test("RBAC penuh: manajemen peran & pengguna, pembatasan modul & unduhan, anti-e
   const client = testDatabase();
   await client.connect();
 
+  let yearId = "";
+  let prevYearId: string | null = null;
   let periodId = "";
   let prevLoginPeriodId: string | null = null;
   let testId = "";
   let topicId = "";
 
   try {
+    prevYearId = (
+      await client.query<{ active_year_id: string | null }>(
+        "SELECT active_year_id::text FROM academic_year_settings WHERE id = 1",
+      )
+    ).rows[0]?.active_year_id ?? null;
     prevLoginPeriodId = (
       await client.query<{ period_id: string | null }>(
         "SELECT period_id::text AS period_id FROM participant_login_settings WHERE id = 1",
       )
     ).rows[0]?.period_id ?? null;
-    // Siapkan periode + tes minimal agar halaman /data-tes/monitoring?tes=... menampilkan FinalGradePanel.
+    await client.query("UPDATE exam_periods SET is_active = false WHERE is_active = true");
+    yearId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO academic_years (name) VALUES ($1) RETURNING id::text AS id",
+        [`TA RBAC ${tag}`],
+      )
+    ).rows[0].id;
+    await client.query("UPDATE academic_year_settings SET active_year_id = $1::bigint WHERE id = 1", [yearId]);
+    // Siapkan periode aktif + tes minimal agar kartu & monitoring tampil sesuai izin.
     periodId = (
       await client.query<{ id: string }>(
-        "INSERT INTO exam_periods (name, start_date, end_date) VALUES ($1, '2026-11-01', '2026-11-30') RETURNING id::text AS id",
-        [`Periode RBAC ${tag}`],
+        "INSERT INTO exam_periods (name, start_date, end_date, academic_year_id, is_active) VALUES ($1, '2026-11-01', '2026-11-30', $2::bigint, true) RETURNING id::text AS id",
+        [`Periode RBAC ${tag}`, yearId],
       )
     ).rows[0].id;
     await client.query("UPDATE participant_login_settings SET period_id = $1::bigint WHERE id = 1", [periodId]);
@@ -332,6 +347,10 @@ test("RBAC penuh: manajemen peran & pengguna, pembatasan modul & unduhan, anti-e
     if (periodId) {
       await client.query("UPDATE participant_login_settings SET period_id = $1::bigint WHERE id = 1", [prevLoginPeriodId]);
       await client.query("DELETE FROM exam_periods WHERE id = $1::bigint", [periodId]);
+    }
+    await client.query("UPDATE academic_year_settings SET active_year_id = $1::bigint WHERE id = 1", [prevYearId]);
+    if (yearId) {
+      await client.query("DELETE FROM academic_years WHERE id = $1::bigint", [yearId]);
     }
     await client.end();
   }

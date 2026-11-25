@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useMemo, useState, useTransition, type FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,8 +8,11 @@ import { BookOpenCheck, ChevronLeft, ChevronRight, Eye, ImageIcon, Info, Pencil,
 import { toast } from "sonner";
 
 import { deleteQuestion, saveQuestion } from "@/app/data-modul/soal/actions";
+import { useCanDevCascadeDelete } from "@/components/admin-user-context";
+import { DevCascadeDeleteDialog } from "@/components/dev-cascade-delete-dialog";
 import { QuestionRichDisplay } from "@/components/question-rich-display";
 import { QuestionRichEditor } from "@/components/question-rich-editor";
+import { SearchableCombobox, type ComboboxOption } from "@/components/searchable-combobox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,12 +20,12 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { QUESTION_IMAGE_SLOTS, QUESTION_LETTERS, type Question, type QuestionImageSlot, type QuestionTopicOption } from "@/lib/question-types";
+import { formatTopicLabel } from "@/lib/topic-validation.mjs";
 
 const PAGE_SIZE = 10;
 // Pemeriksaan awal untuk pengalaman pengguna; server tetap memverifikasi ulang.
 const IMAGE_MAX_BYTES = 1024 * 1024;
 const dialogClass = "max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-3xl";
-const selectClass = "h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50";
 type QuestionError = { message: string; reload?: boolean } | null;
 
 function ErrorNotice({ error, onReload }: { error: NonNullable<QuestionError>; onReload: () => void }) {
@@ -50,8 +53,19 @@ function ImageField({ question, slot, hasImage, disabled }: { question: Question
   );
 }
 
-function QuestionEditor({ question, topics, open, onOpenChange }: { question: Question | null; topics: QuestionTopicOption[]; open: boolean; onOpenChange: (open: boolean) => void }) {
+function QuestionEditor({
+  question,
+  topicOptions,
+  open,
+  onOpenChange,
+}: {
+  question: Question | null;
+  topicOptions: ComboboxOption[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const router = useRouter();
+  const [selectedTopicId, setSelectedTopicId] = useState(question?.topicId ?? "");
   const [error, setError] = useState<QuestionError>(null);
   const [pending, startTransition] = useTransition();
 
@@ -63,7 +77,12 @@ function QuestionEditor({ question, topics, open, onOpenChange }: { question: Qu
   function reload() { setError(null); onOpenChange(false); router.refresh(); }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selectedTopicId) {
+      setError({ message: "Pilih topik / mata pelajaran terlebih dahulu." });
+      return;
+    }
     const data = new FormData(event.currentTarget);
+    data.set("topicId", selectedTopicId);
     // Field file yang tidak dipilih harus dihapus sebelum serialisasi Server Action;
     // beberapa runtime memberi nama "blob" pada File kosong setelah transport.
     for (const slot of QUESTION_IMAGE_SLOTS) {
@@ -102,10 +121,17 @@ function QuestionEditor({ question, topics, open, onOpenChange }: { question: Qu
           <p className="text-[11px] leading-5 text-muted-foreground">Untuk rumus Word, aktifkan “Copy MathML to the clipboard as plain text”, lalu salin satu Equation dan tempel pada posisi kursor. Salin teks/tabel terpisah dari rumus. Word 2013 belum diuji langsung.</p>
           <div className="space-y-2">
             <label htmlFor="question-topic" className="text-sm font-semibold">Topik / mata pelajaran <span className="text-destructive">*</span></label>
-            <select id="question-topic" name="topicId" required disabled={pending} defaultValue={question?.topicId ?? ""} className={selectClass}>
-              <option value="">Pilih satu kategori</option>
-              {topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
-            </select>
+            <SearchableCombobox
+              id="question-topic"
+              name="topicId"
+              options={topicOptions}
+              value={selectedTopicId}
+              onChange={setSelectedTopicId}
+              placeholder="Pilih satu kategori"
+              searchPlaceholder="Cari nama mata pelajaran atau tag..."
+              required
+              disabled={pending}
+            />
           </div>
           <div className="space-y-2">
             <label htmlFor="question-prompt" className="text-sm font-semibold">Isi soal</label>
@@ -145,7 +171,10 @@ function QuestionDetail({ question, onClose }: { question: Question | null; onCl
       <DialogContent className={dialogClass}>
         <DialogHeader><DialogTitle className="text-lg font-bold">Detail soal</DialogTitle><DialogDescription>Kunci jawaban hanya untuk admin. Saat peserta mulai, soal dan kuncinya disalin ke snapshot pengerjaan.</DialogDescription></DialogHeader>
         {question && <div className="space-y-5 py-1">
-          <Badge variant="secondary" className="max-w-full break-words">{question.topicName}</Badge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary" className="max-w-full break-words">{question.topicName}</Badge>
+            {(question.topicTags ?? []).map((tag) => <Badge key={tag} variant="outline" className="rounded-full text-[10px]">{tag}</Badge>)}
+          </div>
           <div><h3 className="text-sm font-bold">Isi soal</h3><div className="mt-2 text-sm"><QuestionRichDisplay document={question.promptRich} fallback={question.prompt} /></div>{question.hasPromptImage && <QuestionImage question={question} slot="prompt" alt="Gambar soal" />}</div>
           <div className="space-y-2"><h3 className="text-sm font-bold">Pilihan jawaban</h3>{question.options.map((option) => <div key={option.letter} className="rounded-xl border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-bold">{option.letter}.</span>{option.letter === question.correctOption && <Badge className="rounded-full">Jawaban benar</Badge>}</div><div className="mt-1 text-sm"><QuestionRichDisplay document={option.rich} fallback={option.text} /></div>{option.hasImage && <QuestionImage question={question} slot={option.letter} alt={`Gambar pilihan ${option.letter}`} />}</div>)}</div>
         </div>}
@@ -155,8 +184,17 @@ function QuestionDetail({ question, onClose }: { question: Question | null; onCl
   );
 }
 
-function DeleteQuestionDialog({ question, onClose }: { question: Question | null; onClose: () => void }) {
+function DeleteQuestionDialog({
+  question,
+  onClose,
+  onRequestCascade,
+}: {
+  question: Question | null;
+  onClose: () => void;
+  onRequestCascade: (question: Question) => void;
+}) {
   const router = useRouter();
+  const canDevCascade = useCanDevCascadeDelete();
   const [error, setError] = useState<QuestionError>(null);
   const [pending, startTransition] = useTransition();
   function close() { if (!pending) { setError(null); onClose(); } }
@@ -176,9 +214,27 @@ function DeleteQuestionDialog({ question, onClose }: { question: Question | null
   return (
     <Dialog open={question !== null} onOpenChange={(next) => { if (!next) close(); }}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-md" showCloseButton={!pending} onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}>
-        <DialogHeader><DialogTitle className="text-lg font-bold">Hapus soal?</DialogTitle><DialogDescription>Soal <strong className="break-words text-foreground">#{question?.id}</strong> beserta gambar yang tersimpan akan dihapus permanen. Jika masih direferensikan, penghapusan ditolak.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle className="text-lg font-bold">Hapus soal?</DialogTitle><DialogDescription>Soal <strong className="break-words text-foreground">#{question?.id}</strong> beserta gambar yang tersimpan akan dihapus permanen. Jika masih direferensikan, penghapusan standar ditolak.</DialogDescription></DialogHeader>
         {error && <ErrorNotice error={error} onReload={reload} />}
-        <DialogFooter className="rounded-b-2xl"><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="button" variant="destructive" disabled={pending} onClick={remove}>{pending ? "Menghapus..." : "Ya, hapus soal"}</Button></DialogFooter>
+        <DialogFooter className="flex-wrap gap-2 rounded-b-2xl">
+          <Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button>
+          {canDevCascade && question && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                const target = question;
+                close();
+                onRequestCascade(target);
+              }}
+              className="border-amber-400 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/40"
+            >
+              Hapus beserta dependensi (Mode Dev)
+            </Button>
+          )}
+          <Button type="button" variant="destructive" disabled={pending} onClick={remove}>{pending ? "Menghapus..." : "Ya, hapus soal"}</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -192,8 +248,18 @@ export function QuestionManager({ topics, questions }: { topics: QuestionTopicOp
   const [editing, setEditing] = useState<Question | null>(null);
   const [viewing, setViewing] = useState<Question | null>(null);
   const [deleting, setDeleting] = useState<Question | null>(null);
+  const [cascadeTarget, setCascadeTarget] = useState<Question | null>(null);
+
+  const topicOptions = useMemo<ComboboxOption[]>(
+    () => topics.map((t) => ({ value: t.id, label: t.name, tags: t.tags ?? [] })),
+    [topics],
+  );
+
   const normalized = query.trim().toLowerCase();
-  const filtered = questions.filter((question) => (!topicId || question.topicId === topicId) && (!normalized || [question.prompt, question.topicName, ...question.options.map((option) => option.text)].some((text) => text.toLowerCase().includes(normalized))));
+  const filtered = questions.filter((question) =>
+    (!topicId || question.topicId === topicId) &&
+    (!normalized || [question.prompt, question.topicName, ...(question.topicTags ?? []), ...question.options.map((option) => option.text)].some((text) => text.toLowerCase().includes(normalized))),
+  );
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
   const visible = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
@@ -202,7 +268,7 @@ export function QuestionManager({ topics, questions }: { topics: QuestionTopicOp
   return (
     <>
       <Alert className="mb-6 max-w-4xl rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] px-4 py-3 text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
-        <Info className="size-4 text-[#727fc8] dark:text-indigo-300" /><AlertTitle className="text-[12px] font-bold">Bank soal</AlertTitle><AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Satu kategori, lima pilihan A–E, dan satu jawaban benar. <Link href="/data-modul/import-soal" className="font-semibold underline">Impor Word</Link> tersedia untuk format yang didukung; ekspor Word belum tersedia.</AlertDescription>
+        <Info className="size-4 text-[#727fc8] dark:text-indigo-300" /><AlertTitle className="text-[12px] font-bold">Bank soal</AlertTitle><AlertDescription className="mt-0.5 text-[12px] leading-5 text-[#6873a0] dark:text-indigo-200/70">Satu kategori, lima pilihan A–E, dan satu jawaban benar. Gunakan <Link href="/data-modul/import-soal" className="font-semibold underline">Import Soal Word</Link> atau <Link href="/data-modul/export-soal" className="font-semibold underline">Export Soal Word</Link> untuk pengelolaan massal.</AlertDescription>
       </Alert>
       {topics.length === 0 && <Alert className="mb-6 max-w-4xl rounded-2xl"><Info className="size-4" /><AlertTitle>Siapkan kategori terlebih dahulu</AlertTitle><AlertDescription>Buka <Link href="/data-modul/topik">Topik / Mata Pelajaran</Link> untuk menambah kategori sebelum membuat soal.</AlertDescription></Alert>}
       <Card className="max-w-5xl gap-0 overflow-hidden rounded-[18px] bg-card py-0 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]">
@@ -211,23 +277,53 @@ export function QuestionManager({ topics, questions }: { topics: QuestionTopicOp
           <Button onClick={() => openEditor(null)} disabled={topics.length === 0} className="h-10 rounded-xl px-4 font-semibold"><Plus className="size-4" /> Tambah soal</Button>
         </div>
         <div className="grid gap-4 border-b border-border px-5 py-4 sm:grid-cols-2 sm:px-6">
-          <div><label htmlFor="question-search" className="mb-2 block text-[12px] font-semibold">Cari soal</label><div className="relative"><Search className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" /><Input id="question-search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Cari teks soal atau pilihan" className="h-11 rounded-xl pl-9" /></div></div>
-          <div><label htmlFor="question-filter-topic" className="mb-2 block text-[12px] font-semibold">Filter kategori</label><select id="question-filter-topic" value={topicId} onChange={(event) => { setTopicId(event.target.value); setPage(0); }} className={selectClass}><option value="">Semua kategori</option>{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}</select></div>
+          <div><label htmlFor="question-search" className="mb-2 block text-[12px] font-semibold">Cari soal</label><div className="relative"><Search className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" /><Input id="question-search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Cari teks soal, pilihan, atau tag" className="h-11 rounded-xl pl-9" /></div></div>
+          <div>
+            <label htmlFor="question-filter-topic" className="mb-2 block text-[12px] font-semibold">Filter kategori</label>
+            <SearchableCombobox
+              id="question-filter-topic"
+              options={topicOptions}
+              value={topicId}
+              onChange={(val) => { setTopicId(val); setPage(0); }}
+              placeholder="Semua kategori"
+              searchPlaceholder="Cari nama mata pelajaran atau tag..."
+              emptyOptionLabel="Semua kategori"
+              allowClear
+            />
+          </div>
           {(query || topicId) && <p aria-live="polite" className="text-[11px] text-muted-foreground sm:col-span-2">{filtered.length} soal ditemukan</p>}
         </div>
         {visible.length === 0 ? <div className="flex flex-col items-center px-6 py-12 text-center"><BookOpenCheck className="size-7 text-muted-foreground" /><h3 className="mt-4 text-sm font-bold">{questions.length === 0 ? "Belum ada soal" : "Soal tidak ditemukan"}</h3><p className="mt-1.5 text-[12px] leading-6 text-muted-foreground">{questions.length === 0 ? "Tambahkan soal pilihan ganda pertama." : "Coba kata kunci atau kategori lain."}</p></div> : (
           <ul aria-label="Daftar soal" className="divide-y divide-border">
             {visible.map((question) => <li key={question.id} className="flex min-w-0 flex-col gap-3 p-5 sm:flex-row sm:items-start sm:gap-5 sm:px-6">
-              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><Badge variant="secondary" className="max-w-full break-words">{question.topicName}</Badge><span className="text-[11px] text-muted-foreground">Soal #{question.id}</span>{question.hasPromptImage && <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><ImageIcon className="size-3.5" /> Bergambar</span>}</div><p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-[13px] leading-6 font-semibold">{question.prompt || "Soal bergambar tanpa teks"}</p><p className="mt-1 text-[11px] text-muted-foreground">Kunci: {question.correctOption}</p></div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="secondary" className="max-w-full break-words">{question.topicName}</Badge>
+                  {(question.topicTags ?? []).map((tag) => (
+                    <Badge key={tag} variant="outline" className="rounded-full text-[10px] font-medium">{tag}</Badge>
+                  ))}
+                  <span className="text-[11px] text-muted-foreground">Soal #{question.id}</span>
+                  {question.hasPromptImage && <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><ImageIcon className="size-3.5" /> Bergambar</span>}
+                </div>
+                <p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-[13px] leading-6 font-semibold">{question.prompt || "Soal bergambar tanpa teks"}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Kunci: {question.correctOption}</p>
+              </div>
               <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" size="sm" aria-label={`Lihat soal ${question.id}`} onClick={() => setViewing(question)} className="rounded-lg"><Eye className="size-3.5" /> Lihat</Button><Button variant="outline" size="sm" aria-label={`Ubah soal ${question.id}`} onClick={() => openEditor(question)} className="rounded-lg"><Pencil className="size-3.5" /> Ubah</Button><Button variant="outline" size="sm" aria-label={`Hapus soal ${question.id}`} onClick={() => setDeleting(question)} className="rounded-lg text-destructive hover:text-destructive"><Trash2 className="size-3.5" /> Hapus</Button></div>
             </li>)}
           </ul>
         )}
         {pages > 1 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-4 text-[12px] text-muted-foreground sm:px-6"><span>Halaman {currentPage + 1} dari {pages} · {filtered.length} soal</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)} aria-label="Halaman sebelumnya"><ChevronLeft className="size-4" /> Sebelumnya</Button><Button variant="outline" size="sm" disabled={currentPage >= pages - 1} onClick={() => setPage(currentPage + 1)} aria-label="Halaman berikutnya">Berikutnya <ChevronRight className="size-4" /></Button></div></div>}
       </Card>
-      <QuestionEditor question={editing} topics={topics} open={editorOpen} onOpenChange={setEditorOpen} />
+      <QuestionEditor key={`${editing?.id ?? "new"}-${editorOpen}`} question={editing} topicOptions={topicOptions} open={editorOpen} onOpenChange={setEditorOpen} />
       <QuestionDetail question={viewing} onClose={() => setViewing(null)} />
-      <DeleteQuestionDialog question={deleting} onClose={() => setDeleting(null)} />
+      <DeleteQuestionDialog question={deleting} onClose={() => setDeleting(null)} onRequestCascade={(item) => setCascadeTarget(item)} />
+      <DevCascadeDeleteDialog
+        open={cascadeTarget !== null}
+        onOpenChange={(open) => { if (!open) setCascadeTarget(null); }}
+        entityType="question"
+        entityId={cascadeTarget?.id ?? null}
+        entityTitle={cascadeTarget ? `Soal #${cascadeTarget.id} (${formatTopicLabel({ name: cascadeTarget.topicName, tags: cascadeTarget.topicTags })})` : ""}
+      />
     </>
   );
 }

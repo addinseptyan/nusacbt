@@ -14,10 +14,12 @@ export async function loadExamStartScreen(runId: string): Promise<Screen | null>
     `WITH auth AS (
        SELECT i.id AS identity_id,i.period_id,i.student_id
        FROM participant_sessions sess JOIN participant_identities i ON i.id=sess.participant_identity_id
-       JOIN participant_login_settings ls ON ls.id=1 AND ls.period_id=i.period_id
+       JOIN exam_periods ep ON ep.id=i.period_id
+       JOIN academic_year_settings ys ON ys.id=1 AND ys.active_year_id=ep.academic_year_id
        JOIN student_class_placements pl ON pl.id=sess.placement_id AND pl.student_id=i.student_id AND pl.period_id=i.period_id AND pl.ended_at IS NULL
        JOIN participant_passwords pw ON pw.participant_identity_id=i.id
        WHERE sess.token_hash=$1 AND sess.expires_at>clock_timestamp()
+         AND ep.is_active=true
          AND i.username=sess.username_snapshot AND i.updated_at=sess.identity_revision
          AND pw.updated_at=sess.password_revision AND sha256(convert_to(pw.password_hash,'UTF8'))=sess.password_hash_digest
      )

@@ -13,22 +13,24 @@ export const dynamic = "force-dynamic";
 export default async function PeriodPage() {
   const { allowed } = await requireAdminAccess("periods.manage");
   if (!allowed) return <AccessDenied section="Data peserta" title="Periode Ujian" />;
-  let periods: ExamPeriod[]; let activePeriodId: string | null; let activeRevision: string; let activeYearId: string | null; let years: Array<{ id: string; name: string }>;
+  let periods: ExamPeriod[]; let activeRevision: string; let activeYearId: string | null; let years: Array<{ id: string; name: string }>;
   try {
     // Baca pengaturan dan daftar dari snapshot yang sama, termasuk saat daftar kosong.
-    const result = await getPostgresPool().query<{ activePeriodId: string | null; activeRevision: string; periods: ExamPeriod[]; activeYearId: string | null; years: Array<{ id: string; name: string }> }>(
-      `SELECT settings.period_id::text AS "activePeriodId", settings.xmin::text AS "activeRevision",
+    const result = await getPostgresPool().query<{ activeRevision: string; periods: ExamPeriod[]; activeYearId: string | null; years: Array<{ id: string; name: string }> }>(
+      `SELECT settings.xmin::text AS "activeRevision",
         COALESCE((SELECT json_agg(json_build_object(
           'id', e.id::text, 'name', e.name, 'startDate', to_char(e.start_date, 'YYYY-MM-DD'),
           'endDate', CASE WHEN e.end_date IS NULL THEN NULL ELSE to_char(e.end_date, 'YYYY-MM-DD') END,
-          'revision', e.xmin::text, 'yearId', e.academic_year_id::text, 'yearName', (SELECT name FROM academic_years y WHERE y.id=e.academic_year_id)
-        ) ORDER BY e.start_date DESC, e.id DESC) FROM exam_periods e), '[]'::json) AS periods,
+          'revision', e.xmin::text, 'yearId', e.academic_year_id::text,
+          'yearName', (SELECT name FROM academic_years y WHERE y.id=e.academic_year_id),
+          'isActive', e.is_active
+        ) ORDER BY e.is_active DESC, e.start_date DESC, e.id DESC) FROM exam_periods e), '[]'::json) AS periods,
         ys.active_year_id::text AS "activeYearId",
         COALESCE((SELECT json_agg(json_build_object('id',y.id::text,'name',y.name) ORDER BY y.name DESC,y.id DESC) FROM academic_years y),'[]'::json) AS years
        FROM participant_login_settings settings CROSS JOIN academic_year_settings ys WHERE settings.id = 1 AND ys.id=1`,
     );
     if (result.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
-    ({ periods, activePeriodId, activeRevision, activeYearId, years } = result.rows[0]);
+    ({ periods, activeRevision, activeYearId, years } = result.rows[0]);
   } catch {
     return (
       <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9">
@@ -50,10 +52,10 @@ export default async function PeriodPage() {
         <div>
           <p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data peserta</p>
           <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Periode Ujian</h1>
-          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">Kelola periode ujian di dalam tahun ajaran; akun peserta tetap per periode.</p>
+          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">Kelola periode ujian di dalam tahun ajaran; beberapa periode pada tahun aktif dapat diaktifkan bersamaan untuk login peserta.</p>
         </div>
       </div>
-      <PeriodManager periods={periods} years={years} activeYearId={activeYearId} activePeriodId={activePeriodId} activeRevision={activeRevision} />
+      <PeriodManager periods={periods} years={years} activeYearId={activeYearId} activeRevision={activeRevision} />
     </div>
   );
 }

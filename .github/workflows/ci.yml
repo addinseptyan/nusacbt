@@ -150,3 +150,8 @@ jobs:
           PGDATABASE: nusacbt_test
           NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_test
         run: npm run test:upgrade-027
+      - name: Uji upgrade 027 ke revisi platform 028
+        env:
+          PGDATABASE: nusacbt_test
+          NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_test
+        run: npm run test:upgrade-028

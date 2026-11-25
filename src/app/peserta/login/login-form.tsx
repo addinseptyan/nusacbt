@@ -7,16 +7,40 @@ import { participantLoginAction } from "@/app/peserta/login/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { ActiveLoginPeriod } from "@/lib/participant-auth";
 
-export function ParticipantLoginForm({ enabled, available }: { enabled: boolean; available: boolean }) {
+export function ParticipantLoginForm({ activePeriods, available }: { activePeriods: ActiveLoginPeriod[]; available: boolean }) {
   const [state, action, pending] = useActionState(participantLoginAction, { error: "" });
   const [username, setUsername] = useState("");
+  const [periodId, setPeriodId] = useState(() => (activePeriods.length === 1 ? activePeriods[0].id : ""));
   const [visible, setVisible] = useState(false);
+  const enabled = activePeriods.length > 0;
+  const multiPeriod = activePeriods.length > 1;
   const canLogin = available && enabled;
+
   return (
     <form action={action} className="mt-6 space-y-4">
       {state.error && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertDescription>{state.error}</AlertDescription></Alert>}
       {available && !enabled && <Alert role="status"><CircleAlert className="size-4" /><AlertDescription>Login peserta belum diaktifkan. Hubungi pengawas.</AlertDescription></Alert>}
+      {multiPeriod && (
+        <div className="space-y-2">
+          <label htmlFor="participant-period" className="text-sm font-semibold">Periode ujian</label>
+          <select
+            id="participant-period"
+            name="periodId"
+            required
+            disabled={!canLogin || pending}
+            value={periodId}
+            onChange={(event) => setPeriodId(event.target.value)}
+            className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+          >
+            <option value="">Pilih periode ujian</option>
+            {activePeriods.map((period) => (
+              <option key={period.id} value={period.id}>{period.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="space-y-2">
         <label htmlFor="participant-username" className="text-sm font-semibold">Username peserta</label>
         <Input id="participant-username" name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={64} required disabled={!canLogin || pending}

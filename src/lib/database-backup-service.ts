@@ -140,6 +140,8 @@ function sqlTypeCast(udtName: string) {
       return "bigint";
     case "_int8":
       return "bigint[]";
+    case "_text":
+      return "text[]";
     case "bool":
       return "boolean";
     case "bytea":

@@ -6,6 +6,8 @@ import { BookOpenText, GraduationCap, Info, Pencil, Plus, Trash2 } from "lucide-
 import { toast } from "sonner";
 
 import { deleteClass, deleteMajor, saveClass, saveMajor } from "@/app/data-peserta/kelas/actions";
+import { useCanDevCascadeDelete } from "@/components/admin-user-context";
+import { DevCascadeDeleteDialog } from "@/components/dev-cascade-delete-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -143,8 +145,17 @@ function ClassEditor({ schoolClass, majors, open, onOpenChange }: { schoolClass:
 
 type DeleteTarget = { type: "kelas" | "jurusan"; id: string; name: string };
 
-function DeleteDialog({ target, onClose }: { target: DeleteTarget | null; onClose: () => void }) {
+function DeleteDialog({
+  target,
+  onClose,
+  onRequestCascade,
+}: {
+  target: DeleteTarget | null;
+  onClose: () => void;
+  onRequestCascade: (target: DeleteTarget) => void;
+}) {
   const router = useRouter();
+  const canDevCascade = useCanDevCascadeDelete();
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -181,8 +192,23 @@ function DeleteDialog({ target, onClose }: { target: DeleteTarget | null; onClos
           <DialogDescription><strong className="text-foreground">{target?.name}</strong> akan dihapus permanen.{target?.type === "jurusan" ? " Jurusan tidak dapat dihapus jika masih digunakan oleh kelas." : " Kelas yang memiliki riwayat penempatan siswa tidak dapat dihapus."} Tindakan ini tidak dapat dibatalkan.</DialogDescription>
         </DialogHeader>
         {error && <Alert variant="destructive" role="alert"><Info className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
-        <DialogFooter className="rounded-b-2xl">
+        <DialogFooter className="flex-wrap gap-2 rounded-b-2xl">
           <Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button>
+          {canDevCascade && target && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                const chosen = target;
+                close();
+                onRequestCascade(chosen);
+              }}
+              className="border-amber-400 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/40"
+            >
+              Hapus beserta dependensi (Mode Dev)
+            </Button>
+          )}
           <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>{pending ? "Menghapus..." : `Ya, hapus ${title}`}</Button>
         </DialogFooter>
       </DialogContent>
@@ -196,6 +222,7 @@ export function ClassManager({ classes, majors }: { classes: SchoolClass[]; majo
   const [classOpen, setClassOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<SchoolClass | null>(null);
   const [deleting, setDeleting] = useState<DeleteTarget | null>(null);
+  const [cascadeTarget, setCascadeTarget] = useState<DeleteTarget | null>(null);
 
   function openMajor(major: SchoolMajor | null) {
     setEditingMajor(major);
@@ -259,7 +286,14 @@ export function ClassManager({ classes, majors }: { classes: SchoolClass[]; majo
       </div>
       <MajorEditor major={editingMajor} open={majorOpen} onOpenChange={setMajorOpen} />
       <ClassEditor schoolClass={editingClass} majors={majors} open={classOpen} onOpenChange={setClassOpen} />
-      <DeleteDialog target={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog target={deleting} onClose={() => setDeleting(null)} onRequestCascade={(item) => setCascadeTarget(item)} />
+      <DevCascadeDeleteDialog
+        open={cascadeTarget !== null}
+        onOpenChange={(open) => { if (!open) setCascadeTarget(null); }}
+        entityType={cascadeTarget?.type === "jurusan" ? "major" : "class"}
+        entityId={cascadeTarget?.id ?? null}
+        entityTitle={cascadeTarget?.name ?? ""}
+      />
     </>
   );
 }

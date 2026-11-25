@@ -7,7 +7,10 @@ export const APP_COLOR_PALETTES = [
   { id: "amber", label: "Kuning Emas", detail: "Emas hangat berenergi", swatch: "#d97706", darkSwatch: "#fbbf24" },
 ];
 
+export const APP_MODES = ["production", "dev"];
+
 const PALETTE_IDS = new Set(APP_COLOR_PALETTES.map((item) => item.id));
+const APP_MODE_SET = new Set(APP_MODES);
 const CTRL_ANY = /[\u0000-\u001f\u007f-\u009f]/;
 const CTRL_MULTILINE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/;
 
@@ -37,6 +40,17 @@ export function isValidPalette(raw) {
   return typeof raw === "string" && PALETTE_IDS.has(raw);
 }
 
+/** @param {unknown} raw */
+export function isValidAppMode(raw) {
+  return typeof raw === "string" && APP_MODE_SET.has(raw);
+}
+
+/** @param {unknown} raw */
+export function parseTimelineDefaultDays(raw) {
+  const num = typeof raw === "number" ? raw : typeof raw === "string" && /^[1-7]$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
+  return Number.isInteger(num) && num >= 1 && num <= 7 ? num : null;
+}
+
 /** @param {Record<string, unknown>} input */
 export function validateAppSettingsInput(input) {
   const appName = cleanSingleLine(input.appName);
@@ -45,6 +59,10 @@ export function validateAppSettingsInput(input) {
   const participantInfo = cleanMultiline(input.participantInfo ?? "");
   const colorPalette = typeof input.colorPalette === "string" ? input.colorPalette.trim() : "";
   const revision = typeof input.revision === "string" ? input.revision.trim() : "";
+  const hasAppMode = input.appMode !== undefined && input.appMode !== null && input.appMode !== "";
+  const appMode = hasAppMode ? (typeof input.appMode === "string" ? input.appMode.trim() : "") : "production";
+  const hasTimelineDays = input.timelineDefaultDays !== undefined && input.timelineDefaultDays !== null && input.timelineDefaultDays !== "";
+  const timelineDefaultDays = hasTimelineDays ? parseTimelineDefaultDays(input.timelineDefaultDays) : 7;
 
   if (appName === null || Array.from(appName).length < 1 || Array.from(appName).length > 60 || CTRL_ANY.test(appName)) {
     return { ok: false, error: "Nama aplikasi wajib 1–60 karakter tanpa karakter kontrol." };
@@ -61,12 +79,29 @@ export function validateAppSettingsInput(input) {
   if (!isValidPalette(colorPalette)) {
     return { ok: false, error: "Pilih salah satu palet warna yang tersedia." };
   }
+  if (!isValidAppMode(appMode)) {
+    return { ok: false, error: "Mode aplikasi harus dev atau production." };
+  }
+  if (timelineDefaultDays === null) {
+    return { ok: false, error: "Rentang bawaan timeline harus 1 sampai 7 hari." };
+  }
   if (!/^[1-9]\d{0,18}$/.test(revision)) {
     return { ok: false, error: "Versi pengaturan tidak valid. Muat ulang halaman." };
   }
 
   return {
     ok: true,
-    value: { appName, appDescription, schoolName, participantInfo, colorPalette, revision },
+    value: {
+      appName,
+      appDescription,
+      schoolName,
+      participantInfo,
+      colorPalette,
+      appMode,
+      timelineDefaultDays,
+      revision,
+      appModeProvided: hasAppMode,
+      timelineDaysProvided: hasTimelineDays,
+    },
   };
 }

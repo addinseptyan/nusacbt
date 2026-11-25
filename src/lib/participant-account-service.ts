@@ -16,12 +16,15 @@ const BUCKET_PREFIX = Buffer.from("NusaCBT participant login v1\0", "utf8");
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
 /** Identitas, sandi tersamarkan, dan status kunci diambil dari satu snapshot. */
-export async function loadAccountPage(periodId: string | null): Promise<AccountPageData> {
+export async function loadAccountPage(
+  periodId: string | null,
+  options?: { defaultToFirst?: boolean },
+): Promise<AccountPageData> {
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-    const identities = await loadIdentityPageWithClient(client, periodId);
-    const passwords = await loadPasswordPageWithClient(client, periodId);
+    const identities = await loadIdentityPageWithClient(client, periodId, options);
+    const passwords = await loadPasswordPageWithClient(client, periodId, options);
     if (identities.selected?.id !== passwords.selected?.id) throw new Error("Snapshot periode tidak konsisten.");
     const passwordRows = new Map(passwords.rows.map((row) => [row.identityId, row]));
     const identitiesWithAccount = identities.rows.filter((row) => row.identityId);

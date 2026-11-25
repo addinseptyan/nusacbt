@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowDownToLine, CheckCircle2, CircleAlert, FileText, Info, ListChecks, UploadCloud } from "lucide-react";
 
 import { previewQuestionWord, saveQuestionWord } from "@/app/data-modul/import-soal/actions";
 import { QuestionRichDisplay } from "@/components/question-rich-display";
+import { SearchableCombobox, type ComboboxOption } from "@/components/searchable-combobox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,10 @@ export function QuestionWordImportManager({ topics }: { topics: QuestionTopicOpt
   const fileRef = useRef<HTMLInputElement>(null);
   const pages = preview ? Math.ceil(preview.questions.length / PAGE_SIZE) : 0;
   const visible = preview?.questions.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE) ?? [];
+  const topicOptions = useMemo<ComboboxOption[]>(
+    () => topics.map((t) => ({ value: t.id, label: t.name, tags: t.tags ?? [] })),
+    [topics],
+  );
 
   function clearResult() { setPreview(null); setCompleted(null); setError(""); setPage(0); }
   function makeForm() {
@@ -86,7 +91,20 @@ export function QuestionWordImportManager({ topics }: { topics: QuestionTopicOpt
       <Card className="min-w-0 gap-0 rounded-[18px] p-5 ring-1 ring-border sm:p-6">
         <div className="flex items-center gap-2.5"><span className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><UploadCloud className="size-4" /></span><div><h2 className="text-[15px] font-bold">Pilih file dan kategori</h2><p className="mt-0.5 text-[11px] text-muted-foreground">Belum ada perubahan sampai impor disimpan.</p></div></div>
         <form onSubmit={handlePreview} className="mt-5 space-y-4">
-          <div className="space-y-2"><label htmlFor="question-import-topic" className="text-sm font-semibold">Topik / mata pelajaran <span className="text-destructive">*</span></label><select id="question-import-topic" value={topicId} onChange={(event) => { setTopicId(event.target.value); clearResult(); }} disabled={Boolean(busy) || topics.length === 0} required className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="">Pilih kategori</option>{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}</select></div>
+          <div className="space-y-2">
+            <label htmlFor="question-import-topic" className="text-sm font-semibold">Topik / mata pelajaran <span className="text-destructive">*</span></label>
+            <SearchableCombobox
+              id="question-import-topic"
+              name="topicId"
+              options={topicOptions}
+              value={topicId}
+              onChange={(val) => { setTopicId(val); clearResult(); }}
+              placeholder="Pilih kategori"
+              searchPlaceholder="Cari nama mata pelajaran atau tag..."
+              required
+              disabled={Boolean(busy) || topics.length === 0}
+            />
+          </div>
           <div className="space-y-2"><label htmlFor="question-import-file" className="text-sm font-semibold">File Word <span className="text-destructive">*</span></label><Input ref={fileRef} id="question-import-file" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={Boolean(busy)} onChange={(event) => { setFile(event.currentTarget.files?.[0] ?? null); clearResult(); }} className="h-auto min-h-11 w-full min-w-0 rounded-xl py-2 file:mr-3 file:text-xs file:font-semibold" /><p className="text-[11px] leading-5 text-muted-foreground">Hanya .docx, maksimal 6 MiB dan 100 soal per file. PDF tidak dapat diimpor.</p></div>
           <Button type="submit" disabled={Boolean(busy) || !topics.length || Boolean(preview)} className="h-10 w-full rounded-xl font-semibold sm:w-auto"><ListChecks className="size-4" /> {busy === "preview" ? "Memeriksa file..." : "Periksa pratinjau"}</Button>
         </form>

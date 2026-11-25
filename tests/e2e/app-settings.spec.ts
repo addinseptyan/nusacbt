@@ -30,16 +30,26 @@ test("pengaturan aplikasi menyimpan identitas, palet, logo, kop surat, serta tam
 
   let majorId = "";
   let classId = "";
+  let yearId = "";
+  let prevYearId: string | null = null;
   let periodId = "";
   let studentId = "";
 
   try {
-    // Siapkan 1 siswa pada periode login aktif agar pratinjau kartu peserta dapat diuji
+    prevYearId = (await client.query<{ active_year_id: string | null }>("SELECT active_year_id::text FROM academic_year_settings WHERE id = 1")).rows[0]?.active_year_id ?? null;
+    await client.query("UPDATE exam_periods SET is_active = false WHERE is_active = true");
+    yearId = (await client.query<{ id: string }>(
+      "INSERT INTO academic_years(name) VALUES($1) RETURNING id::text AS id",
+      [`TA App ${tag}`],
+    )).rows[0].id;
+    await client.query("UPDATE academic_year_settings SET active_year_id = $1::bigint WHERE id = 1", [yearId]);
+
+    // Siapkan 1 siswa pada periode aktif di tahun ajaran aktif agar pratinjau kartu peserta dapat diuji
     majorId = (await client.query<{ id: string }>("INSERT INTO school_majors(name) VALUES($1) RETURNING id::text AS id", [`JURUSAN APP ${tag}`])).rows[0].id;
     classId = (await client.query<{ id: string }>("INSERT INTO school_classes(level, major_id) VALUES('XII', $1) RETURNING id::text AS id", [majorId])).rows[0].id;
     periodId = (await client.query<{ id: string }>(
-      "INSERT INTO exam_periods(name, start_date, end_date) VALUES($1, '2026-01-01', '2026-12-31') RETURNING id::text AS id",
-      [`Periode App ${tag}`],
+      "INSERT INTO exam_periods(name, start_date, end_date, academic_year_id, is_active) VALUES($1, '2026-01-01', '2026-12-31', $2::bigint, true) RETURNING id::text AS id",
+      [`Periode App ${tag}`, yearId],
     )).rows[0].id;
     studentId = (await client.query<{ id: string }>(
       "INSERT INTO school_students(name, nisn) VALUES($1, $2) RETURNING id::text AS id",
@@ -119,14 +129,33 @@ test("pengaturan aplikasi menyimpan identitas, palet, logo, kop surat, serta tam
     await page.getByRole("button", { name: "Simpan pengaturan aplikasi" }).click();
     await expect(page.getByText("Pengaturan aplikasi berhasil disimpan.")).toBeVisible();
     expect((await page.request.get("/api/branding/logo")).status()).toBe(404);
+
+    // Uji pengubahan rentang bawaan lini masa (3 hari) dan aktivasi Mode Dev dengan konfirmasi bertingkat
+    await page.getByLabel("Rentang bawaan lini masa").selectOption("3");
+    await page.getByRole("radio", { name: /Dev \(Pengembangan/i }).check({ force: true });
+    await page.getByRole("button", { name: "Simpan pengaturan aplikasi" }).click();
+    const devDialog = page.getByRole("dialog", { name: /Aktifkan Mode Dev\?/ });
+    await expect(devDialog).toBeVisible();
+    await devDialog.getByRole("button", { name: "Ya, aktifkan Mode Dev" }).click();
+    await expect(page.getByText("Pengaturan aplikasi berhasil disimpan.")).toBeVisible();
+    await expect(page.getByTestId("dev-mode-header-pill")).toContainText("Mode Dev");
+
+    // /data-tes/daftar memakai default 3 hari pada timeline saat baru dibuka
+    await page.goto("/data-tes/daftar");
+    const fromVal = await page.locator("#timeline-from").inputValue();
+    const toVal = await page.locator("#timeline-to").inputValue();
+    const daySpan = Math.round((Date.parse(`${toVal}T00:00:00Z`) - Date.parse(`${fromVal}T00:00:00Z`)) / 86_400_000) + 1;
+    expect(daySpan).toBe(3);
   } finally {
     try {
       await client.query("UPDATE participant_login_settings SET period_id = NULL WHERE id = 1");
+      await client.query("UPDATE academic_year_settings SET active_year_id = $1::bigint WHERE id = 1", [prevYearId]);
       if (periodId) {
         await client.query("DELETE FROM participant_identities WHERE period_id = $1", [periodId]);
         await client.query("DELETE FROM student_class_placements WHERE period_id = $1", [periodId]);
         await client.query("DELETE FROM exam_periods WHERE id = $1", [periodId]);
       }
+      if (yearId) await client.query("DELETE FROM academic_years WHERE id = $1::bigint", [yearId]);
       if (studentId) await client.query("DELETE FROM school_students WHERE id = $1", [studentId]);
       if (classId) await client.query("DELETE FROM school_classes WHERE id = $1", [classId]);
       if (majorId) await client.query("DELETE FROM school_majors WHERE id = $1", [majorId]);
@@ -138,6 +167,8 @@ test("pengaturan aplikasi menyimpan identitas, palet, logo, kop surat, serta tam
              school_name = '',
              participant_info = '',
              color_palette = 'emerald',
+             app_mode = 'production',
+             timeline_default_days = 7,
              logo_image = NULL,
              logo_image_mime = NULL,
              letterhead_image = NULL,

@@ -92,6 +92,10 @@ test("satu menu membuka kunci yang nyata dan terisolasi per peserta/periode tanp
     await page.getByRole("link", { name: "Akun Peserta", exact: true }).click();
     await expect(page.getByRole("link", { name: "Identitas Peserta", exact: true })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Sandi Peserta", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "Periode" })).toContainText(f.periodAName);
+    await page.getByRole("combobox", { name: "Periode" }).click();
+    await page.getByRole("option", { name: f.periodBName }).click();
+    await expect(page).toHaveURL(new RegExp(`/data-peserta/akun\\?periode=${f.periodB}$`));
     await page.getByRole("combobox", { name: "Periode" }).click();
     await page.getByRole("option", { name: f.periodAName }).click();
     await expect(page).toHaveURL(new RegExp(`/data-peserta/akun\\?periode=${f.periodA}$`));

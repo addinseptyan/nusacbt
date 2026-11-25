@@ -31,17 +31,24 @@ async function readPage(client: PoolClient, filters: CardFilters, requestedPage:
   const periods = (await client.query<IdentityPeriod>(
     `SELECT id::text AS id,name,to_char(start_date,'YYYY-MM-DD') AS "startDate",
       to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
-     FROM exam_periods ORDER BY start_date DESC,id DESC`,
+     FROM exam_periods ORDER BY is_active DESC,start_date DESC,id DESC`,
   )).rows;
-  const login = (await client.query<{ id: string | null; name: string | null }>(
-    `SELECT setting.period_id::text AS id,period.name FROM participant_login_settings setting
-     LEFT JOIN exam_periods period ON period.id=setting.period_id WHERE setting.id=1`,
-  )).rows[0];
-  if (!login) throw new Error("Pengaturan login peserta tidak tersedia.");
-  if (filters.periodId && filters.periodId !== login.id) throw new CardPeriodChanged();
-  const effectiveFilters = { ...filters, periodId: login.id };
-  const selected = periods.find((period) => period.id === login.id) ?? null;
-  const empty = { filters: effectiveFilters, periods, selected, loginPeriodId: login.id, loginPeriodName: login.name,
+  const activePeriods = (await client.query<IdentityPeriod>(
+    `SELECT ep.id::text AS id,ep.name,to_char(ep.start_date,'YYYY-MM-DD') AS "startDate",
+      to_char(ep.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
+     FROM exam_periods ep
+     JOIN academic_year_settings ys ON ys.id=1 AND ys.active_year_id=ep.academic_year_id
+     WHERE ep.is_active=true
+     ORDER BY ep.start_date DESC,ep.id DESC`,
+  )).rows;
+  const loginCheck = await client.query("SELECT id FROM participant_login_settings WHERE id=1");
+  if (loginCheck.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
+  if (filters.periodId && !activePeriods.some((period) => period.id === filters.periodId)) throw new CardPeriodChanged();
+  const selected = filters.periodId
+    ? (activePeriods.find((period) => period.id === filters.periodId) ?? null)
+    : (activePeriods[0] ?? null);
+  const effectiveFilters = { ...filters, periodId: selected?.id ?? null };
+  const empty = { filters: effectiveFilters, periods, activePeriods, selected, loginPeriodId: selected?.id ?? null, loginPeriodName: selected?.name ?? null,
     classes: [], tests: [], rows: [], total: 0, page: 1, pages: 1 };
   if (!selected) return empty;
 
@@ -80,7 +87,7 @@ async function readPage(client: PoolClient, filters: CardFilters, requestedPage:
     return { studentId, studentName, nisn, classId, classLabel, participantNumber, username,
       hasPassword: record.passwordVersion !== null, candidate };
   });
-  return { filters: effectiveFilters, periods, selected, loginPeriodId: login.id, loginPeriodName: login.name, classes, tests: [], rows, total, page, pages };
+  return { filters: effectiveFilters, periods, activePeriods, selected, loginPeriodId: selected.id, loginPeriodName: selected.name, classes, tests: [], rows, total, page, pages };
 }
 
 /** Sesi dan seluruh opsi/daftar diperiksa dalam satu snapshot. */

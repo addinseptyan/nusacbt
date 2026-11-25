@@ -19,8 +19,9 @@ export type MonitoringRow = {
   completed: boolean; withinWindow: boolean; permissionId: string | null; permissionStatus: "pending" | "consumed" | "revoked" | "expired" | null;
   grantedAt: string | null; grantedBy: string | null; actionAt: string | null; revokedBy: string | null; finalized: boolean; finalRevision: string;
 };
-export type MonitoringOption = { id: string; name: string; period: string; year: string | null };
+export type MonitoringOption = { id: string; name: string; period: string; year: string | null; yearId: string | null; isActivePeriod: boolean };
 export type MonitoringData = { rows: MonitoringRow[]; total: number; page: number; pages: number; final: FinalGradeData | null;
+  effectiveFilters: MonitoringFilters; defaultApplied: boolean;
   options: { years: Array<{ id: string; name: string }>; tests: MonitoringOption[]; classes: string[] } | null };
 const zones = { WIB: "Asia/Jakarta", WITA: "Asia/Makassar", WIT: "Asia/Jayapura" } as const;
 const orderSql: Record<MonitoringFilters["order"], string> = {
@@ -76,22 +77,37 @@ const base = `WITH base AS (
 function bindings(f: MonitoringFilters) { return [f.yearId,f.testId,f.className,f.kind,f.status,f.fromUtc,f.toUtcExclusive,zones[f.zone],f.zone]; }
 async function options(client: PoolClient) {
   const years = (await client.query<{ id:string; name:string }>("SELECT id::text AS id,name FROM academic_years ORDER BY name DESC,id DESC")).rows;
-  const tests = (await client.query<MonitoringOption>(`SELECT t.id::text AS id,t.name,p.name AS period,y.name AS year FROM exam_tests t JOIN exam_periods p ON p.id=t.period_id LEFT JOIN academic_years y ON y.id=p.academic_year_id ORDER BY p.start_date DESC,lower(t.name),t.id`)).rows;
+  const tests = (await client.query<MonitoringOption>(`SELECT t.id::text AS id,t.name,p.name AS period,y.name AS year,p.academic_year_id::text AS "yearId",p.is_active AS "isActivePeriod" FROM exam_tests t JOIN exam_periods p ON p.id=t.period_id LEFT JOIN academic_years y ON y.id=p.academic_year_id ORDER BY p.is_active DESC,p.start_date DESC,t.starts_at DESC,lower(t.name),t.id`)).rows;
   const classes = (await client.query<{ name: string }>(`SELECT DISTINCT COALESCE(a.class_name_snapshot,pl.class_name_snapshot) AS name
     FROM exam_schedule_participants rp JOIN student_class_placements pl ON pl.id=rp.placement_id LEFT JOIN exam_attempts a ON a.run_id=rp.run_id AND a.student_id=rp.student_id ORDER BY name`)).rows.map((r) => r.name);
   return { years, tests, classes };
 }
-async function read(client: PoolClient, f: MonitoringFilters, requestedPage: number, finalPage: number, exporting: boolean): Promise<MonitoringData> {
-  const list = exporting ? null : await options(client); const params = bindings(f);
+async function resolveSmartDefaults(client: PoolClient, f: MonitoringFilters, list: { years: Array<{ id: string; name: string }>; tests: MonitoringOption[]; classes: string[] }) {
+  const activeYearRow = (await client.query<{ id: string | null }>("SELECT active_year_id::text AS id FROM academic_year_settings WHERE id = 1")).rows[0];
+  const defaultYearId = activeYearRow?.id ?? list.years[0]?.id ?? null;
+  const yearTests = defaultYearId ? list.tests.filter((t) => t.yearId === defaultYearId) : list.tests;
+  const preferredTest = yearTests.find((t) => t.isActivePeriod) ?? yearTests[0] ?? null;
+  const defaultTestId = preferredTest?.id ?? null;
+  const effective: MonitoringFilters = { ...f, yearId: defaultYearId, testId: defaultTestId };
+  return { effective, defaultApplied: Boolean(defaultYearId || defaultTestId) };
+}
+async function read(client: PoolClient, f: MonitoringFilters, requestedPage: number, finalPage: number, exporting: boolean, applySmartDefaults: boolean): Promise<MonitoringData> {
+  const list = exporting ? null : await options(client);
+  let effective = f;
+  let defaultApplied = false;
+  if (!exporting && applySmartDefaults && list) {
+    ({ effective, defaultApplied } = await resolveSmartDefaults(client, f, list));
+  }
+  const params = bindings(effective);
   const total = (await client.query<{ count:number }>(`${base} SELECT count(*)::int AS count FROM filtered`, params)).rows[0].count;
   if (exporting && total > MONITOR_MAX_EXPORT) throw new MonitoringSizeExceeded(`Maksimal ${MONITOR_MAX_EXPORT} baris per unduhan; sempitkan filter.`);
   const pages = Math.max(1, Math.ceil(total / MONITOR_PAGE_SIZE)); const page = exporting ? 1 : Math.min(Math.max(requestedPage,1),pages);
-  const rows = (await client.query<MonitoringRow>(`${base} SELECT * FROM filtered ORDER BY ${orderSql[f.order]},"runId","studentId",id NULLS LAST LIMIT $10::int OFFSET $11::int`,
+  const rows = (await client.query<MonitoringRow>(`${base} SELECT * FROM filtered ORDER BY ${orderSql[effective.order]},"runId","studentId",id NULLS LAST LIMIT $10::int OFFSET $11::int`,
     [...params, exporting ? MONITOR_MAX_EXPORT : MONITOR_PAGE_SIZE, exporting ? 0 : (page-1)*MONITOR_PAGE_SIZE])).rows;
-  const final = !exporting && f.testId && list?.tests.some((t) => t.id === f.testId) ? await loadFinalGradeData(client, f.testId, finalPage) : null;
-  return { rows,total,page,pages,final,options:list };
+  const final = !exporting && effective.testId && list?.tests.some((t) => t.id === effective.testId) ? await loadFinalGradeData(client, effective.testId, finalPage) : null;
+  return { rows,total,page,pages,final,effectiveFilters:effective,defaultApplied,options:list };
 }
-export async function withMonitoringSnapshot<T>(f: MonitoringFilters, page: number, finalPage: number, exporting: boolean, render: (data: MonitoringData) => T): Promise<T> {
+export async function withMonitoringSnapshot<T>(f: MonitoringFilters, page: number, finalPage: number, exporting: boolean, render: (data: MonitoringData) => T, optionsArg?: { applySmartDefaults?: boolean }): Promise<T> {
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
@@ -100,7 +116,7 @@ export async function withMonitoringSnapshot<T>(f: MonitoringFilters, page: numb
       ? adminHasPermission(admin, "monitoring.view")
       : adminHasAnyPermission(admin, ["monitoring.view", "grading_overrides.manage"]);
     if (!canRead) throw new MonitoringPermissionDenied();
-    const data = await read(client,f,page,finalPage,exporting); const result = render(data);
+    const data = await read(client,f,page,finalPage,exporting, Boolean(optionsArg?.applySmartDefaults)); const result = render(data);
     const active = await lockActiveAdminSession(client); if (!active || active.id !== admin.id) throw new MonitoringSessionExpired();
     const stillAllowed = exporting
       ? adminHasPermission(active, "monitoring.view")

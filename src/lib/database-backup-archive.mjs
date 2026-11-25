@@ -101,6 +101,7 @@ const SUPPORTED_UDT_TYPES = new Set([
   "jsonb",
   "json",
   "text",
+  "_text",
   "varchar",
   "bpchar",
 ]);
@@ -199,6 +200,10 @@ export function serializeTableRows(columns, rows, blobRegistry) {
           if (!INT_RE.test(text)) throw new BackupArchiveError(`Elemen bigint[] tidak valid pada kolom ${col.name}.`);
           return text;
         });
+      }
+      if (col.udtName === "_text") {
+        if (!Array.isArray(value)) throw new BackupArchiveError(`Nilai array teks tidak valid pada kolom ${col.name}.`);
+        return value.map((item) => String(item));
       }
       if (col.udtName === "int2" || col.udtName === "int4") {
         const num = typeof value === "number" ? value : Number(value);
@@ -345,6 +350,18 @@ function decodeAndValidateTableRows(tableName, columns, rawRows, blobs, referenc
             throw new BackupArchiveError(`Nilai teks pada ${tableName}.${col.name} tidak valid.`);
           }
           rowValues[colIndex] = cell;
+          break;
+        }
+        case "_text": {
+          if (!Array.isArray(cell)) {
+            throw new BackupArchiveError(`Nilai text[] pada ${tableName}.${col.name} tidak valid.`);
+          }
+          rowValues[colIndex] = cell.map((entry) => {
+            if (typeof entry !== "string") {
+              throw new BackupArchiveError(`Elemen text[] pada ${tableName}.${col.name} tidak valid.`);
+            }
+            return entry;
+          });
           break;
         }
         default:

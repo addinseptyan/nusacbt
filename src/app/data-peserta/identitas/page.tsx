@@ -19,7 +19,7 @@ export default async function IdentityPage({ searchParams }: { searchParams: Pro
   const periodId = validDataId(params.periode);
   let data: IdentityPageData;
   try {
-    data = await loadIdentityPage(periodId);
+    data = await loadIdentityPage(periodId, { defaultToFirst: !supplied });
     if (supplied && !periodId) data.selectionMissing = true;
   } catch {
     return (

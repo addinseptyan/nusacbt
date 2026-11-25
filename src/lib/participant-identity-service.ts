@@ -71,13 +71,21 @@ async function getPeriod(client: PoolClient, id: string, lock: boolean): Promise
   return result.rows[0];
 }
 
-export async function loadIdentityPageWithClient(client: PoolClient, periodId: string | null): Promise<IdentityPageData> {
+export async function loadIdentityPageWithClient(
+  client: PoolClient,
+  periodId: string | null,
+  options?: { defaultToFirst?: boolean },
+): Promise<IdentityPageData> {
   const periods = await client.query<IdentityPeriod>(
     `SELECT id::text AS id, name, to_char(start_date, 'YYYY-MM-DD') AS "startDate",
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
-     FROM exam_periods ORDER BY start_date DESC, id DESC`,
+     FROM exam_periods ORDER BY is_active DESC, start_date DESC, id DESC`,
   );
-  const selected = periods.rows.find((period) => period.id === periodId) ?? null;
+  const selected = periodId
+    ? (periods.rows.find((period) => period.id === periodId) ?? null)
+    : options?.defaultToFirst
+      ? (periods.rows[0] ?? null)
+      : null;
   if (!selected) {
     return { periods: periods.rows, selected: null, rows: [], batch: null, selectionMissing: periodId !== null };
   }
@@ -107,11 +115,14 @@ export async function loadIdentityPageWithClient(client: PoolClient, periodId: s
   return { periods: periods.rows, selected, rows: result.rows, batch, selectionMissing: false };
 }
 
-export async function loadIdentityPage(periodId: string | null): Promise<IdentityPageData> {
+export async function loadIdentityPage(
+  periodId: string | null,
+  options?: { defaultToFirst?: boolean },
+): Promise<IdentityPageData> {
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-    const data = await loadIdentityPageWithClient(client, periodId);
+    const data = await loadIdentityPageWithClient(client, periodId, options);
     await client.query("COMMIT");
     return data;
   } catch (error) {

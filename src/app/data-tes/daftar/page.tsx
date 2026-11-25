@@ -14,7 +14,7 @@ export const metadata = { title: "Daftar Tes — NusaCBT" };
 export const dynamic = "force-dynamic";
 
 type QuestionRow = {
-  id: string; revision: string; topicId: string; topicName: string; prompt: string; promptRich: unknown | null; hasPromptImage: boolean;
+  id: string; revision: string; topicId: string; topicName: string; topicTags: string[]; prompt: string; promptRich: unknown | null; hasPromptImage: boolean;
   a: string; b: string; c: string; d: string; e: string;
   richA: unknown | null; richB: unknown | null; richC: unknown | null; richD: unknown | null; richE: unknown | null;
   hasA: boolean; hasB: boolean; hasC: boolean; hasD: boolean; hasE: boolean; correctOption: QuestionLetter;
@@ -24,16 +24,16 @@ export default async function ExamTestsPage() {
   const { allowed } = await requireAdminAccess("exams.manage");
   if (!allowed) return <AccessDenied section="Data tes" title="Daftar Tes" />;
   let periods: ExamPeriodOption[]; let tests: ExamTest[]; let topics: QuestionTopicOption[]; let questions: Question[]; let timeline: TimelineItem[]; let clock: TimelineClock;
+  let timelineDefaultDays = 7;
   let client: PoolClient | undefined;
   try {
     client = await getPostgresPool().connect();
-    // Satu snapshot konsisten: pilihan soal dan revisi tes tidak boleh berasal
-    // dari waktu berbeda saat admin lain sedang mengubah data.
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const periodResult = await client.query<ExamPeriodOption>(
       `SELECT id::text AS id, name, to_char(start_date,'YYYY-MM-DD') AS "startDate",
-         CASE WHEN end_date IS NULL THEN NULL ELSE to_char(end_date,'YYYY-MM-DD') END AS "endDate"
-       FROM exam_periods ORDER BY start_date DESC, id DESC`,
+         CASE WHEN end_date IS NULL THEN NULL ELSE to_char(end_date,'YYYY-MM-DD') END AS "endDate",
+         is_active AS "isActive"
+       FROM exam_periods ORDER BY is_active DESC, start_date DESC, id DESC`,
     );
     const testResult = await client.query<ExamTest>(
       `SELECT e.id::text AS id, e.xmin::text AS revision, e.name, e.period_id::text AS "periodId", p.name AS "periodName",
@@ -43,8 +43,6 @@ export default async function ExamTestsPage() {
          COALESCE((SELECT array_agg(eq.question_id::text ORDER BY eq.position) FROM exam_test_questions eq WHERE eq.exam_test_id=e.id), ARRAY[]::text[]) AS "questionIds"
        FROM exam_tests e JOIN exam_periods p ON p.id=e.period_id ORDER BY e.starts_at DESC, e.id DESC`,
     );
-    // Gunakan pelaksanaan asli; jadwal dasar hanya bila tes belum memiliki
-    // pelaksanaan sama sekali. Semua tanggal dikirim sebagai instant UTC.
     const timelineResult = await client.query<TimelineItem>(
       `SELECT t.id::text AS "testId",r.id::text AS "runId",t.name AS "testName",p.name AS "periodName",
          r.kind,r.label,(r.published_at IS NOT NULL) AS published,
@@ -63,9 +61,18 @@ export default async function ExamTestsPage() {
          to_char(statement_timestamp() AT TIME ZONE 'Asia/Jayapura','YYYY-MM-DD') AS "WIT",
          to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`,
     );
-    const topicResult = await client.query<QuestionTopicOption>("SELECT id::text AS id, name FROM question_topics ORDER BY lower(name), name, id");
+    const appSettingsResult = await client.query<{ days: number }>(
+      "SELECT timeline_default_days AS days FROM app_settings WHERE id = 1",
+    );
+    if (appSettingsResult.rows[0]?.days >= 1 && appSettingsResult.rows[0]?.days <= 7) {
+      timelineDefaultDays = appSettingsResult.rows[0].days;
+    }
+    const topicResult = await client.query<QuestionTopicOption>(
+      "SELECT id::text AS id, name, COALESCE(tags, ARRAY[]::text[]) AS tags FROM question_topics ORDER BY lower(name), name, id",
+    );
     const questionResult = await client.query<QuestionRow>(
       `SELECT q.id::text AS id, q.xmin::text AS revision, q.topic_id::text AS "topicId", t.name AS "topicName",
+         COALESCE(t.tags, ARRAY[]::text[]) AS "topicTags",
          q.prompt_text AS prompt, q.prompt_rich AS "promptRich", q.prompt_image IS NOT NULL AS "hasPromptImage",
          q.option_a_text AS a, q.option_b_text AS b, q.option_c_text AS c, q.option_d_text AS d, q.option_e_text AS e,
          q.option_a_rich AS "richA", q.option_b_rich AS "richB", q.option_c_rich AS "richC", q.option_d_rich AS "richD", q.option_e_rich AS "richE",
@@ -76,7 +83,7 @@ export default async function ExamTestsPage() {
     await client.query("COMMIT");
     periods = periodResult.rows; tests = testResult.rows; topics = topicResult.rows; timeline = timelineResult.rows; clock = clockResult.rows[0];
     questions = questionResult.rows.map((row) => ({
-      id: row.id, revision: row.revision, topicId: row.topicId, topicName: row.topicName, prompt: row.prompt, promptRich: row.promptRich,
+      id: row.id, revision: row.revision, topicId: row.topicId, topicName: row.topicName, topicTags: row.topicTags ?? [], prompt: row.prompt, promptRich: row.promptRich,
       hasPromptImage: row.hasPromptImage, correctOption: row.correctOption,
       options: [
         { letter: "A", text: row.a, rich: row.richA, hasImage: row.hasA }, { letter: "B", text: row.b, rich: row.richB, hasImage: row.hasB },
@@ -101,7 +108,7 @@ export default async function ExamTestsPage() {
         <span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><ClipboardList className="size-5" /></span>
         <div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Daftar Tes</h1><p className="mt-2 text-[13px] leading-6 text-muted-foreground">Siapkan rancangan, jadwal, soal, dan pengaturan acak untuk setiap tes.</p></div>
       </div>
-      <ExamTestManager periods={periods} tests={tests} topics={topics} questions={questions} timeline={timeline} clock={clock} />
+      <ExamTestManager periods={periods} tests={tests} topics={topics} questions={questions} timeline={timeline} clock={clock} defaultDays={timelineDefaultDays} />
     </div>
   );
 }

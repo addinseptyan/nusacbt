@@ -10,10 +10,12 @@ import { getPostgresPool } from "@/lib/postgres";
 import { MAX_DOCX_BYTES, QuestionDocxError, readQuestionDocx } from "@/lib/question-docx.mjs";
 import type { QuestionImportPreview } from "@/lib/question-import-types";
 
+import { formatTopicLabel } from "@/lib/topic-validation.mjs";
+
 class ImportProblem extends Error {}
 type ParsedQuestion = Awaited<ReturnType<typeof readQuestionDocx>>[number];
 type Upload = { topicId: string; fileHash: string; questions: ParsedQuestion[] };
-type Topic = { id: string; name: string };
+type Topic = { id: string; name: string; tags: string[] };
 
 async function readUpload(form: FormData): Promise<Upload> {
   if (["topicId", "file"].some((key) => form.getAll(key).length !== 1)) throw new ImportProblem("Kategori atau file ganda/tidak valid.");
@@ -35,7 +37,7 @@ function requestHash(adminId: string, upload: Upload, operationId: string) {
 }
 
 async function selectTopic(client: PoolClient, id: string, lock: boolean): Promise<Topic> {
-  const result = await client.query<Topic>(`SELECT id::text AS id, name FROM question_topics WHERE id=$1::bigint ${lock ? "FOR SHARE" : ""}`, [id]);
+  const result = await client.query<Topic>(`SELECT id::text AS id, name, tags FROM question_topics WHERE id=$1::bigint ${lock ? "FOR SHARE" : ""}`, [id]);
   if (!result.rows[0]) throw new ImportProblem("Kategori tidak ditemukan atau sudah dihapus. Muat ulang halaman.");
   return result.rows[0];
 }
@@ -51,7 +53,7 @@ export async function previewQuestionImport(form: FormData, adminId: string): Pr
     const topic = await selectTopic(client, upload.topicId, false);
     const operationId = randomUUID();
     return {
-      operationId, topicId: topic.id, topicName: topic.name,
+      operationId, topicId: topic.id, topicName: formatTopicLabel(topic),
       token: requestHash(adminId, upload, operationId),
       questions: upload.questions.map((question) => ({
         number: question.number, prompt: previewPart(question.prompt), options: question.options.map(previewPart), correctOption: question.correctOption,

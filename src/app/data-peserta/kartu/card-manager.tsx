@@ -24,7 +24,7 @@ const selectClass = "h-10 w-full min-w-0 rounded-lg border border-input bg-backg
 const inputClass = "h-10 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm";
 const genericError = "Kartu belum dapat disiapkan. Periksa koneksi dan sesi, lalu muat ulang daftar.";
 const PREVIEW_LIFETIME_MS = 5 * 60_000;
-function pageUrl(data: CardPageData, page: number) { return `/data-peserta/kartu?${cardSearchParams(data.filters, page)}`; }
+function pageUrl(data: CardPageData, page: number) { return `/data-peserta/kartu?${cardSearchParams(data.filters, page, data.activePeriods.length > 1)}`; }
 function wipeVisibleSecrets() {
   // Kosongkan DOM seketika sebelum bfcache/saat halaman disembunyikan.
   document.querySelectorAll("[data-participant-card-secret]").forEach((node) => { node.textContent = ""; });
@@ -32,7 +32,8 @@ function wipeVisibleSecrets() {
 
 export function CardManager({ data, canIncludePassword }: { data: CardPageData; canIncludePassword: boolean }) {
   const branding = useBranding();
-  const { filters, selected, rows } = data;
+  const { filters, selected, rows, activePeriods } = data;
+  const [formPeriod, setFormPeriod] = useState(selected?.id ?? "");
   const [formClass, setFormClass] = useState(filters.classId ?? "");
   const [formStudent, setFormStudent] = useState(filters.student ?? "");
   const [dirty, setDirty] = useState(false);
@@ -182,10 +183,13 @@ export function CardManager({ data, canIncludePassword }: { data: CardPageData; 
 
   return <div className="space-y-5">
     <Alert className="rounded-2xl"><Info className="size-4" /><AlertTitle>Periode login aktif</AlertTitle>
-      <AlertDescription className="text-xs leading-5">{selected ? <>Kartu memakai akun periode <strong>{selected.name}</strong>. Semua siswa berkelas aktif ditampilkan, termasuk yang belum dijadwalkan.</> : <>Belum ada periode login aktif. <Link href="/data-peserta/periode" className="font-semibold underline">Aktifkan periode login</Link> sebelum menyiapkan kartu.</>}</AlertDescription></Alert>
+      <AlertDescription className="text-xs leading-5">{selected ? (activePeriods.length > 1 ? <>Tersedia {activePeriods.length} periode aktif bersamaan. Kartu di bawah memakai akun periode <strong>{selected.name}</strong>; ganti periode melalui filter di bawah bila perlu.</> : <>Kartu memakai akun periode <strong>{selected.name}</strong>. Semua siswa berkelas aktif ditampilkan, termasuk yang belum dijadwalkan.</>) : <>Belum ada periode login aktif. <Link href="/data-peserta/periode" className="font-semibold underline">Aktifkan periode login</Link> sebelum menyiapkan kartu.</>}</AlertDescription></Alert>
     <Card className="gap-0 rounded-[20px] p-5 sm:p-6">
       <h2 className="font-bold">Filter peserta</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Ubah filter lalu klik Terapkan; pilihan peserta sebelumnya akan dihapus.</p>
-      <form action="/data-peserta/kartu" method="get" onChange={changed} className="mt-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <form action="/data-peserta/kartu" method="get" onChange={changed} className={`mt-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-2 ${activePeriods.length > 1 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        {activePeriods.length > 1 && (
+          <div><label htmlFor="card-period" className="mb-1 block text-xs font-semibold">Periode aktif</label><select id="card-period" name="periode" value={formPeriod} onChange={(event) => setFormPeriod(event.target.value)} className={selectClass}>{activePeriods.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+        )}
         <div><label htmlFor="card-class" className="mb-1 block text-xs font-semibold">Kelas / rombel</label><select id="card-class" name="kelas" value={formClass} onChange={(event) => setFormClass(event.target.value)} disabled={!canUsePeriodFilters} className={selectClass}><option value="">Semua kelas</option>{unknownClass && formClass === filters.classId && <option value={filters.classId!}>Kelas tidak tersedia</option>}{data.classes.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></div>
         <div><label htmlFor="card-student" className="mb-1 block text-xs font-semibold">Nama siswa / NISN / username</label><input id="card-student" name="siswa" value={formStudent} onChange={(event) => setFormStudent(event.target.value)} maxLength={100} disabled={!canUsePeriodFilters} className={inputClass} placeholder="Cari peserta" /></div>
         <div className="flex flex-wrap gap-2"><Button type="submit" disabled={!canUsePeriodFilters} className="rounded-lg">Terapkan</Button><Button asChild variant="outline" className="rounded-lg"><Link href="/data-peserta/kartu" prefetch={false}>Reset filter</Link></Button>{dirty && <span role="status" className="self-center text-xs text-amber-700 dark:text-amber-300">Filter berubah; terapkan sebelum memilih peserta.</span>}</div>

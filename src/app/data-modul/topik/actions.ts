@@ -8,11 +8,11 @@ import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import type { TopicActionResult } from "@/lib/topic-types";
-import { validTopicRevision, validateTopicName } from "@/lib/topic-validation.mjs";
+import { validTopicRevision, validateTopicName, validateTopicTags } from "@/lib/topic-validation.mjs";
 
 type Mutation =
-  | { kind: "create"; name: string }
-  | { kind: "update"; id: string; revision: string; name: string }
+  | { kind: "create"; name: string; tags: string[]; tagsSignature: string }
+  | { kind: "update"; id: string; revision: string; name: string; tags: string[]; tagsSignature: string }
   | { kind: "delete"; id: string; revision: string };
 
 class TopicProblem extends Error {
@@ -37,14 +37,17 @@ async function applyMutation(mutation: Mutation): Promise<TopicActionResult> {
     if (!admin) throw new TopicProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
     if (!adminHasPermission(admin, "topics.manage")) throw new TopicProblem(PERMISSION_DENIED_MESSAGE);
     if (mutation.kind === "create") {
-      await client.query("INSERT INTO question_topics(name) VALUES ($1)", [mutation.name]);
+      await client.query(
+        "INSERT INTO question_topics(name, tags, tags_signature) VALUES ($1, $2::text[], $3)",
+        [mutation.name, mutation.tags, mutation.tagsSignature],
+      );
     } else {
       const result = mutation.kind === "update"
         ? await client.query(
-          `UPDATE question_topics SET name = $1,
+          `UPDATE question_topics SET name = $1, tags = $2::text[], tags_signature = $3,
              updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
-           WHERE id = $2::bigint AND xmin::text = $3 RETURNING id`,
-          [mutation.name, mutation.id, mutation.revision],
+           WHERE id = $4::bigint AND xmin::text = $5 RETURNING id`,
+          [mutation.name, mutation.tags, mutation.tagsSignature, mutation.id, mutation.revision],
         )
         : await client.query("DELETE FROM question_topics WHERE id = $1::bigint AND xmin::text = $2 RETURNING id", [mutation.id, mutation.revision]);
       if (!result.rowCount) throw new TopicProblem("Data sudah berubah atau sudah dihapus. Muat ulang daftar sebelum mencoba lagi.", true);
@@ -55,8 +58,11 @@ async function applyMutation(mutation: Mutation): Promise<TopicActionResult> {
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     if (error instanceof TopicProblem) return { ok: false, error: error.message, reload: error.reload };
-    if (hasSqlState(error, "23505") && hasConstraint(error, "question_topics_name_ci_idx")) {
-      return { ok: false, error: "Nama topik atau mata pelajaran sudah digunakan, termasuk dengan huruf besar atau kecil berbeda." };
+    if (hasSqlState(error, "23505") && (hasConstraint(error, "question_topics_name_tags_ci_idx") || hasConstraint(error, "question_topics_name_ci_idx"))) {
+      return { ok: false, error: "Kombinasi nama topik/mata pelajaran dan tag tersebut sudah digunakan. Tambahkan tag pembeda atau gunakan nama lain." };
+    }
+    if (hasSqlState(error, "23514") && hasConstraint(error, "question_topics_tags_check")) {
+      return { ok: false, error: "Daftar tag tidak valid atau melebihi batas maksimal 10 tag." };
     }
     // RESTRICT menghasilkan 23503 di PostgreSQL 17 dan 23001 di PostgreSQL 18.
     if (mutation.kind === "delete" && hasSqlState(error, "23503", "23001")) {
@@ -66,6 +72,10 @@ async function applyMutation(mutation: Mutation): Promise<TopicActionResult> {
   } finally { client?.release(); }
 
   revalidatePath("/data-modul/topik");
+  revalidatePath("/data-modul/soal");
+  revalidatePath("/data-modul/import-soal");
+  revalidatePath("/data-modul/export-soal");
+  revalidatePath("/data-tes/daftar");
   return { ok: true, message: mutation.kind === "create" ? "Topik berhasil ditambahkan." : mutation.kind === "update" ? "Topik berhasil diubah." : "Topik berhasil dihapus." };
 }
 
@@ -77,10 +87,12 @@ export async function saveTopic(formData: FormData): Promise<TopicActionResult> 
   if (rawId !== null && rawId !== "" && !id) return { ok: false, error: "Identitas topik tidak valid." };
   const parsed = validateTopicName(formData.get("name"));
   if (!parsed.ok) return parsed;
-  if (!id) return applyMutation({ kind: "create", name: parsed.value });
+  const parsedTags = validateTopicTags(formData.get("tags"));
+  if (!parsedTags.ok) return parsedTags;
+  if (!id) return applyMutation({ kind: "create", name: parsed.value, tags: parsedTags.value, tagsSignature: parsedTags.signature });
   const revision = validTopicRevision(formData.get("revision"));
   if (!revision) return { ok: false, error: "Versi data tidak valid. Muat ulang daftar." };
-  return applyMutation({ kind: "update", id, revision, name: parsed.value });
+  return applyMutation({ kind: "update", id, revision, name: parsed.value, tags: parsedTags.value, tagsSignature: parsedTags.signature });
 }
 
 export async function deleteTopic(formData: FormData): Promise<TopicActionResult> {

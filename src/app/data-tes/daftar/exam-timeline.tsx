@@ -65,9 +65,10 @@ function ItemTarget({ item, onEditBase, ready, className, style, label, tooltip 
   return tooltip ? <Tooltip><TooltipTrigger asChild>{target}</TooltipTrigger><TooltipContent sideOffset={6} className="max-w-[min(22rem,calc(100vw-2rem))] break-words">{label}</TooltipContent></Tooltip> : target;
 }
 
-export function ExamTimeline({ items, clock, onEditBase }: { items: TimelineItem[]; clock: TimelineClock; onEditBase: (id: string) => void }) {
+export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { items: TimelineItem[]; clock: TimelineClock; defaultDays?: number; onEditBase: (id: string) => void }) {
   const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
-  const [range, setRange] = useState<DateRange>(() => ({ start: clock.WIB, end: endFor(clock.WIB, 7) }));
+  const initialDays = Number.isInteger(defaultDays) && defaultDays >= 1 && defaultDays <= 7 ? defaultDays : 7;
+  const [range, setRange] = useState<DateRange>(() => ({ start: clock.WIB, end: endFor(clock.WIB, initialDays) }));
   const [draft, setDraft] = useState<DateRange>(range);
   const [zone, setZone] = useState<ExamTimeZone>("WIB");
   const [selected, setSelected] = useState<ExamRunKind | "all">("all");
@@ -143,7 +144,7 @@ export function ExamTimeline({ items, clock, onEditBase }: { items: TimelineItem
     if (validTimelineDate(current)) chooseRange({ start: current, end: endFor(current, count) });
   }
 
-  return <Card aria-label="Timeline tes" className="mb-6 min-w-0 gap-0 overflow-hidden rounded-[20px] py-0">
+  return <Card aria-label="Timeline tes" className="relative z-0 isolate mb-6 min-w-0 gap-0 overflow-hidden rounded-[20px] py-0">
     <div className="flex flex-wrap items-start justify-between gap-5 border-b p-5 sm:px-6">
       <div className="min-w-0"><div className="flex items-center gap-2"><span className="flex size-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300"><CalendarDays className="size-4" /></span><div><p className="text-[10px] font-bold tracking-[0.12em] text-indigo-600 uppercase dark:text-indigo-300">Jadwal pelaksanaan</p><h2 className="text-base font-bold">Timeline tes</h2></div></div>
         <p className="mt-2 max-w-xl text-xs leading-5 text-muted-foreground">Lihat jadwal per hari. Draf, jadwal dirilis, dan rancangan yang belum memiliki pelaksanaan tetap ditampilkan.</p></div>

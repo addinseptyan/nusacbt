@@ -18,11 +18,19 @@ function isDatabaseError(error: unknown, ...codes: string[]) {
   return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" && codes.includes(error.code);
 }
 
-export async function loadSessionPlanWithClient(client: PoolClient, periodId: string | null): Promise<SessionPlanPage> {
+export async function loadSessionPlanWithClient(
+  client: PoolClient,
+  periodId: string | null,
+  options?: { defaultToFirst?: boolean },
+): Promise<SessionPlanPage> {
     const periods = (await client.query<SessionPeriod>(
-      `SELECT id::text AS id,name,to_char(start_date,'YYYY-MM-DD') AS "startDate" FROM exam_periods ORDER BY start_date DESC,id DESC`,
+      `SELECT id::text AS id,name,to_char(start_date,'YYYY-MM-DD') AS "startDate" FROM exam_periods ORDER BY is_active DESC,start_date DESC,id DESC`,
     )).rows;
-    const selected = periods.find((p) => p.id === periodId) ?? null;
+    const selected = periodId
+      ? (periods.find((p) => p.id === periodId) ?? null)
+      : options?.defaultToFirst
+        ? (periods[0] ?? null)
+        : null;
     if (!selected) {
       return { periods, selected: null, selectionMissing: periodId !== null, revision: null, groups: [], students: [] };
     }
@@ -52,13 +60,16 @@ export async function loadSessionPlanWithClient(client: PoolClient, periodId: st
     return { periods, selected, selectionMissing: false, revision: plan.rows[0]?.revision ?? null, groups, students };
 }
 
-export async function loadSessionPlan(periodId: string | null): Promise<SessionPlanPage> {
+export async function loadSessionPlan(
+  periodId: string | null,
+  options?: { defaultToFirst?: boolean },
+): Promise<SessionPlanPage> {
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new ScheduleSessionExpired();
-    const data = await loadSessionPlanWithClient(client, periodId);
+    const data = await loadSessionPlanWithClient(client, periodId, options);
     const active = await lockActiveAdminSession(client);
     if (!active || active.id !== admin.id) throw new ScheduleSessionExpired();
     await client.query("COMMIT");

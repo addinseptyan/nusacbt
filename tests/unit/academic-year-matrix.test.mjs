@@ -24,11 +24,17 @@ test('filter monitoring dan matriks: tanggal inklusif zona, duplikasi, jenis dan
   const monitor=parseMonitoringFilters(new URLSearchParams('dari=2026-10-01&sampai=2026-10-07&zona=WITA&kategori=makeup&status=not_started&urut=score_desc'));
   assert.equal(monitor.ok,true); assert.equal(monitor.filters.fromUtc,'2026-09-30T16:00:00.000Z');assert.equal(monitor.filters.toUtcExclusive,'2026-10-07T16:00:00.000Z');
   assert.deepEqual(parseMonitoringFilters(monitoringSearchParams(monitor.filters)),monitor);
-  for(const query of ['status=unknown','tes=0','kategori=x','urut=drop','dari=2026-02-30','dari=2026-12-02&sampai=2026-12-01','tes=1&tes=2']) assert.equal(parseMonitoringFilters(new URLSearchParams(query)).ok,false,query);
+  const monitorAll=parseMonitoringFilters(new URLSearchParams('semua=1'));
+  assert.equal(monitorAll.ok,true);
+  if(monitorAll.ok){assert.equal(monitorAll.filters.showAll,true);assert.equal(monitoringSearchParams(monitorAll.filters).get('semua'),'1');}
+  for(const query of ['status=unknown','tes=0','kategori=x','urut=drop','dari=2026-02-30','dari=2026-12-02&sampai=2026-12-01','tes=1&tes=2','semua=0']) assert.equal(parseMonitoringFilters(new URLSearchParams(query)).ok,false,query);
   const matrix=parseMatrixFilters(new URLSearchParams('tahun=1&kategori=regular&gabung=1&kelas=X%20AK&dari=2026-10-01&sampai=2026-10-07&zona=WIB'));
   assert.equal(matrix.ok,true);assert.equal(matrix.filters.toUtcExclusive,'2026-10-07T17:00:00.000Z');
   assert.deepEqual(parseMatrixFilters(matrixSearchParams(matrix.filters)),matrix);
-  for(const query of ['kategori=remedial&gabung=1','gabung=0','gabung=1&gabung=1','tanggal=1']) assert.equal(parseMatrixFilters(new URLSearchParams(query)).ok,false,query);
+  const matrixAll=parseMatrixFilters(new URLSearchParams('semua=1'));
+  assert.equal(matrixAll.ok,true);
+  if(matrixAll.ok){assert.equal(matrixAll.filters.showAll,true);assert.equal(matrixSearchParams(matrixAll.filters).get('semua'),'1');}
+  for(const query of ['kategori=remedial&gabung=1','gabung=0','gabung=1&gabung=1','tanggal=1','semua=0']) assert.equal(parseMatrixFilters(new URLSearchParams(query)).ok,false,query);
 });
 
 test('nilai matriks hanya dari kategori terpilih; susulan berwarna dan bentrok tidak menjadi nol',()=>{

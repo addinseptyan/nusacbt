@@ -15,11 +15,13 @@ export const dynamic = "force-dynamic";
 export default async function SessionPlanPage({ searchParams }: { searchParams: Promise<{ periode?: string | string[] }> }) {
   const { allowed } = await requireAdminAccess("exams.manage");
   if (!allowed) return <AccessDenied section="Data tes" title="Kelompok Sesi" />;
-  const params = await searchParams; const periodId = validDataId(params.periode);
+  const params = await searchParams;
+  const supplied = params.periode !== undefined;
+  const periodId = validDataId(params.periode);
   let data: SessionPlanData;
   try {
-    data = await loadSessionPlan(periodId);
-    if (params.periode !== undefined && !periodId) data.selectionMissing = true;
+    data = await loadSessionPlan(periodId, { defaultToFirst: !supplied });
+    if (supplied && !periodId) data.selectionMissing = true;
   } catch (error) {
     if (error instanceof ScheduleSessionExpired) redirect("/login");
     return <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-2 text-[29px] font-bold">Kelompok Sesi</h1><Alert variant="destructive" role="alert" className="mt-6 max-w-2xl"><CircleAlert className="size-4" /><AlertTitle>Kelompok sesi belum dapat dimuat</AlertTitle><AlertDescription>Pastikan database berjalan dan migrasi terbaru sudah diterapkan. <Link href="/data-tes/daftar" className="underline">Kembali ke Daftar Tes</Link>.</AlertDescription></Alert></div>;

@@ -73,6 +73,7 @@ export async function setActiveAcademicYear(form: FormData): Promise<Result> {
     }
     if (target !== expected) {
       await client.query("UPDATE academic_year_settings SET active_year_id=$1::bigint,revision=revision+1 WHERE id=1", [target]);
+      await client.query("UPDATE exam_periods SET is_active=false,updated_at=clock_timestamp() WHERE is_active=true");
       await client.query("UPDATE participant_login_settings SET period_id=NULL WHERE id=1");
       await client.query("DELETE FROM participant_sessions");
     }

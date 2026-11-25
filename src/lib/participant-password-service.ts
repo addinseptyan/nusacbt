@@ -86,14 +86,22 @@ async function pageKeyStatus(client: PoolClient): Promise<PasswordKeyStatus> {
   finally { key.fill(0); }
 }
 
-export async function loadPasswordPageWithClient(client: PoolClient, periodId: string | null): Promise<PasswordPageData> {
+export async function loadPasswordPageWithClient(
+  client: PoolClient,
+  periodId: string | null,
+  options?: { defaultToFirst?: boolean },
+): Promise<PasswordPageData> {
   const periods = await client.query<IdentityPeriod>(
     `SELECT id::text AS id, name, to_char(start_date, 'YYYY-MM-DD') AS "startDate",
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
-     FROM exam_periods ORDER BY start_date DESC, id DESC`,
+     FROM exam_periods ORDER BY is_active DESC, start_date DESC, id DESC`,
   );
   const keyStatus = await pageKeyStatus(client);
-  const selected = periods.rows.find((period) => period.id === periodId) ?? null;
+  const selected = periodId
+    ? (periods.rows.find((period) => period.id === periodId) ?? null)
+    : options?.defaultToFirst
+      ? (periods.rows[0] ?? null)
+      : null;
   if (!selected) {
     return { periods: periods.rows, selected: null, rows: [], batch: null, audit: [], keyStatus, selectionMissing: periodId !== null };
   }
@@ -131,11 +139,14 @@ export async function loadPasswordPageWithClient(client: PoolClient, periodId: s
   return { periods: periods.rows, selected, rows, batch, audit: audit.rows, keyStatus, selectionMissing: false };
 }
 
-export async function loadPasswordPage(periodId: string | null): Promise<PasswordPageData> {
+export async function loadPasswordPage(
+  periodId: string | null,
+  options?: { defaultToFirst?: boolean },
+): Promise<PasswordPageData> {
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-    const data = await loadPasswordPageWithClient(client, periodId);
+    const data = await loadPasswordPageWithClient(client, periodId, options);
     await client.query("COMMIT");
     return data;
   } catch (error) {
@@ -404,10 +415,19 @@ export async function prepareParticipantCards(formData: FormData, filters: CardF
       if (key) await lockKeyBinding(client, key, false);
       // Lock pengaturan yang sama dengan pergantian tahun/periode dan login.
       // Kartu dari tab lama tidak boleh disiapkan atau dicetak setelah periode berubah.
-      const login = await client.query<{ periodId: string | null }>(
-        'SELECT period_id::text AS "periodId" FROM participant_login_settings WHERE id=1 FOR SHARE',
+      const login = await client.query<{ id: number }>(
+        "SELECT id FROM participant_login_settings WHERE id=1 FOR SHARE",
       );
-      if (login.rowCount !== 1 || login.rows[0].periodId !== periodId) {
+      if (login.rowCount !== 1) {
+        throw new PasswordProblem("Periode login berubah atau dinonaktifkan. Muat ulang dan pilih peserta kembali.");
+      }
+      const periodActive = await client.query<{ name: string }>(
+        `SELECT ep.name FROM exam_periods ep
+         JOIN academic_year_settings ys ON ys.id=1 AND ys.active_year_id=ep.academic_year_id
+         WHERE ep.id=$1::bigint AND ep.is_active=true FOR SHARE OF ep`,
+        [periodId],
+      );
+      if (periodActive.rowCount !== 1) {
         throw new PasswordProblem("Periode login berubah atau dinonaktifkan. Muat ulang dan pilih peserta kembali.");
       }
       const rows = await lockedRows(client, periodId, candidates);

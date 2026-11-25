@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import pg from "pg";
 
 import { loginAsAdmin } from "./helpers";
-import { cleanupTopics, createQuestion, createTopic, sessionDigest, suffix, testDatabase } from "./question-helpers";
+import { cleanupTopics, createQuestion, createTopic, selectComboboxOption, sessionDigest, suffix, testDatabase } from "./question-helpers";
 
 async function period(client: pg.Client, tag: string) {
   return (await client.query<{ id: string }>("INSERT INTO exam_periods(name,start_date) VALUES($1,'2026-01-01') RETURNING id::text AS id", [`Keamanan Tes ${tag}`])).rows[0].id;
@@ -124,7 +124,7 @@ test("batas 1000 soal diterapkan pada pilih semua dan dapat disimpan sebagai sat
       SELECT $1, $2 || CASE WHEN n<=1000 THEN ' PILIH ' ELSE ' EXTRA ' END || n::text, 'A','B','C','D','E','A' FROM generate_series(1,1001) AS n`, [topics[0], tag]);
     await loginAsAdmin(page); await page.goto("/data-tes/daftar"); await page.getByRole("button", { name: "Tambah tes", exact: true }).click();
     const form = page.getByRole("dialog", { name: "Tambah rancangan tes" }); await form.getByLabel("Nama tes").fill(`Batas ${tag}`); await form.getByLabel("Periode ujian").selectOption(periodId); await form.getByLabel("Tanggal dan waktu mulai").fill("2026-11-17T08:30");
-    await form.getByLabel("Filter topik / mata pelajaran").selectOption(topics[0]); await form.getByRole("button", { name: "Pilih semua hasil" }).click();
+    await selectComboboxOption(form, "Filter topik / mata pelajaran", `Batas Tes ${tag}`); await form.getByRole("button", { name: "Pilih semua hasil" }).click();
     await expect(form.getByRole("alert")).toContainText("melebihi batas 1000 soal");
     await form.getByLabel("Cari soal bank").fill(`${tag} PILIH`); await form.getByRole("button", { name: "Pilih semua hasil" }).click();
     await expect(form.getByText("Urutan soal terpilih (1000)")).toBeVisible(); await form.getByRole("button", { name: "Simpan rancangan" }).click();

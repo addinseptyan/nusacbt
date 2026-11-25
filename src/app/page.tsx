@@ -92,10 +92,10 @@ export default async function DashboardPage() {
           number: "01",
           title: "Tahun ajaran & periode ujian",
           detail: data.activeYearName
-            ? `Tahun aktif ${data.activeYearName}${data.loginPeriodName ? ` · login ${data.loginPeriodName}` : " · login periode belum aktif"}.${data.unmappedPeriods > 0 ? ` ${data.unmappedPeriods} periode belum dipetakan.` : ""}`
+            ? `Tahun aktif ${data.activeYearName}${data.activeLoginPeriodCount > 0 ? ` · ${data.activeLoginPeriodCount} periode login aktif (${data.loginPeriodName})` : " · login periode belum aktif"}.${data.unmappedPeriods > 0 ? ` ${data.unmappedPeriods} periode belum dipetakan.` : ""}`
             : "Belum ada tahun ajaran aktif. Buat dan aktifkan di menu Tahun Ajaran.",
-          status: data.activeYearName && data.loginPeriodName && data.unmappedPeriods === 0 ? "Siap" : "Perlu diatur",
-          ready: Boolean(data.activeYearName && data.loginPeriodName && data.unmappedPeriods === 0),
+          status: data.activeYearName && data.activeLoginPeriodCount > 0 && data.unmappedPeriods === 0 ? "Siap" : "Perlu diatur",
+          ready: Boolean(data.activeYearName && data.activeLoginPeriodCount > 0 && data.unmappedPeriods === 0),
           href: data.activeYearName ? "/data-peserta/periode" : "/data-peserta/tahun-ajaran",
           color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300",
         },
@@ -159,23 +159,23 @@ export default async function DashboardPage() {
           <AlertTitle>Ringkasan database belum dapat dimuat</AlertTitle>
           <AlertDescription>Pastikan PostgreSQL aktif dan migrasi terbaru telah dijalankan dengan <code>npm run db:migrate</code>.</AlertDescription>
         </Alert>
-      ) : (!data.activeYearName || !data.loginPeriodName || data.unmappedPeriods > 0 || data.waitingAttempts > 0) ? (
+      ) : (!data.activeYearName || data.activeLoginPeriodCount === 0 || data.unmappedPeriods > 0 || data.waitingAttempts > 0) ? (
         <Alert className="mb-7 rounded-2xl border-amber-200 bg-amber-50/75 px-4 py-3 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
           <CircleAlert className="size-4 text-amber-700 dark:text-amber-300" />
           <AlertTitle className="text-[12px] font-bold">Perlu pemeriksaan awal sebelum ujian</AlertTitle>
           <AlertDescription className="mt-0.5 text-[12px] leading-5">
             {!data.activeYearName && <>Tahun ajaran aktif belum dipilih (<Link href="/data-peserta/tahun-ajaran" prefetch={false} className="font-semibold underline">Atur tahun ajaran</Link>). </>}
             {data.unmappedPeriods > 0 && <>{data.unmappedPeriods} periode lama belum dipetakan ke tahun ajaran (<Link href="/data-peserta/periode" prefetch={false} className="font-semibold underline">Petakan periode</Link>). </>}
-            {!data.loginPeriodName && <>Periode login peserta belum aktif (<Link href="/data-peserta/periode" prefetch={false} className="font-semibold underline">Aktifkan login periode</Link>). </>}
+            {data.activeLoginPeriodCount === 0 && <>Periode login peserta belum aktif (<Link href="/data-peserta/periode" prefetch={false} className="font-semibold underline">Aktifkan login periode</Link>). </>}
             {data.waitingAttempts > 0 && <>{data.waitingAttempts} pengerjaan melewati batas waktu (<Link href="/data-tes/monitoring" prefetch={false} className="font-semibold underline">Periksa monitoring</Link>).</>}
           </AlertDescription>
         </Alert>
       ) : (
         <Alert className="mb-7 rounded-2xl border-border bg-accent/60 px-4 py-3 text-accent-foreground">
           <CheckCircle2 className="size-4 text-primary" />
-          <AlertTitle className="text-[12px] font-bold">Lingkungan siap untuk pengujian</AlertTitle>
+          <AlertTitle className="text-[12px] font-bold">Sistem siap digunakan</AlertTitle>
           <AlertDescription className="mt-0.5 text-[12px] leading-5 text-muted-foreground">
-            Tahun ajaran aktif <strong>{data.activeYearName}</strong> · Periode login <strong>{data.loginPeriodName}</strong> · {data.activeParticipantSessions} sesi peserta aktif.
+            Tahun ajaran aktif <strong>{data.activeYearName}</strong> · {data.activeLoginPeriodCount > 1 ? `${data.activeLoginPeriodCount} periode login aktif` : "Periode login"} (<strong>{data.loginPeriodName}</strong>) · {data.activeParticipantSessions} sesi peserta aktif.
           </AlertDescription>
         </Alert>
       )}

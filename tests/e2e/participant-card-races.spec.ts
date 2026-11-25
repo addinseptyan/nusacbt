@@ -62,6 +62,7 @@ test("periode login berubah ketika permintaan menunggu lock: sandi dan audit tid
     await expect.poll(async () => (await client.query<{ n: number }>(`SELECT count(*)::int AS n FROM pg_stat_activity
       WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE '%FROM participant_login_settings WHERE id=1 FOR SHARE%'`)).rows[0].n,
       { timeout: 12_000 }).toBeGreaterThan(0);
+    await blocker.query("UPDATE exam_periods SET is_active=(id=$1::bigint) WHERE id=ANY($2::bigint[])", [f.periodB, [f.periodA, f.periodB]]);
     await blocker.query("UPDATE participant_login_settings SET period_id=$1 WHERE id=1", [f.periodB]);
     await blocker.query("COMMIT");
     const response = await pending; expect(response.status()).toBe(409);
