@@ -2,7 +2,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { lockActiveAdminSession } from "@/lib/admin-auth";
 import { adminHasAnyPermission, adminHasPermission } from "@/lib/admin-permissions.mjs";
-import type { MonitoringFilters, MonitoringKind, MonitoringStatus } from "@/lib/monitoring-filter.mjs";
+import { monitoringDayBounds, type MonitoringFilters, type MonitoringKind, type MonitoringStatus } from "@/lib/monitoring-filter.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import { loadFinalGradeData, type FinalGradeData } from "./final-grade-data";
 
@@ -85,11 +85,24 @@ async function options(client: PoolClient) {
 async function resolveSmartDefaults(client: PoolClient, f: MonitoringFilters, list: { years: Array<{ id: string; name: string }>; tests: MonitoringOption[]; classes: string[] }) {
   const activeYearRow = (await client.query<{ id: string | null }>("SELECT active_year_id::text AS id FROM academic_year_settings WHERE id = 1")).rows[0];
   const defaultYearId = activeYearRow?.id ?? list.years[0]?.id ?? null;
-  const yearTests = defaultYearId ? list.tests.filter((t) => t.yearId === defaultYearId) : list.tests;
-  const preferredTest = yearTests.find((t) => t.isActivePeriod) ?? yearTests[0] ?? null;
-  const defaultTestId = preferredTest?.id ?? null;
-  const effective: MonitoringFilters = { ...f, yearId: defaultYearId, testId: defaultTestId };
-  return { effective, defaultApplied: Boolean(defaultYearId || defaultTestId) };
+  const todayRow = (
+    await client.query<{ today: string }>(
+      "SELECT to_char(clock_timestamp() AT TIME ZONE $1::text, 'YYYY-MM-DD') AS today",
+      [zones[f.zone]],
+    )
+  ).rows[0];
+  const today = todayRow?.today ?? null;
+  const bounds = today ? monitoringDayBounds(today, f.zone) : null;
+  const effective: MonitoringFilters = {
+    ...f,
+    yearId: defaultYearId,
+    testId: null,
+    from: bounds ? today : null,
+    to: bounds ? today : null,
+    fromUtc: bounds ? bounds.fromUtc : null,
+    toUtcExclusive: bounds ? bounds.toUtcExclusive : null,
+  };
+  return { effective, defaultApplied: Boolean(defaultYearId || bounds) };
 }
 async function read(client: PoolClient, f: MonitoringFilters, requestedPage: number, finalPage: number, exporting: boolean, applySmartDefaults: boolean): Promise<MonitoringData> {
   const list = exporting ? null : await options(client);

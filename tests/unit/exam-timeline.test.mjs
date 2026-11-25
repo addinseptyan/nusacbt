@@ -28,10 +28,14 @@ test("jadwal melewati tengah malam dan batas minggu dipotong secara tepat", () =
   assert.equal(timelineSegment("2026-03-02T00:00:00Z", 0, "2026-03-02", "WIB"), null);
 });
 
-test("rentang tanggal inklusif membolehkan satu sampai tujuh hari", () => {
+test("rentang tanggal inklusif membolehkan satu sampai tujuh hari dan menghormati batas maksimal", () => {
   assert.equal(timelineRangeLength("2028-02-28", "2028-02-28"), 1);
   assert.equal(timelineRangeLength("2028-02-27", "2028-03-04"), 7);
   assert.equal(timelineRangeLength("2028-02-27", "2028-03-05"), null);
+  assert.equal(timelineRangeLength("2028-02-28", "2028-02-28", 1), 1);
+  assert.equal(timelineRangeLength("2028-02-28", "2028-02-29", 1), null);
+  assert.equal(timelineRangeLength("2028-02-27", "2028-03-01", 3), null);
+  assert.equal(timelineRangeLength("2028-02-27", "2028-02-29", 3), 3);
   assert.equal(timelineRangeLength("2028-03-01", "2028-02-29"), null);
   assert.equal(timelineRangeLength("2027-02-29", "2027-03-01"), null);
   assert.equal(timelineRangeLength("2100-12-31", "2101-01-01"), null);

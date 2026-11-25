@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
-import { adminHasPermission } from "@/lib/admin-permissions.mjs";
+import { adminHasAnyPermission, adminHasPermission } from "@/lib/admin-permissions.mjs";
+import { parseTimelineDefaultDays } from "@/lib/app-settings-validation.mjs";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { EXAM_TEST_FORM_VERSION, validateExamTestDraft } from "@/lib/exam-test-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
@@ -148,4 +149,52 @@ export async function deleteExamTest(formData: FormData): Promise<ActionResult> 
   const revision = validTopicRevision(formData.get("revision"));
   if (!id || !revision) return { ok: false, error: "Identitas atau versi tes tidak valid. Muat ulang daftar.", reload: true };
   return mutate({ kind: "delete", id, revision });
+}
+
+export async function saveTimelineDefaultDays(
+  daysRaw: number | string,
+): Promise<{ ok: true; days: number; message: string } | { ok: false; error: string }> {
+  const { allowed } = await requireAdminAccess("exams.manage", "app_settings.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+  const days = parseTimelineDefaultDays(daysRaw);
+  if (days === null) return { ok: false, error: "Maksimal rentang tanggal timeline harus 1 sampai 7 hari." };
+
+  let client: PoolClient | undefined;
+  try {
+    client = await getPostgresPool().connect();
+    await client.query("BEGIN");
+    const admin = await lockActiveAdminSession(client);
+    if (!admin) {
+      await client.query("ROLLBACK").catch(() => {});
+      return { ok: false, error: "Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan." };
+    }
+    if (!adminHasAnyPermission(admin, ["exams.manage", "app_settings.manage"])) {
+      await client.query("ROLLBACK").catch(() => {});
+      return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+    }
+    await client.query(
+      `UPDATE app_settings
+       SET timeline_default_days = $1,
+           updated_at = clock_timestamp(),
+           updated_by = $2::bigint,
+           revision = revision + 1
+       WHERE id = 1`,
+      [days, admin.id],
+    );
+    const active = await lockActiveAdminSession(client);
+    if (!active || active.id !== admin.id) {
+      await client.query("ROLLBACK").catch(() => {});
+      return { ok: false, error: "Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan." };
+    }
+    await client.query("COMMIT");
+  } catch {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    return { ok: false, error: "Pengaturan maksimal hari timeline belum dapat disimpan." };
+  } finally {
+    client?.release();
+  }
+
+  revalidatePath("/data-tes/daftar");
+  revalidatePath("/pengaturan/aplikasi");
+  return { ok: true, days, message: `Maksimal rentang timeline disimpan menjadi ${days} hari.` };
 }

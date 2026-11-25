@@ -1,18 +1,89 @@
 "use client";
-import { useId, useState } from "react";
+
+import { useState } from "react";
+import { ChevronsUpDown } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { MonitoringOption } from "./monitoring-data";
 
-/** Datalist native mendukung pencarian keyboard tanpa mengirim nama sebagai ID. */
+/** Combobox standar shadcn UI (Popover + Command) dengan nilai kosong "Semua tes". */
 export function SearchableTest({ options, selectedId }: { options: MonitoringOption[]; selectedId: string | null }) {
-  const listId = useId();
-  const label = (t: MonitoringOption) => `${t.name} · ${t.period}${t.year ? ` · ${t.year}` : ""} [${t.id}]`;
-  const selected = options.find((t) => t.id === selectedId);
-  const [text, setText] = useState(selected ? label(selected) : selectedId ? `Tes tidak ditemukan [${selectedId}]` : "");
-  const matched = options.find((t) => label(t) === text);
-  const id = matched?.id ?? (!text ? "" : selectedId && text === `Tes tidak ditemukan [${selectedId}]` ? selectedId : "invalid");
-  return <div><label htmlFor="monitor-test" className="mb-1 block text-xs font-semibold">Nama tes</label>
-    <input id="monitor-test" list={listId} value={text} onChange={(e) => setText(e.target.value)} placeholder="Cari atau pilih tes" autoComplete="off" className="h-10 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm" />
-    <datalist id={listId}>{options.map((t) => <option key={t.id} value={label(t)} />)}</datalist>
-    <input type="hidden" name="tes" value={id} />{text && !matched && id === "invalid" && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Pilih tes dari daftar, atau kosongkan untuk semua.</p>}
-  </div>;
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(selectedId ?? "");
+
+  const selected = options.find((t) => t.id === value) ?? null;
+  const label = (t: MonitoringOption) => `${t.name} · ${t.period}${t.year ? ` · ${t.year}` : ""}`;
+  const displayLabel = selected
+    ? label(selected)
+    : value
+      ? `Tes tidak ditemukan [${value}]`
+      : "Semua tes";
+
+  return (
+    <div className="min-w-0">
+      <label htmlFor="monitor-test" className="mb-1 block text-xs font-semibold">
+        Nama tes
+      </label>
+      <input type="hidden" name="tes" value={value} />
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            id="monitor-test"
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            aria-label="Nama tes"
+            className="h-10 w-full justify-between rounded-lg border-input bg-background px-3 text-sm font-normal hover:bg-background"
+          >
+            <span className={`truncate ${!selected && !value ? "text-muted-foreground" : "text-foreground"}`}>
+              {displayLabel}
+            </span>
+            <ChevronsUpDown className="ml-2 size-4 shrink-0 text-muted-foreground opacity-70" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-[260px] p-0">
+          <Command>
+            <CommandInput placeholder="Cari nama tes atau periode..." />
+            <CommandList>
+              <CommandEmpty>Tes tidak ditemukan.</CommandEmpty>
+              <CommandGroup>
+                <CommandItem
+                  value="__all__ Semua tes"
+                  data-checked={value === ""}
+                  onSelect={() => {
+                    setValue("");
+                    setOpen(false);
+                  }}
+                >
+                  <span className="truncate font-medium">Semua tes</span>
+                </CommandItem>
+                {options.map((t) => (
+                  <CommandItem
+                    key={t.id}
+                    value={`${t.name} ${t.period} ${t.year ?? ""} ${t.id}`}
+                    data-checked={value === t.id}
+                    onSelect={() => {
+                      setValue(t.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{t.name}</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {t.period}
+                        {t.year ? ` · ${t.year}` : ""}
+                      </span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
 }

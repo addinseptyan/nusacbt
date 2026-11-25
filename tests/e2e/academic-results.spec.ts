@@ -90,12 +90,10 @@ test('monitoring menampilkan belum mulai, seluruh pengulangan, filter zona dan e
     await expect(rows).toHaveCount(0); // 16:30 UTC adalah 00:30 WITA hari berikutnya.
     await page.goto(`/data-tes/monitoring?tes=${f.login.activeTest}&dari=2026-03-02&sampai=2026-03-02&zona=WITA`);
     await expect(rows).toHaveCount(5);
-    const input=page.getByLabel('Nama tes');await input.fill('Matematika X');
-    await expect(page.getByText('Pilih tes dari daftar, atau kosongkan untuk semua.')).toBeVisible();
-    const full=await page.locator('datalist option').filter({hasText:''}).first().getAttribute('value');
-    const options=await page.locator('datalist option').evaluateAll((els)=>els.map((el)=>el.getAttribute('value')));
-    const target=options.find((x)=>x?.startsWith('Matematika X ·'));expect(target).toBeTruthy();await input.fill(target!);
-    void full;
+    const testCombobox = page.getByRole('combobox', { name: 'Nama tes' });
+    await testCombobox.click();
+    await page.getByPlaceholder('Cari nama tes atau periode...').fill('Matematika X');
+    await page.getByRole('option', { name: /Matematika X/ }).first().click();
     await page.getByLabel('Kategori tes').selectOption('makeup');await page.getByRole('button',{name:'Terapkan',exact:true}).click();
     await expect(page).toHaveURL(/kategori=makeup/);await expect(rows).toHaveCount(2);
     await page.setViewportSize({width:390,height:820});
@@ -153,22 +151,31 @@ test('monitoring dan rekap memakai default cerdas saat dibuka tanpa parameter da
   try {
     await seed(client,f);await loginAsAdmin(page);
 
-    // 1. Monitoring tanpa query params memakai tahun aktif + tes berjalan/terbaru
+    // 1. Monitoring tanpa query params memakai tahun aktif + Nama tes kosong (Semua tes) + tanggal hari ini (WIB)
+    const todayWib = (await client.query<{ d: string }>("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD') AS d")).rows[0].d;
     await page.goto('/data-tes/monitoring');
     await expect(page.getByText(/Filter otomatis:/)).toBeVisible();
     await expect(page.locator('#monitor-year')).toHaveValue(f.login.yearId);
+    await expect(page.getByRole('combobox', { name: 'Nama tes' })).toContainText('Semua tes');
+    await expect(page.locator('#monitor-from')).toHaveValue(todayWib);
+    await expect(page.locator('#monitor-to')).toHaveValue(todayWib);
 
-    // Klik Tampilkan semua -> ?semua=1 menonaktifkan filter otomatis dan mereset tahun/tes
+    // Klik Tampilkan semua -> ?semua=1 menonaktifkan filter otomatis dan mereset tahun/tes/tanggal
     await page.getByRole('link',{name:'Tampilkan semua'}).click();
     await expect(page).toHaveURL(/\/data-tes\/monitoring\?semua=1$/);
     await expect(page.getByText(/Filter otomatis:/)).toHaveCount(0);
     await expect(page.locator('#monitor-year')).toHaveValue('');
+    await expect(page.locator('#monitor-from')).toHaveValue('');
+    await expect(page.locator('#monitor-to')).toHaveValue('');
 
-    // Klik Reset -> kembali ke default cerdas
+    // Klik Reset -> kembali ke default cerdas (tahun aktif, Semua tes, hari ini)
     await page.getByRole('link',{name:'Reset'}).click();
     await expect(page).toHaveURL(/\/data-tes\/monitoring$/);
     await expect(page.getByText(/Filter otomatis:/)).toBeVisible();
     await expect(page.locator('#monitor-year')).toHaveValue(f.login.yearId);
+    await expect(page.getByRole('combobox', { name: 'Nama tes' })).toContainText('Semua tes');
+    await expect(page.locator('#monitor-from')).toHaveValue(todayWib);
+    await expect(page.locator('#monitor-to')).toHaveValue(todayWib);
 
     // 2. Rekap tanpa query params memakai tahun aktif + periode aktif
     await page.goto('/laporan/rekap');

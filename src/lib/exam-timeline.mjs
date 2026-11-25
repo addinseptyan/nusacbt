@@ -18,11 +18,12 @@ export function shiftTimelineDate(date, days) {
   return validTimelineDate(shifted) ? shifted : null;
 }
 
-/** Jumlah hari inklusif; null berarti tanggal tidak valid, terbalik, atau lebih dari tujuh hari. */
-export function timelineRangeLength(start, end) {
+/** Jumlah hari inklusif; null berarti tanggal tidak valid, terbalik, atau melebihi batas hari. */
+export function timelineRangeLength(start, end, maxDays = 7) {
   if (!validTimelineDate(start) || !validTimelineDate(end)) return null;
+  const limit = Number.isInteger(maxDays) && maxDays >= 1 && maxDays <= 7 ? maxDays : 7;
   const days = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / DAY_MS + 1;
-  return Number.isInteger(days) && days >= 1 && days <= 7 ? days : null;
+  return Number.isInteger(days) && days >= 1 && days <= limit ? days : null;
 }
 
 /** @param {string} instant @param {"WIB"|"WITA"|"WIT"} zone */

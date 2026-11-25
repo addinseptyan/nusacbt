@@ -32,7 +32,7 @@ export function AppSidebar() {
   const branding = useBranding();
   const currentUser = useCurrentAdminUser();
   const { isMobile, setOpenMobile } = useSidebar();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [openState, setOpenState] = useState<{ forPath: string; section: string | null } | null>(null);
   const containsPage = (href: string) => navigationPageContains(href, pathname);
   const initialLetter = branding.appName.slice(0, 1).toUpperCase() || "N";
 
@@ -47,6 +47,10 @@ export function AppSidebar() {
       return { ...section, pages };
     })
     .filter((section): section is NonNullable<typeof section> => section !== null);
+
+  const activeSectionTitle =
+    visibleSections.find((section) => Boolean(section.pages?.some((page) => containsPage(page.href))))?.title ?? null;
+  const currentOpenSection = openState && openState.forPath === pathname ? openState.section : activeSectionTitle;
 
   const canManageAppSettings = adminHasPermission(currentUser, "app_settings.manage");
 
@@ -112,13 +116,15 @@ export function AppSidebar() {
                   );
                 }
 
-                const isOpen = expanded[section.title] ?? active;
+                const isOpen = currentOpenSection === section.title;
                 return (
                   <Collapsible
                     key={section.title}
                     asChild
                     open={isOpen}
-                    onOpenChange={(open) => setExpanded((current) => ({ ...current, [section.title]: open }))}
+                    onOpenChange={(open) =>
+                      setOpenState({ forPath: pathname, section: open ? section.title : null })
+                    }
                   >
                     <SidebarMenuItem>
                       <CollapsibleTrigger asChild>

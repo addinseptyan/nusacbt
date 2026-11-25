@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateAcademicYearName,suggestedPromotion,parseRolloverChoices } from '../../src/lib/academic-year.mjs';
-import { parseMonitoringFilters,monitoringSearchParams } from '../../src/lib/monitoring-filter.mjs';
+import { parseMonitoringFilters,monitoringSearchParams,monitoringDayBounds } from '../../src/lib/monitoring-filter.mjs';
 import { parseMatrixFilters,matrixSearchParams } from '../../src/lib/matrix-report-filter.mjs';
 import { buildResultMatrix } from '../../src/lib/matrix-report.mjs';
 import { createReportWorkbook } from '../../src/lib/report-xlsx.mjs';
@@ -27,6 +27,8 @@ test('filter monitoring dan matriks: tanggal inklusif zona, duplikasi, jenis dan
   const monitorAll=parseMonitoringFilters(new URLSearchParams('semua=1'));
   assert.equal(monitorAll.ok,true);
   if(monitorAll.ok){assert.equal(monitorAll.filters.showAll,true);assert.equal(monitoringSearchParams(monitorAll.filters).get('semua'),'1');}
+  assert.deepEqual(monitoringDayBounds('2026-10-01','WIB'),{fromUtc:'2026-09-30T17:00:00.000Z',toUtcExclusive:'2026-10-01T17:00:00.000Z'});
+  assert.equal(monitoringDayBounds('2026-02-30','WIB'),null);
   for(const query of ['status=unknown','tes=0','kategori=x','urut=drop','dari=2026-02-30','dari=2026-12-02&sampai=2026-12-01','tes=1&tes=2','semua=0']) assert.equal(parseMonitoringFilters(new URLSearchParams(query)).ok,false,query);
   const matrix=parseMatrixFilters(new URLSearchParams('tahun=1&kategori=regular&gabung=1&kelas=X%20AK&dari=2026-10-01&sampai=2026-10-07&zona=WIB'));
   assert.equal(matrix.ok,true);assert.equal(matrix.filters.toUtcExclusive,'2026-10-07T17:00:00.000Z');
