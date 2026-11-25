@@ -19,13 +19,14 @@ const HASH_FORMAT = /^scrypt\$32768\$8\$3\$[A-Za-z0-9_-]{22}\$[A-Za-z0-9_-]{86}$
 // Dummy publik memastikan akun/identitas tanpa sandi juga melalui scrypt.
 const DUMMY_HASH = "scrypt$32768$8$3$bnVzYWNidC1kdW1teS12MQ$Raa-ekVKy8Za16jY9UvGVQe7QgcE8qumcVaR-QYwcSlPWOICqa72jz34cvRzGMbcqD08s2eMvJpOmu-lx5iNfA";
 
-type Credentials = { username: string; password: string };
-type ScopedCredentials = Credentials & { periodId: string };
+type Credentials = { username: string; password: string; periodId?: string | null };
+type ScopedCredentials = { username: string; password: string; periodId: string };
 type IdentityLookup = { id: string; studentId: string };
 type LockedIdentity = { id: string; username: string };
 type PasswordRow = { passwordHash: string };
 type AttemptRow = { failedAttempts: number; locked: boolean; lockExpired: boolean };
 
+export type ActiveLoginPeriod = { id: string; name: string };
 export type ParticipantSchedule = {
   id: string; name: string; label: string; kind: "regular" | "makeup" | "remedial"; sessionNumber: number | null;
   startLocal: string; endLocal: string; zone: "WIB" | "WITA" | "WIT";
@@ -62,8 +63,6 @@ async function globalAttemptSlot() {
 }
 
 async function pruneOldAuthRows() {
-  // Pembersihan dibatasi dan melewati baris yang sedang digunakan. Bucket
-  // tetap ada setidaknya 24 jam; pembersihan hanya terjadi saat ada login.
   const pool = getPostgresPool();
   await pool.query(
     `DELETE FROM participant_login_attempts WHERE bucket_hash IN (
@@ -82,9 +81,6 @@ async function pruneOldAuthRows() {
 }
 
 async function lockIdentityRows(client: PoolClient, credentials: ScopedCredentials) {
-  // Urutannya sama dengan layanan identitas/sandi: siswa, periode,
-  // penempatan, identitas, sandi. Lookup awal hanya untuk menemukan siswa;
-  // identitas dan username diperiksa lagi setelah penguncian.
   const lookup = await client.query<IdentityLookup>(
     `SELECT id::text AS id, student_id::text AS "studentId"
      FROM participant_identities WHERE period_id = $1::bigint AND lower(username COLLATE "C") = $2`,
@@ -93,7 +89,11 @@ async function lockIdentityRows(client: PoolClient, credentials: ScopedCredentia
   if (!lookup.rows[0]) return null;
   const candidate = lookup.rows[0];
   const student = await client.query("SELECT id FROM school_students WHERE id = $1::bigint FOR SHARE", [candidate.studentId]);
-  const period = await client.query("SELECT id FROM exam_periods WHERE id = $1::bigint FOR SHARE", [credentials.periodId]);
+  const period = await client.query(
+    `SELECT e.id FROM exam_periods e JOIN academic_year_settings ys ON ys.id = 1 AND ys.active_year_id = e.academic_year_id
+     WHERE e.id = $1::bigint AND e.is_active = true FOR SHARE OF e`,
+    [credentials.periodId],
+  );
   const placement = await client.query<{ id: string }>(
     `SELECT id::text AS id FROM student_class_placements
      WHERE student_id = $1::bigint AND period_id = $2::bigint AND ended_at IS NULL FOR SHARE`,
@@ -122,15 +122,45 @@ export async function authenticateParticipant(credentials: Credentials): Promise
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN");
-    // Tahan pengaturan sampai sesi diterbitkan. Penggantian periode menunggu
-    // login yang sedang berjalan lalu menghapus semua sesi secara atomik.
-    const setting = await client.query<{ periodId: string | null }>(
-      'SELECT period_id::text AS "periodId" FROM participant_login_settings WHERE id = 1 FOR SHARE',
+    // Tahan pengaturan sampai sesi diterbitkan. Penggantian/penonaktifan periode
+    // menunggu login yang sedang berjalan lalu menghapus sesi terkait secara atomik.
+    const setting = await client.query<{ id: number }>(
+      "SELECT id FROM participant_login_settings WHERE id = 1 FOR SHARE",
     );
     if (setting.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
-    const periodId = setting.rows[0].periodId;
-    if (!periodId) { await client.query("COMMIT"); return null; }
-    const scoped: ScopedCredentials = { ...credentials, periodId };
+
+    const activePeriods = (
+      await client.query<ActiveLoginPeriod>(
+        `SELECT e.id::text AS id, e.name
+         FROM exam_periods e
+         JOIN academic_year_settings ys ON ys.id = 1 AND ys.active_year_id = e.academic_year_id
+         WHERE e.is_active = true
+         ORDER BY e.start_date DESC, e.id DESC
+         FOR SHARE OF e`,
+      )
+    ).rows;
+
+    if (activePeriods.length === 0) {
+      await client.query("COMMIT");
+      return null;
+    }
+
+    let periodId: string | null = null;
+    if (activePeriods.length === 1) {
+      if (credentials.periodId && credentials.periodId !== activePeriods[0].id) {
+        await client.query("COMMIT");
+        return null;
+      }
+      periodId = activePeriods[0].id;
+    } else {
+      if (!credentials.periodId || !activePeriods.some((p) => p.id === credentials.periodId)) {
+        await client.query("COMMIT");
+        return null;
+      }
+      periodId = credentials.periodId;
+    }
+
+    const scoped: ScopedCredentials = { username: credentials.username, password: credentials.password, periodId };
     const bucket = participantAttemptBucket(periodId, credentials.username);
     await client.query("INSERT INTO participant_login_attempts(bucket_hash) VALUES($1) ON CONFLICT (bucket_hash) DO NOTHING", [bucket]);
     const attempt = await client.query<AttemptRow>(
@@ -164,9 +194,6 @@ export async function authenticateParticipant(credentials: Credentials): Promise
     const token = randomBytes(32).toString("base64url");
     const tokenHash = participantSessionDigest(token);
     if (!tokenHash) throw new Error("Token sesi tidak valid.");
-    // Dengan UNIQUE per identitas, penerbitan baru menggantikan sesi lama.
-    // Kunci identitas/sandi/penempatan ditahan sampai commit agar reset atau
-    // pemindahan kelas yang bersamaan tidak menghasilkan sesi usang.
     await client.query("DELETE FROM participant_sessions WHERE participant_identity_id = $1::bigint", [records.identity.id]);
     const inserted = await client.query(
       `INSERT INTO participant_sessions(token_hash, participant_identity_id, placement_id, username_snapshot,
@@ -206,19 +233,26 @@ export async function endParticipantSession() {
   store.set(COOKIE_NAME, "", { httpOnly: true, secure: participantCookieSecure(), sameSite: "strict", path: COOKIE_PATH, maxAge: 0 });
 }
 
-export async function participantLoginEnabled(): Promise<boolean> {
-  const result = await getPostgresPool().query<{ enabled: boolean }>(
-    "SELECT period_id IS NOT NULL AS enabled FROM participant_login_settings WHERE id = 1",
+export async function activeParticipantLoginPeriods(): Promise<ActiveLoginPeriod[]> {
+  const check = await getPostgresPool().query("SELECT 1 FROM participant_login_settings WHERE id = 1");
+  if (check.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
+  const result = await getPostgresPool().query<ActiveLoginPeriod>(
+    `SELECT e.id::text AS id, e.name
+     FROM exam_periods e
+     JOIN academic_year_settings ys ON ys.id = 1 AND ys.active_year_id = e.academic_year_id
+     WHERE e.is_active = true
+     ORDER BY e.start_date DESC, e.id DESC`,
   );
-  if (result.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
-  return result.rows[0].enabled;
+  return result.rows;
+}
+
+export async function participantLoginEnabled(): Promise<boolean> {
+  return (await activeParticipantLoginPeriods()).length > 0;
 }
 
 export async function participantView(requestedPage: number): Promise<ParticipantView | null> {
   const hash = participantSessionDigest((await cookies()).get(COOKIE_NAME)?.value);
   if (!hash) return null;
-  // Profil dan jadwal diperoleh dalam SATU query, dibatasi oleh sesi aktif.
-  // Tidak ada join ke soal, jawaban, token, atau data peserta lain.
   const result = await getPostgresPool().query<ParticipantView>(
     `WITH auth AS (
        SELECT i.id AS identity_id, i.period_id, st.id AS student_id, st.name AS "studentName", i.username, i.participant_number AS "participantNumber",
@@ -226,18 +260,18 @@ export async function participantView(requestedPage: number): Promise<Participan
        FROM participant_sessions sess
        JOIN participant_identities i ON i.id = sess.participant_identity_id
        JOIN school_students st ON st.id = i.student_id
+       JOIN participant_login_settings ls ON ls.id = 1
        JOIN exam_periods ep ON ep.id = i.period_id
-       JOIN participant_login_settings ls ON ls.id = 1 AND ls.period_id = i.period_id
+       JOIN academic_year_settings ys ON ys.id = 1 AND ys.active_year_id = ep.academic_year_id
        JOIN student_class_placements pl ON pl.id = sess.placement_id AND pl.student_id = i.student_id
          AND pl.period_id = i.period_id AND pl.ended_at IS NULL
        JOIN school_classes c ON c.id = pl.class_id JOIN school_majors m ON m.id = c.major_id
        JOIN participant_passwords pw ON pw.participant_identity_id = i.id
        WHERE sess.token_hash = $1 AND sess.expires_at > clock_timestamp()
+         AND ep.is_active = true
          AND i.username = sess.username_snapshot AND i.updated_at = sess.identity_revision
          AND pw.updated_at = sess.password_revision AND sha256(convert_to(pw.password_hash, 'UTF8')) = sess.password_hash_digest
      ), visible AS (
-       -- Pembatasan terjadi pada server, berdasarkan identitas siswa dan
-       -- periode dari sesi; parameter browser tidak dapat memilih siswa lain.
        SELECT r.id,r.exam_test_id,r.label,r.kind,r.session_number,r.starts_at,r.time_zone,r.duration_minutes,
          att.id AS attempt_id, (att.completed_at IS NOT NULL) AS attempt_completed,(fg.finalized_at IS NOT NULL) AS finalized,COALESCE(fg.revision,0)::text AS final_revision,
          CASE WHEN fg.finalized_at IS NULL AND att.completed_at IS NOT NULL AND att.deadline>clock_timestamp()
@@ -255,7 +289,6 @@ export async function participantView(requestedPage: number): Promise<Participan
        ) retry ON true
        LEFT JOIN exam_final_grade_state fg ON fg.exam_test_id=r.exam_test_id AND fg.participant_identity_id=a.identity_id
        ${PARTICIPANT_SCHEDULE_DAY_JOIN}
-       -- Filter sebelum count dan LIMIT: hari ini per zona, serta kemarin jika masih berlangsung.
        WHERE r.published_at IS NOT NULL AND ${PARTICIPANT_SCHEDULE_DAY_FILTER}
      ), counts AS (
        SELECT count(*)::int AS total FROM visible
@@ -295,11 +328,6 @@ export type ParticipantSharedScores = {
   ))[];
 };
 
-/**
- * Satu snapshot query membatasi sesi, periode dan visibilitas di server.
- * Nilai akhir tidak boleh disimpulkan dari sebagian kategori: jika salah satu
- * kategori penyumbang tersembunyi, seluruh entri akhir tidak dikirim.
- */
 export async function participantSharedScores(requestedPage: number): Promise<ParticipantSharedScores | null> {
   const hash = participantSessionDigest((await cookies()).get(COOKIE_NAME)?.value);
   if (!hash) return null;
@@ -312,11 +340,14 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
     `WITH auth AS (
        SELECT i.id AS identity_id, i.period_id
        FROM participant_sessions sess JOIN participant_identities i ON i.id=sess.participant_identity_id
-       JOIN participant_login_settings ls ON ls.id=1 AND ls.period_id=i.period_id
+       JOIN participant_login_settings ls ON ls.id=1
+       JOIN exam_periods ep ON ep.id=i.period_id
+       JOIN academic_year_settings ys ON ys.id=1 AND ys.active_year_id=ep.academic_year_id
        JOIN student_class_placements pl ON pl.id=sess.placement_id AND pl.student_id=i.student_id
          AND pl.period_id=i.period_id AND pl.ended_at IS NULL
        JOIN participant_passwords pw ON pw.participant_identity_id=i.id
        WHERE sess.token_hash=$1 AND sess.expires_at>clock_timestamp()
+         AND ep.is_active=true
          AND i.username=sess.username_snapshot AND i.updated_at=sess.identity_revision
          AND pw.updated_at=sess.password_revision AND sha256(convert_to(pw.password_hash,'UTF8'))=sess.password_hash_digest
      ), visible AS (
@@ -365,8 +396,6 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
     if (!item.method || !item.evidence) throw new Error("Data nilai akhir tidak konsisten.");
     const score = calculateFinalGrade(item.method, item.evidence);
     if (score === null) throw new Error("Data nilai akhir tidak konsisten.");
-    // Perhitungan dan bukti hanya di server: jumlah benar, jumlah soal,
-    // kategori tersembunyi dan kunci tidak dikirim ke browser peserta.
     return { id: item.id, type: "final", testName: item.testName, method: item.method, score: formatFinalGrade(score) };
   });
   return { total: row.total, page: row.page, pages: row.pages, scores };

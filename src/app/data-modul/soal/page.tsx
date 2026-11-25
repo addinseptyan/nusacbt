@@ -11,7 +11,8 @@ export const metadata = { title: "Manajemen Soal — NusaCBT" };
 export const dynamic = "force-dynamic";
 
 type QuestionRow = {
-  id: string; revision: string; topicId: string; topicName: string; prompt: string; promptRich: unknown | null; hasPromptImage: boolean;
+  id: string; revision: string; topicId: string; topicName: string; topicTags: string[];
+  prompt: string; promptRich: unknown | null; hasPromptImage: boolean;
   a: string; b: string; c: string; d: string; e: string;
   richA: unknown | null; richB: unknown | null; richC: unknown | null; richD: unknown | null; richE: unknown | null;
   hasA: boolean; hasB: boolean; hasC: boolean; hasD: boolean; hasE: boolean;
@@ -28,9 +29,9 @@ export default async function QuestionsPage() {
   try {
     const pool = getPostgresPool();
     const [topicResult, questionResult] = await Promise.all([
-      pool.query<QuestionTopicOption>("SELECT id::text AS id, name FROM question_topics ORDER BY lower(name), name, id"),
+      pool.query<QuestionTopicOption>("SELECT id::text AS id, name, tags FROM question_topics ORDER BY lower(name), tags_signature, name, id"),
       pool.query<QuestionRow>(
-        `SELECT q.id::text AS id, q.xmin::text AS revision, q.topic_id::text AS "topicId", t.name AS "topicName",
+        `SELECT q.id::text AS id, q.xmin::text AS revision, q.topic_id::text AS "topicId", t.name AS "topicName", t.tags AS "topicTags",
          q.prompt_text AS prompt, q.prompt_rich AS "promptRich", q.prompt_image IS NOT NULL AS "hasPromptImage",
          q.option_a_text AS a, q.option_b_text AS b, q.option_c_text AS c, q.option_d_text AS d, q.option_e_text AS e,
          q.option_a_rich AS "richA", q.option_b_rich AS "richB", q.option_c_rich AS "richC", q.option_d_rich AS "richD", q.option_e_rich AS "richE",
@@ -41,8 +42,8 @@ export default async function QuestionsPage() {
     ]);
     topics = topicResult.rows;
     questions = questionResult.rows.map((row) => ({
-      id: row.id, revision: row.revision, topicId: row.topicId, topicName: row.topicName, prompt: row.prompt, promptRich: row.promptRich,
-      hasPromptImage: row.hasPromptImage, correctOption: row.correctOption,
+      id: row.id, revision: row.revision, topicId: row.topicId, topicName: row.topicName, topicTags: row.topicTags ?? [],
+      prompt: row.prompt, promptRich: row.promptRich, hasPromptImage: row.hasPromptImage, correctOption: row.correctOption,
       options: [
         { letter: "A", text: row.a, rich: row.richA, hasImage: row.hasA }, { letter: "B", text: row.b, rich: row.richB, hasImage: row.hasB },
         { letter: "C", text: row.c, rich: row.richC, hasImage: row.hasC }, { letter: "D", text: row.d, rich: row.richD, hasImage: row.hasD },

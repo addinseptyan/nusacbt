@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { participantAttemptBucket } from "../../src/lib/participant-login-validation.mjs";
 import { loginAsAdmin } from "./helpers";
 import { insertLegacyPassword } from "./legacy-password-fixture";
-import { activateLoginPeriod, cleanupLoginFixture, loginParticipant, loginTestDatabase, openParticipantLogin, resetLoginGlobal, seedLoginFixture } from "./participant-login-helpers";
+import { activateLoginPeriod, cleanupLoginFixture, clearAllLoginPeriods, deactivateLoginPeriod, loginParticipant, loginTestDatabase, openParticipantLogin, resetLoginGlobal, seedLoginFixture } from "./participant-login-helpers";
 
 const loginError = (page: Page) => page.getByRole("alert").filter({ hasText: "Username atau kata sandi" });
 
@@ -16,6 +16,7 @@ test("admin mengaktifkan, mengganti, kembali, dan menonaktifkan periode tanpa me
   const replayContext = await browser.newContext({ baseURL: "http://127.0.0.1:3100" });
   try {
     const before = await client.query("SELECT * FROM participant_passwords WHERE participant_identity_id=ANY($1::bigint[]) ORDER BY participant_identity_id", [[f.identityA, f.identityB]]);
+    await client.query("UPDATE exam_periods SET is_active=false WHERE id=ANY($1::bigint[])", [[f.periodA, f.periodB]]);
     await client.query("UPDATE participant_login_settings SET period_id=NULL WHERE id=1");
     await page.goto("/peserta/login");
     await expect(page.getByRole("status").filter({ hasText: "Login peserta belum diaktifkan" })).toBeVisible();
@@ -31,6 +32,7 @@ test("admin mengaktifkan, mengganti, kembali, dan menonaktifkan periode tanpa me
     const oldCookie = (await page.context().cookies()).find((cookie) => cookie.name === "nusacbt_participant_session");
     if (!oldCookie) throw new Error("Cookie sesi peserta uji tidak ditemukan.");
 
+    await deactivateLoginPeriod(admin, f.periodAName);
     await activateLoginPeriod(admin, f.periodBName);
     expect((await client.query("SELECT 1 FROM participant_sessions WHERE participant_identity_id=$1", [f.identityA])).rowCount).toBe(0);
     await page.goto("/peserta"); await expect(page).toHaveURL(/sesi=berakhir/);
@@ -39,17 +41,14 @@ test("admin mengaktifkan, mengganti, kembali, dan menonaktifkan periode tanpa me
     await expect(page.getByRole("heading", { name: `Halo, ${f.studentBName}!` })).toBeVisible();
     await expect(page.getByText(f.hiddenName, { exact: true })).toBeVisible();
 
+    await deactivateLoginPeriod(admin, f.periodBName);
     await activateLoginPeriod(admin, f.periodAName);
     await page.goto("/peserta"); await expect(page).toHaveURL(/sesi=berakhir/);
     await replayContext.addCookies([oldCookie]);
     const replayPage = await replayContext.newPage(); await replayPage.goto("/peserta");
     await expect(replayPage).toHaveURL(/sesi=berakhir/); // Sesi A sebelum perpindahan tidak hidup kembali.
     await loginParticipant(page, f.username, f.passwordA);
-    await admin.getByRole("button", { name: "Nonaktifkan login", exact: true }).click();
-    const disable = admin.getByRole("dialog", { name: "Nonaktifkan login peserta?" });
-    await expect(disable).toContainText("Semua sesi peserta sebelumnya diakhiri");
-    await disable.getByRole("button", { name: "Ya, nonaktifkan login" }).click();
-    await expect(disable).toBeHidden();
+    await clearAllLoginPeriods(admin);
     await page.goto("/peserta"); await expect(page).toHaveURL(/sesi=berakhir/);
     await expect(page.getByRole("status").filter({ hasText: "Login peserta belum diaktifkan" })).toBeVisible();
     // Tombol nonaktif bukan satu-satunya penjaga: replay langsung ke server tetap gagal.
@@ -89,9 +88,16 @@ test("parameter periode palsu tidak memilih identitas di luar periode aktif", as
     });
     expect(response.status()).toBe(200);
     expect(await response.text()).toContain("Username atau kata sandi");
+    const forgedPeriodId = `--${boundary}\r\nContent-Disposition: form-data; name="_1_periodId"\r\n\r\n${f.periodB}\r\n`;
+    const responseId = await page.request.post("/peserta/login", {
+      headers: { origin: "http://127.0.0.1:3100", "content-type": headers["content-type"], "next-action": headers["next-action"] },
+      data: Buffer.from(serialized.replace(nextField, forgedPeriodId + nextField)), failOnStatusCode: false, maxRedirects: 0,
+    });
+    expect(responseId.status()).toBe(200);
+    expect(await responseId.text()).toContain("Username atau kata sandi");
     expect((await client.query("SELECT 1 FROM participant_sessions WHERE participant_identity_id=$1", [f.identityB])).rowCount).toBe(0);
     const bucketA = participantAttemptBucket(f.periodA, f.username); const bucketB = participantAttemptBucket(f.periodB, f.username);
-    expect((await client.query<{ failed: number }>("SELECT failed_attempts AS failed FROM participant_login_attempts WHERE bucket_hash=$1", [bucketA])).rows[0].failed).toBe(2);
+    expect((await client.query<{ failed: number }>("SELECT failed_attempts AS failed FROM participant_login_attempts WHERE bucket_hash=$1", [bucketA])).rows[0].failed).toBe(1);
     expect((await client.query("SELECT 1 FROM participant_login_attempts WHERE bucket_hash=$1", [bucketB])).rowCount).toBe(0);
     await loginParticipant(page, f.username, f.passwordA);
     await expect(page.getByRole("heading", { name: `Halo, ${f.studentAName}!` })).toBeVisible();
@@ -114,10 +120,10 @@ test("pengaturan menolak admin usang, tanpa sesi, dan Origin asing", async ({ pa
     const outgoing = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/data-peserta/periode");
     await dialog.getByRole("button", { name: "Ya, aktifkan login" }).click();
     const request = await outgoing; await expect(dialog).toBeHidden();
-    // A → B → A tetap harus membuat dialog dari A semula menjadi usang.
-    await activateLoginPeriod(page, f.periodAName);
+    // Aktifkan lalu nonaktifkan B agar revision periode B berubah walaupun kembali nonaktif.
+    await deactivateLoginPeriod(page, f.periodBName);
     await staleDialog.getByRole("button", { name: "Ya, aktifkan login" }).click();
-    await expect(staleDialog.getByRole("alert").filter({ hasText: "Periode login sudah berubah di sesi lain" })).toBeVisible();
+    await expect(staleDialog.getByRole("alert").filter({ hasText: "Data periode tujuan sudah berubah" })).toBeVisible();
     const headers = request.headers(); const body = request.postDataBuffer();
     if (!headers["next-action"] || !headers["content-type"] || !body) throw new Error("Aksi admin tidak dapat diperiksa.");
     const foreign = await page.request.post("/data-peserta/periode", {
@@ -156,17 +162,18 @@ test("login yang sedang berjalan tidak meninggalkan sesi lama setelah periode be
     pending.push(loginPost.then((response) => response.finished()));
     pending.push(page.getByRole("button", { name: "Masuk sebagai peserta" }).click());
     await expect.poll(async () => Number((await client.query<{ n: string }>(`SELECT count(*)::text AS n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%participant_passwords%' AND query LIKE '%FOR SHARE%'`)).rows[0].n), { timeout: 10_000 }).toBeGreaterThan(0);
-    await admin.getByRole("button", { name: `Aktifkan login ${f.periodBName}` }).click();
-    const dialog = admin.getByRole("dialog", { name: "Aktifkan periode login?" });
+    await admin.getByRole("button", { name: `Nonaktifkan login ${f.periodAName}` }).click();
+    const dialog = admin.getByRole("dialog", { name: "Nonaktifkan periode login?" });
     const adminPost = admin.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/data-peserta/periode");
     pending.push(adminPost.then((response) => response.finished()));
-    pending.push(dialog.getByRole("button", { name: "Ya, aktifkan login" }).click());
+    pending.push(dialog.getByRole("button", { name: "Ya, nonaktifkan periode" }).click());
     await expect.poll(async () => Number((await client.query<{ n: string }>(`SELECT count(*)::text AS n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%participant_login_settings%' AND query LIKE '%FOR UPDATE%'`)).rows[0].n), { timeout: 10_000 }).toBeGreaterThan(0);
     await locker.query("COMMIT");
     await Promise.all(pending); await expect(dialog).toBeHidden();
-    expect((await client.query<{ period: string }>("SELECT period_id::text AS period FROM participant_login_settings WHERE id=1")).rows[0].period).toBe(f.periodB);
+    expect((await client.query<{ active: boolean }>("SELECT is_active AS active FROM exam_periods WHERE id=$1", [f.periodA])).rows[0].active).toBe(false);
     expect((await client.query("SELECT 1 FROM participant_sessions WHERE participant_identity_id=$1", [f.identityA])).rowCount).toBe(0);
     await page.goto("/peserta"); await expect(page).toHaveURL(/sesi=berakhir/);
+    await activateLoginPeriod(admin, f.periodBName);
     await loginParticipant(page, f.username, f.passwordB);
   } finally {
     await locker.query("ROLLBACK").catch(() => {}); await Promise.allSettled(pending); await locker.end();
@@ -182,10 +189,11 @@ test("kegagalan mengakhiri sesi membatalkan perubahan periode secara atomik", as
     await loginParticipant(page, f.username, f.passwordA); await loginAsAdmin(admin); await admin.goto("/data-peserta/periode");
     await client.query(`CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.participant_identity_id = ${f.identityA} THEN RAISE EXCEPTION 'synthetic period switch failure'; END IF; RETURN OLD; END $$`);
     await client.query(`CREATE TRIGGER ${trigger} BEFORE DELETE ON participant_sessions FOR EACH ROW EXECUTE FUNCTION ${fn}()`);
-    await admin.getByRole("button", { name: `Aktifkan login ${f.periodBName}` }).click();
-    const dialog = admin.getByRole("dialog", { name: "Aktifkan periode login?" });
-    await dialog.getByRole("button", { name: "Ya, aktifkan login" }).click();
+    await admin.getByRole("button", { name: `Nonaktifkan login ${f.periodAName}` }).click();
+    const dialog = admin.getByRole("dialog", { name: "Nonaktifkan periode login?" });
+    await dialog.getByRole("button", { name: "Ya, nonaktifkan periode" }).click();
     await expect(dialog.getByRole("alert").filter({ hasText: "belum dapat dipastikan" })).toBeVisible();
+    expect((await client.query<{ active: boolean }>("SELECT is_active AS active FROM exam_periods WHERE id=$1", [f.periodA])).rows[0].active).toBe(true);
     expect((await client.query<{ period: string }>("SELECT period_id::text AS period FROM participant_login_settings WHERE id=1")).rows[0].period).toBe(f.periodA);
     expect((await client.query("SELECT 1 FROM participant_sessions WHERE participant_identity_id=$1", [f.identityA])).rowCount).toBe(1);
     await page.reload(); await expect(page.getByRole("heading", { name: `Halo, ${f.studentAName}!` })).toBeVisible();
@@ -303,10 +311,10 @@ test("login yang menunggu penggantian memakai periode baru, bukan nilai sebelum 
   try {
     await loginParticipant(page, f.username, f.passwordA); await loginAsAdmin(admin); await admin.goto("/data-peserta/periode");
     await locker.query("BEGIN"); await locker.query("SELECT token_hash FROM participant_sessions WHERE participant_identity_id=$1 FOR UPDATE", [f.identityA]);
-    await admin.getByRole("button", { name: `Aktifkan login ${f.periodBName}` }).click();
-    const dialog = admin.getByRole("dialog", { name: "Aktifkan periode login?" });
+    await admin.getByRole("button", { name: `Nonaktifkan login ${f.periodAName}` }).click();
+    const dialog = admin.getByRole("dialog", { name: "Nonaktifkan periode login?" });
     const adminPost = admin.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/data-peserta/periode");
-    pending.push(adminPost.then((response) => response.finished())); pending.push(dialog.getByRole("button", { name: "Ya, aktifkan login" }).click());
+    pending.push(adminPost.then((response) => response.finished())); pending.push(dialog.getByRole("button", { name: "Ya, nonaktifkan periode" }).click());
     await expect.poll(async () => Number((await client.query<{ n: string }>(`SELECT count(*)::text AS n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'DELETE FROM participant_sessions%'`)).rows[0].n), { timeout: 10_000 }).toBeGreaterThan(0);
     await entrant.goto("/peserta/login"); await entrant.getByLabel("Username peserta").fill(f.username); await entrant.getByLabel("Kata sandi", { exact: true }).fill(f.passwordA);
     const loginPost = entrant.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/peserta/login");
@@ -314,8 +322,9 @@ test("login yang menunggu penggantian memakai periode baru, bukan nilai sebelum 
     await expect.poll(async () => Number((await client.query<{ n: string }>(`SELECT count(*)::text AS n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%participant_login_settings%' AND query LIKE '%FOR SHARE%'`)).rows[0].n), { timeout: 10_000 }).toBeGreaterThan(0);
     await locker.query("COMMIT"); await Promise.all(pending); await expect(dialog).toBeHidden();
     await expect(loginError(entrant)).toBeVisible();
-    expect((await client.query<{ period: string }>("SELECT period_id::text AS period FROM participant_login_settings WHERE id=1")).rows[0].period).toBe(f.periodB);
+    expect((await client.query<{ active: boolean }>("SELECT is_active AS active FROM exam_periods WHERE id=$1", [f.periodA])).rows[0].active).toBe(false);
     expect((await client.query("SELECT 1 FROM participant_sessions WHERE participant_identity_id=ANY($1::bigint[])", [[f.identityA, f.identityB]])).rowCount).toBe(0);
+    await activateLoginPeriod(admin, f.periodBName);
     await loginParticipant(entrant, f.username, f.passwordB);
   } finally {
     await locker.query("ROLLBACK").catch(() => {}); await Promise.allSettled(pending); await locker.end();
@@ -354,4 +363,56 @@ test("perubahan data periode tujuan menolak dialog aktivasi yang usang", async (
     expect((await client.query("SELECT 1 FROM participant_sessions WHERE participant_identity_id=$1", [f.identityA])).rowCount).toBe(1);
     await page.reload(); await expect(page.getByRole("heading", { name: `Halo, ${f.studentAName}!` })).toBeVisible();
   } finally { await adminContext.close(); await cleanupLoginFixture(client, f); await client.end(); }
+});
+
+test("multi-periode aktif bersamaan menampilkan pemilih periode di login dan filter periode di kartu", async ({ page, browser }) => {
+  test.setTimeout(90_000);
+  const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client);
+  const f = await seedLoginFixture(client);
+  const adminContext = await browser.newContext({ baseURL: "http://127.0.0.1:3100" }); const admin = await adminContext.newPage();
+  const secondContext = await browser.newContext({ baseURL: "http://127.0.0.1:3100" }); const second = await secondContext.newPage();
+  try {
+    await loginAsAdmin(admin);
+    // f.periodA sudah aktif; aktifkan f.periodB juga -> 2 periode aktif bersamaan
+    await activateLoginPeriod(admin, f.periodBName);
+    await expect(admin.getByText("2 periode aktif bersamaan")).toBeVisible();
+
+    // Halaman login peserta menampilkan dropdown Periode ujian dengan kedua periode
+    await page.goto("/peserta/login");
+    await expect(page.getByLabel("Periode ujian")).toBeVisible();
+    await page.getByLabel("Periode ujian").selectOption(f.periodA);
+    await page.getByLabel("Username peserta").fill(f.username);
+    await page.getByLabel("Kata sandi", { exact: true }).fill(f.passwordA);
+    await page.getByRole("button", { name: "Masuk sebagai peserta" }).click();
+    await expect(page.getByRole("heading", { name: `Halo, ${f.studentAName}!` })).toBeVisible();
+
+    await second.goto("/peserta/login");
+    await second.getByLabel("Periode ujian").selectOption(f.periodB);
+    await second.getByLabel("Username peserta").fill(f.username);
+    await second.getByLabel("Kata sandi", { exact: true }).fill(f.passwordB);
+    await second.getByRole("button", { name: "Masuk sebagai peserta" }).click();
+    await expect(second.getByRole("heading", { name: `Halo, ${f.studentBName}!` })).toBeVisible();
+
+    // Halaman cetak kartu menampilkan switcher Periode aktif saat >= 2 periode aktif
+    await admin.goto("/data-peserta/kartu");
+    await expect(admin.getByLabel("Periode aktif")).toBeVisible();
+    await admin.getByLabel("Periode aktif").selectOption(f.periodB);
+    await admin.getByRole("button", { name: "Terapkan" }).click();
+    await expect(admin.getByRole("list", { name: "Daftar peserta untuk kartu" })).toContainText(f.studentBName);
+
+    // Menonaktifkan hanya periodA mengakhiri sesi A tanpa memengaruhi sesi B
+    await deactivateLoginPeriod(admin, f.periodAName);
+    await page.goto("/peserta");
+    await expect(page).toHaveURL(/sesi=berakhir/);
+    await second.reload();
+    await expect(second.getByRole("heading", { name: `Halo, ${f.studentBName}!` })).toBeVisible();
+    // Kini hanya 1 periode aktif -> dropdown periode tidak tampil lagi
+    await page.goto("/peserta/login");
+    await expect(page.getByLabel("Periode ujian")).toHaveCount(0);
+  } finally {
+    await secondContext.close();
+    await adminContext.close();
+    await cleanupLoginFixture(client, f);
+    await client.end();
+  }
 });

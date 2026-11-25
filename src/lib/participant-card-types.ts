@@ -16,6 +16,7 @@ export type CardListRow = {
 export type CardPageData = {
   filters: CardFilters;
   periods: IdentityPeriod[];
+  activePeriods: IdentityPeriod[];
   selected: IdentityPeriod | null;
   loginPeriodId: string | null;
   loginPeriodName: string | null;

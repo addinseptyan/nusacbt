@@ -2,14 +2,14 @@ import path from "node:path";
 import { readFileSync } from "node:fs";
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { loginAsAdmin } from "./helpers";
-import { cleanupTopics, createTopic, sessionDigest, suffix, testDatabase } from "./question-helpers";
+import { cleanupTopics, createTopic, selectComboboxOption, sessionDigest, suffix, testDatabase } from "./question-helpers";
 
 const fixture = path.join(process.cwd(), "public/templates/template-soal-nusacbt.docx");
 const destination = "/data-modul/import-soal";
 
 async function previewFile(page: Page, topic: string) {
   await page.goto(destination);
-  await page.getByLabel("Topik / mata pelajaran").selectOption({ label: topic });
+  await selectComboboxOption(page, "Topik / mata pelajaran", topic);
   await page.getByLabel("File Word").setInputFiles(fixture);
   await page.getByRole("button", { name: "Periksa pratinjau" }).click();
   await expect(page.getByRole("heading", { name: "Pratinjau soal" })).toBeVisible();
@@ -95,7 +95,7 @@ test("mengganti kategori atau file menghapus pratinjau; dokumen rusak tidak disi
   try {
     topics.push(await createTopic(client, name), await createTopic(client, second));
     await loginAsAdmin(page); await previewFile(page, name);
-    await page.getByLabel("Topik / mata pelajaran").selectOption({ label: second });
+    await selectComboboxOption(page, "Topik / mata pelajaran", second);
     await expect(page.getByRole("heading", { name: "Pratinjau soal" })).toHaveCount(0);
     await page.getByRole("button", { name: "Periksa pratinjau" }).click();
     await expect(page.getByRole("heading", { name: "Pratinjau soal" })).toBeVisible();

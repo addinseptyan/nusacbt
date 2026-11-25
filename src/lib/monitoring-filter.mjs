@@ -1,6 +1,6 @@
 import { validDataId } from './class-validation.mjs';
 
-const fields = ['tahun','tes','kelas','kategori','status','dari','sampai','zona','urut','halaman','nilaiHalaman'];
+const fields = ['tahun','tes','kelas','kategori','status','dari','sampai','zona','urut','halaman','nilaiHalaman','semua'];
 const statuses = ['not_started','working','waiting','submitted','time_expired'];
 const kinds = ['regular','makeup','remedial'];
 const orders = ['time_desc','time_asc','score_desc','score_asc','student_asc','student_desc','test_asc','test_desc'];
@@ -30,12 +30,13 @@ export function parseMonitoringFilters(p) {
   const order = get('urut') || 'time_desc';
   if (!orders.includes(order)) return { ok:false,error:'Pengurutan tidak valid.' };
   const zone = get('zona') || 'WIB'; if (!Object.hasOwn(zones,zone)) return { ok:false,error:'Zona waktu tidak valid.' };
+  const semuaRaw = get('semua'); if (!['','1'].includes(semuaRaw)) return { ok:false,error:'Parameter semua tidak valid.' };
   const from = get('dari') || null, to = get('sampai') || null;
   const a = from ? dateUtc(from, zones[zone]) : null, b = to ? dateUtc(to, zones[zone]) : null;
   if ((from && a === null) || (to && b === null) || (a !== null && b !== null && a > b)) return { ok:false,error:'Rentang tanggal tidak valid (tahun 2000–2100).' };
   const page = get('halaman'), finalPage = get('nilaiHalaman');
   if ((page && !/^[1-9]\d{0,5}$/.test(page)) || (finalPage && !/^[1-9]\d{0,5}$/.test(finalPage))) return { ok:false,error:'Nomor halaman tidak valid.' };
-  return { ok:true, filters:{ yearId,testId,className,kind,status,order,zone,from,to,
+  return { ok:true, filters:{ yearId,testId,className,kind,status,order,zone,from,to,showAll:semuaRaw === '1',
     fromUtc:a === null ? null : new Date(a).toISOString(), toUtcExclusive:b === null ? null : new Date(b + 86400_000).toISOString() },
     page:page ? Number(page) : 1, finalPage:finalPage ? Number(finalPage) : 1 };
 }
@@ -45,6 +46,7 @@ export function monitoringSearchParams(f,page=1,finalPage=1) {
   if(f.yearId) p.set('tahun',f.yearId); if(f.testId) p.set('tes',f.testId); if(f.className) p.set('kelas',f.className);
   if(f.kind) p.set('kategori',f.kind); if(f.status) p.set('status',f.status);
   if(f.from) p.set('dari',f.from); if(f.to) p.set('sampai',f.to); if(f.zone !== 'WIB') p.set('zona',f.zone);
-  if(f.order !== 'time_desc') p.set('urut',f.order); if(page>1) p.set('halaman',String(page)); if(finalPage>1) p.set('nilaiHalaman',String(finalPage));
+  if(f.order !== 'time_desc') p.set('urut',f.order); if(f.showAll) p.set('semua','1');
+  if(page>1) p.set('halaman',String(page)); if(finalPage>1) p.set('nilaiHalaman',String(finalPage));
   return p;
 }

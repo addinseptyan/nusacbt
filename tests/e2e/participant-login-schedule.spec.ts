@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { loginAsAdmin } from "./helpers";
-import { activateLoginPeriod, cleanupLoginFixture, loginParticipant, loginTestDatabase, openParticipantLogin, resetLoginGlobal, seedLoginFixture, seedPublishedSchedules } from "./participant-login-helpers";
+import { activateLoginPeriod, cleanupLoginFixture, deactivateLoginPeriod, loginParticipant, loginTestDatabase, openParticipantLogin, resetLoginGlobal, seedLoginFixture, seedPublishedSchedules } from "./participant-login-helpers";
 
 test("jadwal dipaginasi di server dan zona ditampilkan tanpa soal atau tes periode lain", async ({ page }) => {
   const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client);
@@ -48,6 +48,7 @@ test("username yang sama di dua periode memakai sandi dan jadwal periode yang di
   try {
     await loginAsAdmin(admin);
     await activateLoginPeriod(admin, f.periodBName);
+    await deactivateLoginPeriod(admin, f.periodAName);
     await openParticipantLogin(page, f.username, f.passwordA);
     await expect(page.getByRole("alert").filter({ hasText: "Username atau kata sandi" })).toBeVisible();
     await loginParticipant(page, f.username.toUpperCase(), f.passwordB);

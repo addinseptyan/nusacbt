@@ -68,10 +68,14 @@ export async function deletePeriod(formData: FormData): Promise<ActionResult> {
     const admin = await lockActiveAdminSession(client);
     if (!admin) throw new PeriodDeleteProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
     if (!adminHasPermission(admin, "periods.manage")) throw new PeriodDeleteProblem(PERMISSION_DENIED_MESSAGE);
-    // Satu pagar dengan perubahan kelompok/jadwal. Rencana kosong boleh
-    // dibersihkan hanya bersamaan dengan penghapusan periodenya; kalau ada
-    // referensi lain, seluruh transaksi termasuk pembersihan di-rollback.
     if (!await lockSchedulePeriod(client, id)) throw new PeriodDeleteProblem("Periode tidak ditemukan atau sudah dihapus.");
+    const activeCheck = await client.query(
+      "SELECT 1 FROM exam_periods WHERE id=$1::bigint AND is_active=true LIMIT 1",
+      [id],
+    );
+    if (activeCheck.rowCount) {
+      throw new PeriodDeleteProblem("Periode sedang aktif untuk login peserta dan tidak dapat dihapus. Nonaktifkan login periode terlebih dahulu.");
+    }
     const used = await client.query(
       `SELECT 1 FROM exam_session_assignments WHERE period_id=$1::bigint
        UNION ALL SELECT 1 FROM exam_schedule_runs WHERE period_id=$1::bigint AND kind='regular' LIMIT 1`, [id],
@@ -100,69 +104,108 @@ export async function deletePeriod(formData: FormData): Promise<ActionResult> {
 
 class LoginPeriodProblem extends Error {}
 
-// Perubahan periode dan pengakhiran sesi harus satu transaksi. Login menahan
-// lock SHARE pada baris yang sama sampai sesi terbit, sehingga sesi dari
-// periode lama tidak dapat lolos ketika admin mengganti periode bersamaan.
+/**
+ * Mengaktifkan / menonaktifkan satu periode (multi-periode aktif), atau menonaktifkan seluruh periode login.
+ * Pengaturan & sesi peserta diperbarui atomik dalam satu transaksi.
+ */
 export async function setActiveLoginPeriod(formData: FormData): Promise<ActionResult> {
   const { allowed } = await requireAdminAccess("periods.manage");
   if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+
   const targets = formData.getAll("periodId");
-  const expectedValues = formData.getAll("expectedPeriodId");
+  const modes = formData.getAll("mode");
   const revisions = formData.getAll("expectedRevision");
   const targetRevisions = formData.getAll("targetRevision");
-  if (targets.length !== 1 || expectedValues.length !== 1 || revisions.length !== 1 || targetRevisions.length !== 1 || typeof targets[0] !== "string" || typeof expectedValues[0] !== "string" || typeof targetRevisions[0] !== "string") {
+  if (targets.length !== 1 || revisions.length !== 1 || targetRevisions.length !== 1 ||
+      typeof targets[0] !== "string" || typeof targetRevisions[0] !== "string") {
     return { ok: false, error: "Permintaan tidak valid. Muat ulang halaman." };
   }
+  const mode = modes.length === 1 && typeof modes[0] === "string" ? modes[0] : (targets[0] === "" ? "clear_all" : "activate");
+  if (!["activate", "deactivate", "clear_all"].includes(mode)) {
+    return { ok: false, error: "Tindakan status login tidak valid." };
+  }
   const target = targets[0] === "" ? null : validPeriodId(targets[0]);
-  const expected = expectedValues[0] === "" ? null : validPeriodId(expectedValues[0]);
   const revision = validRowRevision(revisions[0]);
   const targetRevision = target ? validRowRevision(targetRevisions[0]) : null;
-  if ((targets[0] !== "" && !target) || (expectedValues[0] !== "" && !expected) || !revision ||
-      (target ? !targetRevision : targetRevisions[0] !== "")) {
+  if ((targets[0] !== "" && !target) || !revision || (target ? !targetRevision : targetRevisions[0] !== "")) {
     return { ok: false, error: "Identitas periode tidak valid." };
   }
+  if (mode !== "clear_all" && !target) {
+    return { ok: false, error: "Identitas periode tujuan wajib diisi." };
+  }
 
+  const client = await getPostgresPool().connect();
   try {
-    const client = await getPostgresPool().connect();
-    try {
-      await client.query("BEGIN");
-      const admin = await lockActiveAdminSession(client);
-      if (!admin) throw new LoginPeriodProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
-      if (!adminHasPermission(admin, "periods.manage")) throw new LoginPeriodProblem(PERMISSION_DENIED_MESSAGE);
-      const result = await client.query<{ periodId: string | null; revision: string }>(
-        'SELECT period_id::text AS "periodId", xmin::text AS revision FROM participant_login_settings WHERE id = 1 FOR UPDATE',
+    await client.query("BEGIN");
+    const admin = await lockActiveAdminSession(client);
+    if (!admin) throw new LoginPeriodProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    if (!adminHasPermission(admin, "periods.manage")) throw new LoginPeriodProblem(PERMISSION_DENIED_MESSAGE);
+
+    const result = await client.query<{ periodId: string | null; revision: string }>(
+      'SELECT period_id::text AS "periodId", xmin::text AS revision FROM participant_login_settings WHERE id = 1 FOR UPDATE',
+    );
+    if (result.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
+
+    let messageText = "Status login periode diperbarui.";
+    if (mode === "clear_all") {
+      if (result.rows[0].revision !== revision) {
+        throw new LoginPeriodProblem("Pengaturan login sudah berubah di sesi lain. Muat ulang halaman.");
+      }
+      await client.query("UPDATE exam_periods SET is_active = false, updated_at = clock_timestamp() WHERE is_active = true");
+      await client.query("UPDATE participant_login_settings SET period_id = NULL WHERE id = 1");
+      await client.query("DELETE FROM participant_sessions");
+      messageText = "Semua login peserta dinonaktifkan. Seluruh sesi peserta telah diakhiri.";
+    } else {
+      const period = await client.query<{ revision: string; yearId: string | null; activeYear: string | null; isActive: boolean; name: string }>(
+        `SELECT e.xmin::text AS revision, e.academic_year_id::text AS "yearId", ys.active_year_id::text AS "activeYear",
+           e.is_active AS "isActive", e.name
+         FROM exam_periods e CROSS JOIN academic_year_settings ys
+         WHERE e.id = $1::bigint AND ys.id = 1 FOR UPDATE OF e`,
+        [target],
       );
-      if (result.rowCount !== 1) throw new Error("Pengaturan login peserta tidak tersedia.");
-      // Revisi juga mendeteksi A → B → A saat dialog lama masih terbuka.
-      if (result.rows[0].periodId !== expected || result.rows[0].revision !== revision) {
-        throw new LoginPeriodProblem("Periode login sudah berubah di sesi lain. Tidak ada perubahan; muat ulang halaman.");
+      if (!period.rowCount) throw new LoginPeriodProblem("Periode tidak ditemukan atau sudah dihapus. Muat ulang halaman.");
+      const row = period.rows[0];
+      if (row.revision !== targetRevision) throw new LoginPeriodProblem("Data periode tujuan sudah berubah. Tidak ada perubahan; muat ulang halaman.");
+
+      if (mode === "activate") {
+        if (row.isActive) throw new LoginPeriodProblem("Periode tersebut sudah aktif di sesi lain. Muat ulang halaman.");
+        if (!row.yearId || row.yearId !== row.activeYear) throw new LoginPeriodProblem("Periode harus berada pada tahun ajaran yang sedang aktif.");
+        await client.query("UPDATE exam_periods SET is_active = true, updated_at = clock_timestamp() WHERE id = $1::bigint", [target]);
+        messageText = `Login periode ${row.name} diaktifkan.`;
+      } else {
+        if (!row.isActive) throw new LoginPeriodProblem("Periode tersebut sudah nonaktif di sesi lain. Muat ulang halaman.");
+        await client.query("UPDATE exam_periods SET is_active = false, updated_at = clock_timestamp() WHERE id = $1::bigint", [target]);
+        await client.query(
+          "DELETE FROM participant_sessions s USING participant_identities i WHERE s.participant_identity_id = i.id AND i.period_id = $1::bigint",
+          [target],
+        );
+        messageText = `Login periode ${row.name} dinonaktifkan. Sesi peserta pada periode tersebut diakhiri.`;
       }
-      const changed = result.rows[0].periodId !== target;
-      if (changed) {
-        if (target) {
-          const period = await client.query<{ revision: string; yearId: string | null; activeYear: string | null }>(
-            `SELECT e.xmin::text AS revision,e.academic_year_id::text AS "yearId",ys.active_year_id::text AS "activeYear"
-             FROM exam_periods e CROSS JOIN academic_year_settings ys WHERE e.id=$1::bigint AND ys.id=1 FOR SHARE OF e,ys`, [target]);
-          if (!period.rowCount) throw new LoginPeriodProblem("Periode tidak ditemukan atau sudah dihapus. Muat ulang halaman.");
-          if (period.rows[0].revision !== targetRevision) throw new LoginPeriodProblem("Data periode tujuan sudah berubah. Tidak ada perubahan; muat ulang halaman.");
-          if (!period.rows[0].yearId || period.rows[0].yearId !== period.rows[0].activeYear) throw new LoginPeriodProblem("Periode harus berada pada tahun ajaran yang sedang aktif.");
-        }
-        await client.query("UPDATE participant_login_settings SET period_id = $1::bigint WHERE id = 1", [target]);
-        await client.query("DELETE FROM participant_sessions");
-      }
-      const stillActive = await lockActiveAdminSession(client);
-      if (!stillActive || stillActive.id !== admin.id) throw new LoginPeriodProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
-      await client.query("COMMIT");
-      revalidatePath("/data-peserta/periode");
-      revalidatePath("/peserta/login");
-      revalidatePath("/peserta");
-      return { ok: true, message: !changed ? "Periode login tidak berubah." : target ? "Periode login diaktifkan. Sesi peserta sebelumnya diakhiri." : "Login peserta dinonaktifkan. Sesi peserta sebelumnya diakhiri." };
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => {});
-      throw error;
-    } finally { client.release(); }
+
+      // Sinkronkan participant_login_settings.period_id dengan periode aktif pertama (atau NULL bila habis)
+      const firstActive = await client.query<{ id: string }>(
+        `SELECT e.id::text AS id FROM exam_periods e
+         JOIN academic_year_settings ys ON ys.id = 1 AND ys.active_year_id = e.academic_year_id
+         WHERE e.is_active = true ORDER BY e.start_date DESC, e.id DESC LIMIT 1`,
+      );
+      await client.query("UPDATE participant_login_settings SET period_id = $1::bigint WHERE id = 1", [firstActive.rows[0]?.id ?? null]);
+    }
+
+    const stillActive = await lockActiveAdminSession(client);
+    if (!stillActive || stillActive.id !== admin.id) throw new LoginPeriodProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    await client.query("COMMIT");
+
+    revalidatePath("/data-peserta/periode");
+    revalidatePath("/data-peserta/kartu");
+    revalidatePath("/peserta/login");
+    revalidatePath("/peserta");
+    revalidatePath("/");
+    return { ok: true, message: messageText };
   } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
     if (error instanceof LoginPeriodProblem) return { ok: false, error: error.message };
     return { ok: false, error: "Hasil pengaturan belum dapat dipastikan. Periksa sesi dan koneksi, lalu muat ulang halaman." };
+  } finally {
+    client.release();
   }
 }

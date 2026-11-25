@@ -9,14 +9,17 @@ import { BrandingProvider } from "@/components/branding-context";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { AdminSessionUser } from "@/lib/admin-auth";
 import type { PublicAppSettings } from "@/lib/app-settings-types";
+import type { AppModeId } from "@/lib/app-settings-validation.mjs";
 
 export function AppShell({
   branding,
   adminUser,
+  appMode = "production",
   children,
 }: Readonly<{
   branding: PublicAppSettings;
   adminUser: AdminSessionUser | null;
+  appMode?: AppModeId;
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
@@ -35,7 +38,9 @@ export function AppShell({
 
   return (
     <BrandingProvider value={branding}>
-      <AdminUserProvider value={adminUser}>{content}</AdminUserProvider>
+      <AdminUserProvider value={adminUser} appMode={appMode}>
+        {content}
+      </AdminUserProvider>
     </BrandingProvider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, CircleDashed, Info } from "lucide-react";
+import { CheckCircle2, Info } from "lucide-react";
 
 import { useBranding } from "@/components/branding-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -29,8 +29,8 @@ export function ProjectDialog() {
           <DialogDescription>{branding.schoolName || branding.appDescription || "Platform ujian berbasis jaringan lokal untuk sekolah."}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-1 text-sm">
-          <div className="flex gap-2.5"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" /><span>Tahun ajaran, periode, kelas, siswa, akun, kartu A4, bank soal, impor/ekspor Word, jadwal, token, pengerjaan, monitoring, nilai akhir, rekap Excel, dan identitas aplikasi aktif.</span></div>
-          <div className="flex gap-2.5"><CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground" /><span>Pengaturan pengguna/hak akses granular dan backup/pemulihan melalui antarmuka akan melengkapi tahap berikutnya.</span></div>
+          <div className="flex gap-2.5"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" /><span>Tahun ajaran, periode multi-login, kelas, siswa, akun, kartu A4, bank soal, impor/ekspor Word, jadwal, token, pengerjaan, monitoring, nilai akhir, dan rekap Excel aktif.</span></div>
+          <div className="flex gap-2.5"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" /><span>Pengaturan aplikasi, peran/hak akses granular pengguna, serta backup dan pemulihan terenkripsi tersedia pada menu Pengaturan.</span></div>
         </div>
         <Alert className="rounded-xl bg-muted/50">
           <Info className="size-4" />

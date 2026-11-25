@@ -4,7 +4,7 @@ import sharp from "sharp";
 
 import { parseMathML } from "../../src/lib/question-math.mjs";
 import { loginAsAdmin } from "./helpers";
-import { cleanupTopics, createQuestion, createTopic, deletion, sessionDigest, suffix, testDatabase } from "./question-helpers";
+import { cleanupTopics, createQuestion, createTopic, deletion, selectComboboxOption, sessionDigest, suffix, testDatabase } from "./question-helpers";
 
 async function createPeriod(client: pg.Client, tag: string) {
   return (await client.query<{ id: string }>("INSERT INTO exam_periods(name,start_date,end_date) VALUES($1,'2026-01-01','2026-12-31') RETURNING id::text AS id", [`Periode Tes ${tag}`])).rows[0].id;
@@ -57,12 +57,12 @@ test("admin menyusun, melihat, mengubah, dan menghapus rancangan dengan soal dan
     await page.getByRole("button", { name: "Data Tes", exact: true }).click();
     await page.getByRole("link", { name: "Daftar Tes", exact: true }).click();
     await expect(page).toHaveURL(/\/data-tes\/daftar$/);
-    await expect(page.getByText("Rancangan admin, pratinjau data fiktif")).toBeVisible();
+    await expect(page.getByText("Pengelolaan jadwal & pelaksanaan tes")).toBeVisible();
     const form = await openForm(page);
     await fillForm(form, periodId, `Ujian ${tag}`);
     await form.getByLabel("Zona waktu").selectOption("WITA");
     await expect(form.getByText(/Perkiraan akhir:.*18\/11\/2026 01:00 WITA/)).toBeVisible();
-    await form.getByLabel("Filter topik / mata pelajaran").selectOption(topics[0]);
+    await selectComboboxOption(form, "Filter topik / mata pelajaran", `Matematika Tes ${tag}`);
     await form.getByRole("button", { name: `Lihat isi soal ${q1.id}` }).click();
     await expect(form.locator('p[dir="rtl"]')).toContainText("سُؤَالٌ");
     await expect(form.locator("table")).toHaveCount(1); await expect(form.locator("math mfrac")).toHaveCount(1);
@@ -72,7 +72,7 @@ test("admin menyusun, melihat, mengubah, dan menghapus rancangan dengan soal dan
     await expect(imageElement).toBeVisible();
     await expect.poll(() => imageElement.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(4);
     await form.getByRole("button", { name: "Pilih semua hasil" }).click();
-    await form.getByLabel("Filter topik / mata pelajaran").selectOption(topics[1]);
+    await selectComboboxOption(form, "Filter topik / mata pelajaran", `Arab Tes ${tag}`);
     await form.getByLabel(`Pilih soal ${q3.id}`).check();
     await form.getByRole("button", { name: `Naikkan soal ${q3.id}` }).click();
     await form.getByRole("button", { name: `Naikkan soal ${q3.id}` }).click();

@@ -27,7 +27,9 @@ async function snapshot(tables, sequences) {
   const result = {};
   for (const table of tables) {
     const object = table === "exam_periods"
-      ? "(to_jsonb(r)-'academic_year_id')"
+      ? "(to_jsonb(r)-'academic_year_id'-'is_active')"
+      : table === "question_topics"
+        ? "(to_jsonb(r)-'tags'-'tags_signature')"
       : table === "admin_users"
         ? "(to_jsonb(r)-'full_name'-'is_superuser'-'is_active'-'role_id'-'updated_at'-'last_login_at')"
         : "to_jsonb(r)";

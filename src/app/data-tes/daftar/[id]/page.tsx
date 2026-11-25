@@ -20,7 +20,7 @@ export const metadata = { title: "Pelaksanaan Tes — NusaCBT", robots: { index:
 export const dynamic = "force-dynamic";
 class SchedulePermissionDenied extends Error {}
 type QuestionRow = {
-  id:string; revision:string; topicId:string; topicName:string; prompt:string; promptRich:unknown|null; hasPromptImage:boolean;
+  id:string; revision:string; topicId:string; topicName:string; topicTags:string[]; prompt:string; promptRich:unknown|null; hasPromptImage:boolean;
   a:string;b:string;c:string;d:string;e:string;richA:unknown|null;richB:unknown|null;richC:unknown|null;richD:unknown|null;richE:unknown|null;
   hasA:boolean;hasB:boolean;hasC:boolean;hasD:boolean;hasE:boolean;correctOption:QuestionLetter;
 };
@@ -70,6 +70,7 @@ export default async function ExamRunPage({ params, searchParams }: { params: Pr
       plan.students.push(...missing);
       const questionRows=(await client.query<QuestionRow>(
         `SELECT q.id::text AS id,q.xmin::text AS revision,q.topic_id::text AS "topicId",t.name AS "topicName",
+          COALESCE(t.tags,ARRAY[]::text[]) AS "topicTags",
           q.prompt_text AS prompt,q.prompt_rich AS "promptRich",q.prompt_image IS NOT NULL AS "hasPromptImage",
           q.option_a_text AS a,q.option_b_text AS b,q.option_c_text AS c,q.option_d_text AS d,q.option_e_text AS e,
           q.option_a_rich AS "richA",q.option_b_rich AS "richB",q.option_c_rich AS "richC",q.option_d_rich AS "richD",q.option_e_rich AS "richE",
@@ -77,7 +78,7 @@ export default async function ExamRunPage({ params, searchParams }: { params: Pr
           q.option_d_image IS NOT NULL AS "hasD",q.option_e_image IS NOT NULL AS "hasE",q.correct_option AS "correctOption"
          FROM question_bank q JOIN question_topics t ON t.id=q.topic_id ORDER BY q.id`,
       )).rows;
-      questions=questionRows.map((row)=>({id:row.id,revision:row.revision,topicId:row.topicId,topicName:row.topicName,prompt:row.prompt,promptRich:row.promptRich,hasPromptImage:row.hasPromptImage,correctOption:row.correctOption,options:[
+      questions=questionRows.map((row)=>({id:row.id,revision:row.revision,topicId:row.topicId,topicName:row.topicName,topicTags:row.topicTags??[],prompt:row.prompt,promptRich:row.promptRich,hasPromptImage:row.hasPromptImage,correctOption:row.correctOption,options:[
         {letter:"A",text:row.a,rich:row.richA,hasImage:row.hasA},{letter:"B",text:row.b,rich:row.richB,hasImage:row.hasB},
         {letter:"C",text:row.c,rich:row.richC,hasImage:row.hasC},{letter:"D",text:row.d,rich:row.richD,hasImage:row.hasD},
         {letter:"E",text:row.e,rich:row.richE,hasImage:row.hasE},

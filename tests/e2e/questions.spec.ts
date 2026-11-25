@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import sharp from "sharp";
 
 import { loginAsAdmin } from "./helpers";
-import { cleanupTopics, createQuestion, createTopic, deletion, editor, fillDraft, LETTERS, questionRow, SLOTS, suffix, testDatabase } from "./question-helpers";
+import { cleanupTopics, createQuestion, createTopic, deletion, editor, fillDraft, LETTERS, questionRow, selectComboboxOption, SLOTS, suffix, testDatabase } from "./question-helpers";
 
 test("kategori kosong meminta admin menyiapkan topik sebelum menambah soal", async ({ page }) => {
   const client = testDatabase(); await client.connect();
@@ -35,7 +35,7 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
     await page.getByRole("link", { name: "Manajemen Soal", exact: true }).click();
     await expect(page).toHaveURL(/\/data-modul\/soal$/);
     await expect(page.getByRole("heading", { name: "Manajemen Soal", exact: true })).toBeVisible();
-    await expect(page.getByText(/ekspor Word belum tersedia/)).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: "Export Soal Word" })).toBeVisible();
 
     let form = await editor(page);
     await fillDraft(form, firstTopic, "", ["1", "2", "3", "4", "5"]);
@@ -66,10 +66,10 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
     await page.getByLabel("Cari soal").fill(`JAWABAN KHUSUS ${tag.toUpperCase()}`);
     await expect(questionRow(page, id)).toBeVisible();
     await expect(page.getByText("1 soal ditemukan")).toBeVisible();
-    await page.getByLabel("Filter kategori").selectOption({ label: secondTopic });
+    await selectComboboxOption(page, "Filter kategori", secondTopic);
     await expect(questionRow(page, id)).toHaveCount(0);
     await expect(page.getByText("Soal tidak ditemukan")).toBeVisible();
-    await page.getByLabel("Filter kategori").selectOption({ label: firstTopic });
+    await selectComboboxOption(page, "Filter kategori", firstTopic);
     await expect(questionRow(page, id)).toBeVisible();
 
     await questionRow(page, id).getByRole("button", { name: `Lihat soal ${id}` }).click();
@@ -81,14 +81,14 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
     await detail.getByRole("button", { name: "Tutup" }).click();
 
     form = await editor(page, id);
-    await form.getByLabel("Topik / mata pelajaran").selectOption({ label: secondTopic });
+    await selectComboboxOption(form, "Topik / mata pelajaran", secondTopic);
     await form.getByRole("textbox", { name: "Isi soal", exact: true }).fill(changed);
     await form.getByLabel("Jawaban B benar").check();
     await form.getByRole("button", { name: "Simpan soal" }).click();
     await expect(form).toBeHidden();
     await expect(questionRow(page, id)).toHaveCount(0);
     await page.getByLabel("Cari soal").fill(tag);
-    await page.getByLabel("Filter kategori").selectOption({ label: secondTopic });
+    await selectComboboxOption(page, "Filter kategori", secondTopic);
     await expect(questionRow(page, id)).toContainText(changed);
     expect((await client.query("SELECT topic_id::text,prompt_text,correct_option FROM question_bank WHERE id=$1", [id])).rows).toEqual([
       { topic_id: topics[1], prompt_text: changed, correct_option: "B" },
@@ -138,7 +138,7 @@ test("enam gambar disimpan atomik, hanya admin dapat mengakses, dan perubahan ti
     const jpeg = await sharp({ create: { width: 48, height: 30, channels: 3, background: "blue" } }).jpeg().toBuffer();
     await loginAsAdmin(page); await page.goto("/data-modul/soal");
     const form = await editor(page);
-    await form.getByLabel("Topik / mata pelajaran").selectOption({ label: topic });
+    await selectComboboxOption(form, "Topik / mata pelajaran", topic);
     await form.getByLabel("Jawaban E benar").check();
     for (const slot of SLOTS) {
       const label = slot === "prompt" ? "Gambar soal" : `Gambar pilihan ${slot}`;
@@ -293,7 +293,7 @@ test("kategori yang dipakai tidak dapat dihapus dan penggantian nama mempertahan
     const question = await createQuestion(client, topics[0], `Soal referensi ${tag}`);
     await expect(client.query("DELETE FROM question_topics WHERE id=$1", [topics[0]])).rejects.toMatchObject({ code: expect.stringMatching(/^(23503|23001)$/) });
     await loginAsAdmin(page); await page.goto("/data-modul/topik");
-    await page.getByLabel("Cari topik atau mata pelajaran").fill(tag);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(tag);
     const row = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: topic, exact: true }) });
     await row.getByRole("button", { name: `Hapus topik ${topic}` }).click();
     const confirm = page.getByRole("dialog", { name: "Hapus topik?" });
@@ -331,12 +331,12 @@ test("pencarian dan paginasi menangani lebih dari dua halaman serta filter kateg
     await page.getByRole("button", { name: "Halaman berikutnya" }).click();
     await expect(page.getByText("Halaman 3 dari 3 · 25 soal")).toBeVisible();
     await expect(page.getByRole("listitem").filter({ hasText: `Pertanyaan ${tag} 01` })).toBeVisible();
-    await page.getByLabel("Filter kategori").selectOption({ label: topic });
+    await selectComboboxOption(page, "Filter kategori", topic);
     await expect(page.getByText("13 soal ditemukan")).toBeVisible();
     await expect(page.getByText("Halaman 1 dari 2 · 13 soal")).toBeVisible();
     await page.getByRole("button", { name: "Halaman berikutnya" }).click();
     await expect(page.getByText("Halaman 2 dari 2 · 13 soal")).toBeVisible();
-    await page.getByLabel("Filter kategori").selectOption({ label: second });
+    await selectComboboxOption(page, "Filter kategori", second);
     await expect(page.getByText("12 soal ditemukan")).toBeVisible();
     await expect(page.getByText("Halaman 1 dari 2 · 12 soal")).toBeVisible();
   } finally { await cleanupTopics(client, topics); await client.end(); }

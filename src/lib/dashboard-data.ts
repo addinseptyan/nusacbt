@@ -24,6 +24,7 @@ export type DashboardSummary = {
   totalPeriods: number;
   unmappedPeriods: number;
   loginPeriodName: string | null;
+  activeLoginPeriodCount: number;
   activeLoginAccounts: number;
   activeParticipantSessions: number;
   totalQuestions: number;
@@ -55,6 +56,7 @@ export async function loadDashboardSummary(): Promise<DashboardSummary> {
         totalPeriods: number;
         unmappedPeriods: number;
         loginPeriodName: string | null;
+        activeLoginPeriodCount: number;
         activeLoginAccounts: number;
         activeParticipantSessions: number;
         totalQuestions: number;
@@ -76,11 +78,11 @@ export async function loadDashboardSummary(): Promise<DashboardSummary> {
           LEFT JOIN academic_years y ON y.id = s.active_year_id
           WHERE s.id = 1
         ),
-        login_period AS (
-          SELECT p.id, p.name
-          FROM participant_login_settings s
-          LEFT JOIN exam_periods p ON p.id = s.period_id
-          WHERE s.id = 1
+        login_periods AS (
+          SELECT ep.id, ep.name, ep.start_date
+          FROM exam_periods ep
+          JOIN active_year ay ON ay.id = ep.academic_year_id
+          WHERE ep.is_active = true
         )
         SELECT
           (SELECT count(*)::int FROM school_students) AS "totalStudents",
@@ -89,11 +91,12 @@ export async function loadDashboardSummary(): Promise<DashboardSummary> {
           (SELECT count(*)::int FROM academic_years) AS "totalYears",
           (SELECT count(*)::int FROM exam_periods) AS "totalPeriods",
           (SELECT count(*)::int FROM exam_periods WHERE academic_year_id IS NULL) AS "unmappedPeriods",
-          (SELECT name FROM login_period) AS "loginPeriodName",
+          (SELECT string_agg(name, ', ' ORDER BY start_date DESC, id DESC) FROM login_periods) AS "loginPeriodName",
+          (SELECT count(*)::int FROM login_periods) AS "activeLoginPeriodCount",
           (SELECT count(*)::int
              FROM participant_identities i
              JOIN student_class_placements p ON p.student_id = i.student_id AND p.period_id = i.period_id AND p.ended_at IS NULL
-             JOIN login_period lp ON lp.id = i.period_id) AS "activeLoginAccounts",
+             JOIN login_periods lp ON lp.id = i.period_id) AS "activeLoginAccounts",
           (SELECT count(*)::int FROM participant_sessions WHERE expires_at > clock_timestamp()) AS "activeParticipantSessions",
           (SELECT count(*)::int FROM question_bank) AS "totalQuestions",
           (SELECT count(*)::int FROM question_topics) AS "totalTopics",

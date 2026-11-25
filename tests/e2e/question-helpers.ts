@@ -51,8 +51,23 @@ export async function deletion(page: Page, id: string): Promise<Locator> {
   return dialog;
 }
 
+export async function selectComboboxOption(scope: Locator | Page, label: string, optionText: string) {
+  const trigger = scope.getByLabel(label);
+  const listId = await trigger.getAttribute("aria-controls");
+  await trigger.click();
+  const root = "page" in scope ? scope.page() : scope;
+  const listbox = listId ? root.locator(`[id="${listId}"]`) : root.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+  const escaped = optionText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await listbox
+    .getByRole("option")
+    .filter({ has: root.locator("span.break-words", { hasText: new RegExp(`^${escaped}$`) }) })
+    .first()
+    .click();
+}
+
 export async function fillDraft(dialog: Locator, topic: string, prompt: string, choices = ["Satu", "Dua", "Tiga", "Empat", "Lima"], correct = "D") {
-  await dialog.getByLabel("Topik / mata pelajaran").selectOption({ label: topic });
+  await selectComboboxOption(dialog, "Topik / mata pelajaran", topic);
   await dialog.getByRole("textbox", { name: "Isi soal", exact: true }).fill(prompt);
   for (const [index, letter] of LETTERS.entries()) await dialog.getByLabel(`Pilihan ${letter}`, { exact: true }).fill(choices[index]);
   await dialog.getByLabel(`Jawaban ${correct} benar`).check();

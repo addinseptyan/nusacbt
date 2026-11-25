@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
-import { CircleAlert, Info } from "lucide-react";
+import { CircleAlert, Info, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { useCanDevCascadeDelete } from "@/components/admin-user-context";
+import { DevCascadeDeleteDialog } from "@/components/dev-cascade-delete-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,9 +21,11 @@ const field = "h-10 w-full min-w-0 rounded-lg border border-input bg-background 
 
 export function AcademicYearManager({ years, activeYearId, revision }: { years: YearItem[]; activeYearId: string | null; revision: string }) {
   const router = useRouter();
+  const canDevCascade = useCanDevCascadeDelete();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const [targetYear, setTargetYear] = useState<YearItem | null | undefined>(undefined);
+  const [cascadeYear, setCascadeYear] = useState<YearItem | null>(null);
   const [source, setSource] = useState(""); const [target, setTarget] = useState("");
   const [preview, setPreview] = useState<RolloverPreview | null>(null);
   const [choices, setChoices] = useState<Record<string, Choice>>({});
@@ -55,11 +59,11 @@ export function AcademicYearManager({ years, activeYearId, revision }: { years: 
     } catch { setError("Hasil belum dapat dipastikan. Periksa roster tujuan sebelum mencoba lagi."); setConfirmRollover(false); } });
   }
   return <div className="space-y-5">
-    <Alert><Info className="size-4" /><AlertTitle>Satu tahun aktif</AlertTitle><AlertDescription>Periode ujian dan roster siswa berada di dalam tahun ajaran. Mengganti atau menonaktifkan tahun mengakhiri sesi peserta dan menonaktifkan login periode lama; aktifkan periode baru secara manual setelah siap.</AlertDescription></Alert>
+    <Alert><Info className="size-4" /><AlertTitle>Satu tahun aktif</AlertTitle><AlertDescription>Periode ujian dan roster siswa berada di dalam tahun ajaran. Mengganti atau menonaktifkan tahun menonaktifkan semua periode login aktif di tahun lama dan mengakhiri sesi peserta; aktifkan periode baru secara manual setelah siap.</AlertDescription></Alert>
     {error && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertTitle>Belum dapat dilanjutkan</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
     <Card className="gap-0 rounded-[20px] p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-bold">Daftar tahun ajaran</h2><p className="mt-1 text-xs text-muted-foreground">Aktif: <strong>{activeYear?.name ?? "belum ada"}</strong>. Tahun lama tetap dapat dilihat.</p></div>{activeYear && <Button variant="outline" size="sm" disabled={pending} onClick={() => setTargetYear(null)}>Nonaktifkan tahun</Button>}</div>
       <form onSubmit={create} className="mt-4 flex flex-wrap items-end gap-2"><div className="w-48"><label htmlFor="year-name" className="mb-1 block text-xs font-semibold">Tahun ajaran baru</label><input id="year-name" name="name" required placeholder="2026/2027" maxLength={9} className={field} /></div><Button type="submit" disabled={pending}>Tambah tahun</Button></form>
-      <ul className="mt-4 divide-y border-t">{years.map((year) => <li key={year.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><strong className="text-sm">{year.name}</strong> {year.id === activeYearId && <Badge>Aktif</Badge>}<p className="mt-1 text-xs text-muted-foreground">{year.students} siswa aktif · {year.periods} periode</p></div>{year.id !== activeYearId && <Button size="sm" variant="outline" disabled={pending} onClick={() => setTargetYear(year)}>Aktifkan {year.name}</Button>}</li>)}</ul>
+      <ul className="mt-4 divide-y border-t">{years.map((year) => <li key={year.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><strong className="text-sm">{year.name}</strong> {year.id === activeYearId && <Badge>Aktif</Badge>}<p className="mt-1 text-xs text-muted-foreground">{year.students} siswa aktif · {year.periods} periode</p></div><div className="flex flex-wrap gap-2">{year.id !== activeYearId && <Button size="sm" variant="outline" disabled={pending} onClick={() => setTargetYear(year)}>Aktifkan {year.name}</Button>}{canDevCascade && <Button size="sm" variant="outline" disabled={pending} aria-label={`Hapus tahun ajaran ${year.name} (Mode Dev)`} onClick={() => setCascadeYear(year)} className="border-amber-400 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/40"><Trash2 className="size-3.5" /> Hapus (Mode Dev)</Button>}</div></li>)}</ul>
       {!years.length && <p className="pt-4 text-sm text-muted-foreground">Belum ada tahun ajaran. Tambahkan terlebih dahulu.</p>}
     </Card>
     <Card className="gap-0 rounded-[20px] p-5"><h2 className="font-bold">Perpindahan siswa ke tahun baru</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Sistem mengusulkan X → XI dan XI → XII pada jurusan yang sama jika kelas tujuan tersedia. Periksa setiap siswa; kelas XII dan kelas tanpa usulan harus ditentukan sendiri. Hanya siswa berstatus aktif pada tahun asal yang disertakan.</p>
@@ -76,7 +80,14 @@ export function AcademicYearManager({ years, activeYearId, revision }: { years: 
       </div>}
     </Card>
     <p className="text-xs text-muted-foreground">Tambahkan siswa baru di <Link href="/data-peserta/siswa" className="font-semibold underline">Data Siswa</Link> atau melalui impor Excel.</p>
-    <Dialog open={targetYear !== undefined} onOpenChange={(open) => { if (!open && !pending) { setTargetYear(undefined); setError(""); } }}><DialogContent><DialogHeader><DialogTitle>{targetYear ? `Aktifkan ${targetYear.name}?` : "Nonaktifkan tahun ajaran?"}</DialogTitle><DialogDescription>Login periode lama akan dinonaktifkan dan semua sesi peserta diakhiri. Riwayat, akun dan sandi tetap disimpan. Admin perlu mengaktifkan periode login yang sesuai secara manual.</DialogDescription></DialogHeader>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<DialogFooter><Button variant="outline" disabled={pending} onClick={() => setTargetYear(undefined)}>Batal</Button><Button disabled={pending} onClick={activate}>Ya, lanjutkan</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={targetYear !== undefined} onOpenChange={(open) => { if (!open && !pending) { setTargetYear(undefined); setError(""); } }}><DialogContent><DialogHeader><DialogTitle>{targetYear ? `Aktifkan ${targetYear.name}?` : "Nonaktifkan tahun ajaran?"}</DialogTitle><DialogDescription>Semua periode login pada tahun sebelumnya akan dinonaktifkan dan seluruh sesi peserta diakhiri. Riwayat, akun dan sandi tetap disimpan. Admin perlu mengaktifkan periode login yang sesuai secara manual.</DialogDescription></DialogHeader>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<DialogFooter><Button variant="outline" disabled={pending} onClick={() => setTargetYear(undefined)}>Batal</Button><Button disabled={pending} onClick={activate}>Ya, lanjutkan</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={confirmRollover} onOpenChange={(open) => { if (!pending) setConfirmRollover(open); }}><DialogContent><DialogHeader><DialogTitle>Simpan perpindahan siswa?</DialogTitle><DialogDescription>{preview?.rows.length} siswa diperiksa dari {preview?.sourceName} ke {preview?.targetName}. Siswa yang sudah ada di tujuan tidak ditimpa. Siswa lulus/keluar tercatat sebagai riwayat dan tidak ditempatkan pada periode tujuan. Data sumber tidak dihapus.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={pending} onClick={() => setConfirmRollover(false)}>Batal</Button><Button disabled={pending} onClick={saveRollover}>Ya, simpan</Button></DialogFooter></DialogContent></Dialog>
+    <DevCascadeDeleteDialog
+      open={cascadeYear !== null}
+      onOpenChange={(open) => { if (!open) setCascadeYear(null); }}
+      entityType="academic_year"
+      entityId={cascadeYear?.id ?? null}
+      entityTitle={cascadeYear?.name ?? ""}
+    />
   </div>;
 }

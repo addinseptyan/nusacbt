@@ -20,7 +20,7 @@ export default async function PasswordPage({ searchParams }: { searchParams: Pro
   const periodId = validDataId(params.periode);
   let data: PasswordPageData;
   try {
-    data = await loadPasswordPage(periodId);
+    data = await loadPasswordPage(periodId, { defaultToFirst: !supplied });
     if (supplied && !periodId) data.selectionMissing = true;
   } catch {
     return (

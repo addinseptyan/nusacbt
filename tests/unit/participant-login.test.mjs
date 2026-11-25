@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { participantAttemptBucket, participantPageNumber, participantSessionDigest, parseParticipantCredentials } from "../../src/lib/participant-login-validation.mjs";
+import { parseOptionalParticipantPeriodId, participantAttemptBucket, participantPageNumber, participantSessionDigest, parseParticipantCredentials } from "../../src/lib/participant-login-validation.mjs";
 
 test("kredensial tidak menerima periode dari klien dan tetap menerima sandi lama", () => {
   assert.deepEqual(parseParticipantCredentials("  Abc.07 ", "  Password-fiktif-123  "), { username: "abc.07", password: "  Password-fiktif-123  " });
@@ -26,4 +26,8 @@ test("digest sesi hanya menerima token acak berformat dan paginasi dibatasi", ()
   assert.notDeepEqual(participantSessionDigest(token), participantSessionDigest("B".repeat(43)));
   assert.equal(participantPageNumber("2"), 2);
   for (const invalid of [undefined, "0", "-1", "01", "1.1", "1000000", ["2"]]) assert.equal(participantPageNumber(invalid), 1);
+  assert.equal(parseOptionalParticipantPeriodId(undefined), null);
+  assert.equal(parseOptionalParticipantPeriodId(""), null);
+  assert.equal(parseOptionalParticipantPeriodId("42"), "42");
+  for (const badPeriod of ["0", "-1", "abc", "1 2"]) assert.equal(parseOptionalParticipantPeriodId(badPeriod), "invalid");
 });

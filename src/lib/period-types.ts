@@ -6,4 +6,5 @@ export type ExamPeriod = {
   revision: string;
   yearId: string | null;
   yearName: string | null;
+  isActive: boolean;
 };

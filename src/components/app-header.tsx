@@ -1,11 +1,11 @@
 "use client";
 
-import { ChevronRight, LogOut } from "lucide-react";
+import { ChevronRight, LogOut, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { logoutAction } from "@/app/login/actions";
-import { useCurrentAdminUser } from "@/components/admin-user-context";
+import { useAdminAppMode, useCurrentAdminUser } from "@/components/admin-user-context";
 import { useBranding } from "@/components/branding-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ export function AppHeader() {
   const pathname = usePathname();
   const branding = useBranding();
   const currentUser = useCurrentAdminUser();
+  const appMode = useAdminAppMode();
   const page = findNavigationPage(pathname);
   const displayName = currentUser?.fullName || currentUser?.username || "Admin";
   const roleLabel = currentUser
@@ -27,7 +28,7 @@ export function AppHeader() {
   const initial = displayName.slice(0, 1).toUpperCase() || "A";
 
   return (
-    <header className="sticky top-0 z-10 flex h-[72px] shrink-0 items-center justify-between gap-3 border-b border-border bg-card/95 px-4 backdrop-blur-md sm:px-7 lg:px-9">
+    <header className="sticky top-0 z-40 flex h-[72px] shrink-0 items-center justify-between gap-3 border-b border-border bg-card/95 px-4 backdrop-blur-md sm:px-7 lg:px-9">
       <div className="flex min-w-0 items-center gap-3">
         <SidebarTrigger aria-label="Buka atau tutup sidebar" className="size-9 rounded-lg text-muted-foreground hover:text-foreground" />
         <Separator orientation="vertical" className="h-5!" />
@@ -40,6 +41,17 @@ export function AppHeader() {
         </nav>
       </div>
       <div className="flex shrink-0 items-center gap-2.5 sm:gap-4">
+        {appMode === "dev" && (
+          <Link
+            href="/pengaturan/aplikasi"
+            prefetch={false}
+            data-testid="dev-mode-header-pill"
+            className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-900 transition-colors hover:bg-amber-200 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+          >
+            <Wrench className="size-3" />
+            <span>Mode Dev</span>
+          </Link>
+        )}
         <span className="hidden max-w-44 items-center gap-2 truncate rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-accent-foreground sm:inline-flex">
           <span className="size-1.5 shrink-0 rounded-full bg-primary" /> <span className="truncate">{branding.schoolName || "Server lokal"}</span>
         </span>

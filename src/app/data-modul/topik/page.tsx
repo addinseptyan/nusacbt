@@ -18,7 +18,7 @@ export default async function TopicsPage() {
   let topics: QuestionTopic[];
   try {
     const result = await getPostgresPool().query<QuestionTopic>(
-      "SELECT id::text AS id, name, xmin::text AS revision FROM question_topics ORDER BY lower(name), name, id",
+      "SELECT id::text AS id, name, tags, xmin::text AS revision FROM question_topics ORDER BY lower(name), tags_signature, name, id",
     );
     topics = result.rows;
   } catch {
@@ -42,7 +42,7 @@ export default async function TopicsPage() {
         <div className="min-w-0">
           <p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data modul</p>
           <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Topik / Mata Pelajaran</h1>
-          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">Siapkan daftar kategori sebagai fondasi bank soal.</p>
+          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">Siapkan daftar mata pelajaran atau topik beserta tag pengelompokan sebagai fondasi bank soal.</p>
         </div>
       </div>
       <TopicManager topics={topics} />

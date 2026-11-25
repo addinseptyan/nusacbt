@@ -72,6 +72,60 @@ test("validateAppSettingsInput menolak nama aplikasi kosong, palet tidak valid, 
     }).ok,
     false,
   );
+  const devMode = validateAppSettingsInput({
+    appName: "NusaCBT",
+    appDescription: "",
+    schoolName: "Sekolah",
+    participantInfo: "",
+    colorPalette: "emerald",
+    appMode: "dev",
+    timelineDefaultDays: "3",
+    revision: "5",
+  });
+  assert.equal(devMode.ok, true);
+  if (devMode.ok) {
+    assert.equal(devMode.value.appMode, "dev");
+    assert.equal(devMode.value.timelineDefaultDays, 3);
+  }
+  assert.equal(
+    validateAppSettingsInput({
+      appName: "NusaCBT",
+      appDescription: "",
+      schoolName: "Sekolah",
+      participantInfo: "",
+      colorPalette: "emerald",
+      appMode: "staging",
+      timelineDefaultDays: "3",
+      revision: "5",
+    }).ok,
+    false,
+  );
+  assert.equal(
+    validateAppSettingsInput({
+      appName: "NusaCBT",
+      appDescription: "",
+      schoolName: "Sekolah",
+      participantInfo: "",
+      colorPalette: "emerald",
+      appMode: "production",
+      timelineDefaultDays: "8",
+      revision: "5",
+    }).ok,
+    false,
+  );
+  assert.equal(
+    validateAppSettingsInput({
+      appName: "NusaCBT",
+      appDescription: "",
+      schoolName: "Sekolah",
+      participantInfo: "",
+      colorPalette: "emerald",
+      appMode: "production",
+      timelineDefaultDays: "0",
+      revision: "5",
+    }).ok,
+    false,
+  );
 });
 
 test("normalizeBrandingImage menerima PNG/JPEG statis dan menolak SVG atau berkas melebihi batas", async () => {

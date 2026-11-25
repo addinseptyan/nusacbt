@@ -135,12 +135,14 @@ test("hanya kelas dan pencarian; kartu selalu memakai periode login aktif", asyn
     await expect(list.getByRole("listitem")).toHaveCount(1); await expect(list).toContainText(f.login.studentBName);
     await page.goto(`/data-peserta/kartu?tes=${f.login.activeTest}&kategori=regular`);
     await expect(page.getByText("Filter tidak valid")).toBeVisible();
+    await client.query("UPDATE exam_periods SET is_active=(id=$1::bigint) WHERE id=ANY($2::bigint[])", [f.login.periodB, [f.login.periodA, f.login.periodB]]);
     await client.query("UPDATE participant_login_settings SET period_id=$1 WHERE id=1", [f.login.periodB]);
     await page.goto("/data-peserta/kartu");
     await expect(page.getByText(f.login.periodBName).first()).toBeVisible();
     await expect(list.getByRole("listitem")).toHaveCount(1); await expect(list).toContainText(f.login.studentBName);
     await page.goto(`/data-peserta/kartu?periode=${f.login.periodA}`);
     await expect(page.getByText("Periode login berubah")).toBeVisible();
+    await client.query("UPDATE exam_periods SET is_active=false WHERE id=ANY($1::bigint[])", [[f.login.periodA, f.login.periodB]]);
     await client.query("UPDATE participant_login_settings SET period_id=NULL WHERE id=1");
     await page.goto("/data-peserta/kartu");
     await expect(page.getByText("Belum ada periode login aktif")).toBeVisible();

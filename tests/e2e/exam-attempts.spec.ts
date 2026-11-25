@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { loginAsAdmin } from "./helpers";
-import { activateLoginPeriod, loginParticipant, loginTestDatabase, resetLoginGlobal } from "./participant-login-helpers";
+import { activateLoginPeriod, deactivateLoginPeriod, loginParticipant, loginTestDatabase, resetLoginGlobal } from "./participant-login-helpers";
 import { cleanupAttemptFixture, openStart, PIXEL_PNG, seedAttemptFixture, seedAttemptToken, startWithToken } from "./exam-attempt-helpers";
 
 test.use({ actionTimeout: 15_000 });
@@ -173,13 +173,13 @@ test("sesi peserta periode lain tidak dapat membuka attempt atau gambar", async 
     await page.bringToFront();
     await seedAttemptToken(client, f, "global", "112233"); await loginParticipant(page, f.login.username, f.login.passwordA);
     const attempt = await startWithToken(page, f.runId, "112233");
-    await admin.bringToFront(); await loginAsAdmin(admin); await activateLoginPeriod(admin, f.login.periodBName);
+    await admin.bringToFront(); await loginAsAdmin(admin); await activateLoginPeriod(admin, f.login.periodBName); await deactivateLoginPeriod(admin, f.login.periodAName);
     await other.bringToFront(); await loginParticipant(other, f.login.username, f.login.passwordB);
     expect((await other.request.get(`/peserta/pengerjaan/${attempt}/gambar/1/prompt`)).status()).toBe(404);
     const response = await other.goto(`/peserta/pengerjaan/${attempt}`); expect(response?.status()).toBe(404);
     expect(await other.content()).not.toContain(f.login.questionSecret);
     await page.bringToFront(); await page.goto(`/peserta/pengerjaan/${attempt}`); await expect(page).toHaveURL(/\/peserta\/login\?sesi=berakhir/);
-    await admin.bringToFront(); await activateLoginPeriod(admin, f.login.periodAName);
+    await admin.bringToFront(); await activateLoginPeriod(admin, f.login.periodAName); await deactivateLoginPeriod(admin, f.login.periodBName);
     await page.bringToFront(); await loginParticipant(page, f.login.username, f.login.passwordA);
     await page.getByRole("listitem").filter({ hasText: f.login.activeName }).getByRole("link", { name: "Lanjutkan tes" }).click();
     await expect(page).toHaveURL(new RegExp(`/pengerjaan/${attempt}(?:\\?|$)`));

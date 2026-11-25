@@ -10,17 +10,48 @@ export const MATRIX_PAGE_SIZE = 30, MATRIX_MAX_STUDENTS = 2000, MATRIX_MAX_TESTS
 export class MatrixSessionExpired extends Error {}
 export class MatrixPermissionDenied extends Error {}
 export class MatrixSizeExceeded extends Error {}
-export type MatrixOptions = { years:Array<{id:string;name:string}>; periods:Array<{id:string;name:string;year:string|null}>; tests:Array<{id:string;name:string;period:string}>; classes:string[] };
-export type MatrixData = { columns:MatrixColumn[]; rows:MatrixRow[]; total:number; page:number; pages:number; attempts:number; attemptRows:MatrixAttempt[]; options:MatrixOptions|null; warning:string|null };
+export type MatrixOptions = {
+  years:Array<{id:string;name:string}>;
+  periods:Array<{id:string;name:string;year:string|null;yearId:string|null;isActive:boolean}>;
+  tests:Array<{id:string;name:string;period:string}>;
+  classes:string[];
+};
+export type MatrixData = {
+  columns:MatrixColumn[];
+  rows:MatrixRow[];
+  total:number;
+  page:number;
+  pages:number;
+  attempts:number;
+  attemptRows:MatrixAttempt[];
+  options:MatrixOptions|null;
+  effectiveFilters:MatrixFilters;
+  defaultApplied:boolean;
+  warning:string|null;
+};
 async function options(client:PoolClient):Promise<MatrixOptions> {
   const years = (await client.query<{id:string;name:string}>("SELECT id::text AS id,name FROM academic_years ORDER BY name DESC,id DESC")).rows;
-  const periods = (await client.query<{id:string;name:string;year:string|null}>("SELECT p.id::text AS id,p.name,y.name AS year FROM exam_periods p LEFT JOIN academic_years y ON y.id=p.academic_year_id ORDER BY p.start_date DESC,p.id DESC")).rows;
+  const periods = (await client.query<{id:string;name:string;year:string|null;yearId:string|null;isActive:boolean}>("SELECT p.id::text AS id,p.name,y.name AS year,p.academic_year_id::text AS \"yearId\",p.is_active AS \"isActive\" FROM exam_periods p LEFT JOIN academic_years y ON y.id=p.academic_year_id ORDER BY p.is_active DESC,p.start_date DESC,p.id DESC")).rows;
   const tests = (await client.query<{id:string;name:string;period:string}>("SELECT t.id::text AS id,t.name,p.name AS period FROM exam_tests t JOIN exam_periods p ON p.id=t.period_id ORDER BY lower(t.name),p.start_date DESC,t.id")).rows;
   const classes = (await client.query<{name:string}>("SELECT DISTINCT class_name_snapshot AS name FROM exam_attempts WHERE completed_at IS NOT NULL ORDER BY name")).rows.map((r) => r.name);
   return {years,periods,tests,classes};
 }
-async function read(client:PoolClient,f:MatrixFilters,requestedPage:number,exporting:boolean):Promise<MatrixData> {
+async function resolveSmartDefaults(client:PoolClient, f:MatrixFilters, opts:MatrixOptions) {
+  const activeYearRow = (await client.query<{id:string|null}>("SELECT active_year_id::text AS id FROM academic_year_settings WHERE id = 1")).rows[0];
+  const defaultYearId = activeYearRow?.id ?? opts.years[0]?.id ?? null;
+  const yearPeriods = defaultYearId ? opts.periods.filter((p) => p.yearId === defaultYearId) : opts.periods;
+  const preferredPeriod = yearPeriods.find((p) => p.isActive) ?? yearPeriods[0] ?? null;
+  const defaultPeriodId = preferredPeriod?.id ?? null;
+  const effective: MatrixFilters = { ...f, yearId: defaultYearId, periodId: defaultPeriodId };
+  return { effective, defaultApplied: Boolean(defaultYearId || defaultPeriodId) };
+}
+async function read(client:PoolClient,f:MatrixFilters,requestedPage:number,exporting:boolean,applySmartDefaults:boolean):Promise<MatrixData> {
   const opts = await options(client);
+  let effective = f;
+  let defaultApplied = false;
+  if (!exporting && applySmartDefaults) {
+    ({ effective, defaultApplied } = await resolveSmartDefaults(client, f, opts));
+  }
   const matches = (await client.query<MatrixAttempt>(
     `SELECT a.id::text AS id,a.student_id::text AS "studentId",a.student_name_snapshot AS student,s.nisn,a.class_name_snapshot AS "className",
       p.academic_year_id::text AS "yearId",y.name AS year,a.exam_test_id::text AS "testId",a.test_name_snapshot AS "testName",p.name AS period,
@@ -34,21 +65,21 @@ async function read(client:PoolClient,f:MatrixFilters,requestedPage:number,expor
       AND ($5::text IS NULL OR strpos(lower(a.student_name_snapshot),lower($5::text))>0 OR strpos(lower(a.participant_number_snapshot),lower($5::text))>0 OR strpos(s.nisn,$5::text)>0)
       AND (a.kind=$6::text OR ($7::boolean AND a.kind='makeup'))
       AND ($8::timestamptz IS NULL OR a.completed_at >= $8::timestamptz) AND ($9::timestamptz IS NULL OR a.completed_at < $9::timestamptz)
-     ORDER BY a.completed_at,a.id LIMIT $10::int`, [f.yearId,f.periodId,f.testId,f.className,f.student,f.kind,f.merge,f.fromUtc,f.toUtcExclusive,MATRIX_MAX_ATTEMPTS+1],
+     ORDER BY a.completed_at,a.id LIMIT $10::int`, [effective.yearId,effective.periodId,effective.testId,effective.className,effective.student,effective.kind,effective.merge,effective.fromUtc,effective.toUtcExclusive,MATRIX_MAX_ATTEMPTS+1],
   )).rows;
   let warning:string|null = matches.length > MATRIX_MAX_ATTEMPTS ? `Terlalu banyak pengerjaan cocok (maksimal ${MATRIX_MAX_ATTEMPTS}). Sempitkan filter.` : null;
-  const matrix = warning ? {columns:[],rows:[]} : buildResultMatrix(matches,f.merge);
+  const matrix = warning ? {columns:[],rows:[]} : buildResultMatrix(matches,effective.merge);
   if (!warning && matrix.columns.length > MATRIX_MAX_TESTS) warning = `Terlalu banyak kolom tes (maksimal ${MATRIX_MAX_TESTS}). Pilih periode, kelas atau rentang yang lebih sempit.`;
   if (!warning && matrix.rows.length > MATRIX_MAX_STUDENTS) warning = `Terlalu banyak baris siswa (maksimal ${MATRIX_MAX_STUDENTS}). Sempitkan filter.`;
-  if (warning) { if (exporting) throw new MatrixSizeExceeded(warning); return {columns:[],rows:[],total:0,page:1,pages:1,attempts:matches.length,attemptRows:[],options:opts,warning}; }
+  if (warning) { if (exporting) throw new MatrixSizeExceeded(warning); return {columns:[],rows:[],total:0,page:1,pages:1,attempts:matches.length,attemptRows:[],options:opts,effectiveFilters:effective,defaultApplied,warning}; }
   const total = matrix.rows.length, pages = Math.max(1,Math.ceil(total/MATRIX_PAGE_SIZE)), page = exporting ? 1 : Math.min(Math.max(requestedPage,1),pages);
-  return {columns:matrix.columns,rows:exporting ? matrix.rows : matrix.rows.slice((page-1)*MATRIX_PAGE_SIZE,page*MATRIX_PAGE_SIZE),total,page,pages,attempts:matches.length,attemptRows:matches,options:opts,warning:null};
+  return {columns:matrix.columns,rows:exporting ? matrix.rows : matrix.rows.slice((page-1)*MATRIX_PAGE_SIZE,page*MATRIX_PAGE_SIZE),total,page,pages,attempts:matches.length,attemptRows:matches,options:opts,effectiveFilters:effective,defaultApplied,warning:null};
 }
-export async function withMatrixSnapshot<T>(f:MatrixFilters,page:number,exporting:boolean,render:(data:MatrixData)=>T):Promise<T> {
+export async function withMatrixSnapshot<T>(f:MatrixFilters,page:number,exporting:boolean,render:(data:MatrixData)=>T,optionsArg?:{applySmartDefaults?:boolean}):Promise<T> {
   const client = await getPostgresPool().connect();
   try { await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ"); const admin = await lockActiveAdminSession(client); if(!admin) throw new MatrixSessionExpired();
     if(!adminHasPermission(admin,"reports.view")) throw new MatrixPermissionDenied();
-    const data = await read(client,f,page,exporting); const result = render(data); const active = await lockActiveAdminSession(client);
+    const data = await read(client,f,page,exporting,Boolean(optionsArg?.applySmartDefaults)); const result = render(data); const active = await lockActiveAdminSession(client);
     if(!active || active.id!==admin.id) throw new MatrixSessionExpired();
     if(!adminHasPermission(active,"reports.view")) throw new MatrixPermissionDenied();
     await client.query("COMMIT"); return result;

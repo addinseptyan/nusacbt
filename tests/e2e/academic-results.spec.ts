@@ -146,3 +146,46 @@ test('matriks memisahkan kategori, menggabungkan Susulan, menandai bentrok dan m
     expect((await page.request.get('/laporan/rekap/unduh?kategori=remedial&gabung=1')).status()).toBe(400);
   } finally { await cleanupAttemptFixture(client,f); await client.end(); }
 });
+
+test('monitoring dan rekap memakai default cerdas saat dibuka tanpa parameter dan menyediakan Tampilkan semua serta Reset', async ({page}) => {
+  test.setTimeout(90_000);
+  const client=loginTestDatabase();await client.connect();const f=await seedAttemptFixture(client,0);
+  try {
+    await seed(client,f);await loginAsAdmin(page);
+
+    // 1. Monitoring tanpa query params memakai tahun aktif + tes berjalan/terbaru
+    await page.goto('/data-tes/monitoring');
+    await expect(page.getByText(/Filter otomatis:/)).toBeVisible();
+    await expect(page.locator('#monitor-year')).toHaveValue(f.login.yearId);
+
+    // Klik Tampilkan semua -> ?semua=1 menonaktifkan filter otomatis dan mereset tahun/tes
+    await page.getByRole('link',{name:'Tampilkan semua'}).click();
+    await expect(page).toHaveURL(/\/data-tes\/monitoring\?semua=1$/);
+    await expect(page.getByText(/Filter otomatis:/)).toHaveCount(0);
+    await expect(page.locator('#monitor-year')).toHaveValue('');
+
+    // Klik Reset -> kembali ke default cerdas
+    await page.getByRole('link',{name:'Reset'}).click();
+    await expect(page).toHaveURL(/\/data-tes\/monitoring$/);
+    await expect(page.getByText(/Filter otomatis:/)).toBeVisible();
+    await expect(page.locator('#monitor-year')).toHaveValue(f.login.yearId);
+
+    // 2. Rekap tanpa query params memakai tahun aktif + periode aktif
+    await page.goto('/laporan/rekap');
+    await expect(page.getByText(/Filter otomatis:/)).toBeVisible();
+    await expect(page.locator('#matrix-year')).toHaveValue(f.login.yearId);
+    await expect(page.locator('#matrix-period')).toHaveValue(f.login.periodA);
+
+    await page.getByRole('link',{name:'Tampilkan semua'}).click();
+    await expect(page).toHaveURL(/\/laporan\/rekap\?semua=1$/);
+    await expect(page.getByText(/Filter otomatis:/)).toHaveCount(0);
+    await expect(page.locator('#matrix-year')).toHaveValue('');
+    await expect(page.locator('#matrix-period')).toHaveValue('');
+
+    await page.getByRole('link',{name:'Reset'}).click();
+    await expect(page).toHaveURL(/\/laporan\/rekap$/);
+    await expect(page.getByText(/Filter otomatis:/)).toBeVisible();
+    await expect(page.locator('#matrix-year')).toHaveValue(f.login.yearId);
+    await expect(page.locator('#matrix-period')).toHaveValue(f.login.periodA);
+  } finally { await cleanupAttemptFixture(client,f); await client.end(); }
+});

@@ -3,7 +3,7 @@ import { expect, test, type APIRequestContext, type Page, type Request, type Rou
 
 import { cleanupAttemptFixture, openStart, seedAttemptFixture, seedAttemptToken, type AttemptFixture } from "./exam-attempt-helpers";
 import { loginAsAdmin } from "./helpers";
-import { activateLoginPeriod, loginParticipant, loginTestDatabase, resetLoginGlobal } from "./participant-login-helpers";
+import { activateLoginPeriod, deactivateLoginPeriod, loginParticipant, loginTestDatabase, resetLoginGlobal } from "./participant-login-helpers";
 
 test.use({ actionTimeout: 15_000 });
 
@@ -313,7 +313,7 @@ test("izin dan pengerjaan tidak dapat dipakai peserta atau periode lain", async 
     const requestPromise = page.waitForRequest((r) => r.method() === "POST" && new URL(r.url()).pathname === "/peserta");
     await page.getByRole("button", { name: "Mulai pengulangan" }).click(); const captured = await requestPromise;
     await expect(page.getByRole("alert").filter({ hasText: "Token tidak cocok" })).toBeVisible();
-    await admin.bringToFront(); await activateLoginPeriod(admin, f.login.periodBName);
+    await admin.bringToFront(); await activateLoginPeriod(admin, f.login.periodBName); await deactivateLoginPeriod(admin, f.login.periodAName);
     await page.bringToFront(); await loginParticipant(page, f.login.username, f.login.passwordB);
     await replay(captured, page.request);
     expect((await client.query("SELECT 1 FROM exam_attempts WHERE run_id=$1", [f.runId])).rowCount).toBe(1);

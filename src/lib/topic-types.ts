@@ -1,6 +1,7 @@
 export type QuestionTopic = {
   id: string;
   name: string;
+  tags: string[];
   // Versi baris untuk menolak perubahan atau penghapusan dari halaman usang.
   revision: string;
 };

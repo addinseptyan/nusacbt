@@ -56,7 +56,7 @@ test("admin menambah, mencari, mengubah dan menghapus kategori; server menolak d
     await expect(page).toHaveURL(/\/data-modul\/topik$/);
     await expect(page.getByRole("heading", { name: "Topik / Mata Pelajaran", exact: true })).toBeVisible();
     await expect(page.getByText("Satu daftar fleksibel")).toBeVisible();
-    await expect(page.getByText(/tanpa subtopik/)).toBeVisible();
+    await expect(page.getByText(/Gunakan nama mata pelajaran yang ringkas/)).toBeVisible();
 
     let editor = await openEditor(page);
     await editor.getByLabel("Nama topik / mata pelajaran").fill(`  ${first}  `);
@@ -98,13 +98,13 @@ test("admin menambah, mencari, mengubah dan menghapus kategori; server menolak d
     await expect(topicRow(page, renamed)).toBeVisible();
     expect((await client.query("SELECT name FROM question_topics WHERE id=$1", [firstId])).rows).toEqual([{ name: renamed }]);
 
-    await page.getByLabel("Cari topik atau mata pelajaran").fill("  gEoMeTri  ");
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill("  gEoMeTri  ");
     await expect(topicRow(page, renamed)).toBeVisible();
     await expect(topicRow(page, second)).toHaveCount(0);
     await expect(page.getByText("1 kategori ditemukan")).toBeVisible();
-    await page.getByLabel("Cari topik atau mata pelajaran").fill(`TIDAK-ADA-${suffix}`);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(`TIDAK-ADA-${suffix}`);
     await expect(page.getByText("Topik tidak ditemukan")).toBeVisible();
-    await page.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
     await expect(topicRow(page, second)).toBeVisible();
     await expect(topicRow(page, renamed)).toBeVisible();
 
@@ -184,7 +184,7 @@ test("database menjaga nama kategori dan keunikan tanpa membedakan kapitalisasi"
       { value: "Topik ", code: "23514", constraint: "question_topics_name_check" },
       { value: "x".repeat(101), code: "23514", constraint: "question_topics_name_check" },
       { value: "Topik\nDasar", code: "23514", constraint: "question_topics_name_check" },
-      { value: name.toUpperCase(), code: "23505", constraint: "question_topics_name_ci_idx" },
+      { value: name.toUpperCase(), code: "23505", constraint: "question_topics_name_tags_ci_idx" },
     ];
     for (const { value, code, constraint } of checks) {
       await client.query("SAVEPOINT periksa_topik");
@@ -212,7 +212,7 @@ test("pembuatan bersamaan tetap unik ketika transaksi lain belum commit", async 
     await editor.getByRole("button", { name: "Simpan topik" }).click();
     await expect.poll(async () => (await client.query<{ waiting: boolean }>(
       `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid <> pg_backend_pid()
-       AND wait_event_type='Lock' AND query LIKE '%INSERT INTO question_topics(name)%') AS waiting`,
+       AND wait_event_type='Lock' AND query LIKE '%INSERT INTO question_topics(name, tags, tags_signature)%') AS waiting`,
     )).rows[0].waiting, { timeout: 10_000 }).toBe(true);
     await blocker.query("COMMIT");
     await expect(editor.getByRole("alert")).toContainText("sudah digunakan");
@@ -233,10 +233,10 @@ test("formulir usang tidak menimpa, menghapus, atau menghidupkan kembali perubah
   try {
     const id = (await client.query<{ id: string }>("INSERT INTO question_topics(name) VALUES($1) RETURNING id::text AS id", [original])).rows[0].id;
     await loginAsAdmin(page); await page.goto("/data-modul/topik");
-    await page.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
     secondPage = await page.context().newPage();
     await secondPage.goto("/data-modul/topik");
-    await secondPage.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+    await secondPage.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
     const firstEditor = await openEditor(page, original);
     const staleEditor = await openEditor(secondPage, original);
     await firstEditor.getByLabel("Nama topik / mata pelajaran").fill(changed);
@@ -281,7 +281,7 @@ test("formulir usang yang menunggu kunci baris tidak menimpa transaksi yang lebi
   try {
     const id = (await client.query<{ id: string }>("INSERT INTO question_topics(name) VALUES($1) RETURNING id::text AS id", [original])).rows[0].id;
     await loginAsAdmin(page); await page.goto("/data-modul/topik");
-    await page.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
     const editor = await openEditor(page, original);
     await editor.getByLabel("Nama topik / mata pelajaran").fill(stale);
     await blocker.query("BEGIN");
@@ -315,13 +315,13 @@ test("nama kategori diperlakukan sebagai teks, bukan markup atau perintah SQL", 
     await editor.getByLabel("Nama topik / mata pelajaran").fill(name);
     await editor.getByRole("button", { name: "Simpan topik" }).click();
     await expect(editor).toBeHidden();
-    await page.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
     await expect(topicRow(page, name)).toBeVisible();
     await expect(topicRow(page, name).locator("img")).toHaveCount(0);
     expect(openedAlert).toBe(false);
     expect((await client.query("SELECT name FROM question_topics WHERE name=$1", [name])).rows).toEqual([{ name }]);
     await page.reload();
-    await page.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
     await expect(topicRow(page, name)).toBeVisible();
     expect(openedAlert).toBe(false);
   } finally { await cleanup(client, suffix); await client.end(); }
@@ -343,7 +343,7 @@ test("kategori yang direferensikan foreign key pembatas tidak dapat dihapus", as
       code: expect.stringMatching(/^(23503|23001)$/), constraint: `${referenceTable}_topic_id_fkey`,
     });
     await loginAsAdmin(page); await page.goto("/data-modul/topik");
-    await page.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
     const confirmation = await openDelete(page, name);
     await confirmation.getByRole("button", { name: "Ya, hapus topik" }).click();
     await expect(confirmation.getByRole("alert")).toContainText("masih digunakan oleh data lain");
@@ -370,7 +370,7 @@ test("tambah, ubah, dan hapus menolak sesi admin yang dicabut", async ({ page })
     const id = (await client.query<{ id: string }>("INSERT INTO question_topics(name) VALUES($1) RETURNING id::text AS id", [name])).rows[0].id;
     for (const operation of ["create", "update", "delete"] as const) {
       await loginAsAdmin(page); await page.goto("/data-modul/topik");
-      await page.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+      await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
       const dialog = operation === "delete" ? await openDelete(page, name) : await openEditor(page, operation === "update" ? name : undefined);
       if (operation !== "delete") await dialog.getByLabel("Nama topik / mata pelajaran").fill(attempted);
       await revokeCurrentSession(page, client);
@@ -394,7 +394,7 @@ test("sesi yang kedaluwarsa saat menunggu transaksi membatalkan perubahan", asyn
   try {
     const id = (await client.query<{ id: string }>("INSERT INTO question_topics(name) VALUES($1) RETURNING id::text AS id", [name])).rows[0].id;
     await loginAsAdmin(page); await page.goto("/data-modul/topik");
-    await page.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
     const editor = await openEditor(page, name);
     await editor.getByLabel("Nama topik / mata pelajaran").fill(attempted);
     const cookie = (await page.context().cookies()).find((item) => item.name === "nusacbt_admin_session");
@@ -429,7 +429,7 @@ test("pencarian dan paginasi bekerja pada daftar lebih dari satu halaman", async
   try {
     await client.query("INSERT INTO question_topics(name) SELECT unnest($1::text[])", [names]);
     await loginAsAdmin(page); await page.goto("/data-modul/topik");
-    const search = page.getByLabel("Cari topik atau mata pelajaran");
+    const search = page.getByLabel("Cari topik, mata pelajaran, atau tag");
     await search.fill(prefix.toUpperCase());
     await expect(page.getByText("25 kategori ditemukan")).toBeVisible();
     await expect(page.getByText("Halaman 1 dari 3 · 25 kategori")).toBeVisible();
@@ -472,7 +472,7 @@ test.describe("topik pada layar kecil", () => {
       await sidebar.getByRole("link", { name: "Topik / Mata Pelajaran", exact: true }).click();
       await expect(page).toHaveURL(/\/data-modul\/topik$/);
       await expect(sidebar).toBeHidden();
-      await page.getByLabel("Cari topik atau mata pelajaran").fill(suffix);
+      await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(suffix);
       await expect(topicRow(page, name)).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
       await page.setViewportSize({ width: 360, height: 320 });
@@ -488,4 +488,76 @@ test.describe("topik pada layar kecil", () => {
       await expect(editor).toBeHidden();
     } finally { await cleanup(client, suffix); await client.end(); }
   });
+});
+
+test("nama mata pelajaran sama boleh dibuat dengan tag berbeda, sedangkan kombinasi nama dan tag identik ditolak", async ({ page }) => {
+  const suffix = randomBytes(5).toString("hex");
+  const subjectName = `Matematika Tag ${suffix}`;
+  const tagX = `Kelas X ${suffix}`;
+  const tagXI = `Kelas XI ${suffix}`;
+  const client = testDatabase();
+  await client.connect();
+  try {
+    await loginAsAdmin(page);
+    await page.goto("/data-modul/topik");
+
+    // 1. Buat topik pertama: nama + tag Kelas X + Ganjil
+    let editor = await openEditor(page);
+    await editor.getByLabel("Nama topik / mata pelajaran").fill(subjectName);
+    await editor.getByLabel("Tag pengelompokan (opsional)").fill(`${tagX}, Ganjil`);
+    await editor.getByRole("button", { name: "Tambah tag" }).click();
+    await editor.getByRole("button", { name: "Simpan topik" }).click();
+    await expect(editor).toBeHidden();
+
+    // 2. Buat topik kedua dengan nama yang SAMA persis tetapi tag berbeda (Kelas XI) -> BERHASIL
+    editor = await openEditor(page);
+    await editor.getByLabel("Nama topik / mata pelajaran").fill(subjectName);
+    await editor.getByLabel("Tag pengelompokan (opsional)").fill(tagXI);
+    await editor.getByRole("button", { name: "Tambah tag" }).click();
+    await editor.getByRole("button", { name: "Simpan topik" }).click();
+    await expect(editor).toBeHidden();
+
+    const stored = await client.query<{ id: string; tags: string[]; tags_signature: string }>(
+      "SELECT id::text AS id, tags, tags_signature FROM question_topics WHERE name = $1 ORDER BY id",
+      [subjectName],
+    );
+    expect(stored.rows).toHaveLength(2);
+
+    // 3. Buat topik dengan nama dan kombinasi tag sama (beda urutan & kapitalisasi) -> DITOLAK
+    editor = await openEditor(page);
+    await editor.getByLabel("Nama topik / mata pelajaran").fill(subjectName.toLowerCase());
+    await editor.getByLabel("Tag pengelompokan (opsional)").fill(`GANJIL, ${tagX.toLowerCase()}`);
+    await editor.getByRole("button", { name: "Tambah tag" }).click();
+    await editor.getByRole("button", { name: "Simpan topik" }).click();
+    await expect(editor.getByRole("alert")).toContainText("sudah digunakan");
+    await editor.getByRole("button", { name: "Batal" }).click();
+
+    // 4. Filter tag & pencarian berdasarkan tag bekerja akurat di /data-modul/topik
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(tagXI);
+    await expect(page.getByText("1 kategori ditemukan")).toBeVisible();
+    await expect(topicRow(page, subjectName)).toHaveCount(1);
+    await expect(topicRow(page, subjectName)).toContainText(tagXI);
+    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill("");
+    await page.locator("[aria-label='Filter menurut tag']")
+      .getByRole("button", { name: tagX, exact: true })
+      .click();
+    await expect(page.getByText("1 kategori ditemukan")).toBeVisible();
+    await expect(topicRow(page, subjectName)).toHaveCount(1);
+    await expect(topicRow(page, subjectName)).toContainText(tagX);
+
+    // 5. SearchableCombobox di /data-modul/soal membedakan kedua topik dan mendukung pencarian tag
+    await page.goto("/data-modul/soal");
+    const combo = page.getByLabel("Filter kategori");
+    const listId = await combo.getAttribute("aria-controls");
+    await combo.click();
+    const listbox = page.locator(`[id="${listId}"]`);
+    await expect(listbox).toBeVisible();
+    await page.getByPlaceholder("Cari nama mata pelajaran atau tag...").fill(tagXI);
+    await expect(listbox.getByRole("option")).toHaveCount(1);
+    await expect(listbox.getByRole("option").first()).toContainText(subjectName);
+    await expect(listbox.getByRole("option").first()).toContainText(tagXI);
+  } finally {
+    await cleanup(client, suffix);
+    await client.end();
+  }
 });

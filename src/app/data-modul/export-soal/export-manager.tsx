@@ -3,19 +3,22 @@
 import { CheckSquare, CircleAlert, Download, FileText, Image as ImageIcon, Info, Search, Square } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { SearchableCombobox, type ComboboxOption } from "@/components/searchable-combobox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { QuestionLetter, QuestionTopicOption } from "@/lib/question-types";
+import { formatTopicLabel } from "@/lib/topic-validation.mjs";
 
 export type ExportQuestionSummary = {
   id: string;
   topicId: string;
   topicName: string;
+  topicTags?: string[];
   promptPreview: string;
   hasPromptImage: boolean;
   optionImageCount: number;
@@ -37,16 +40,21 @@ export function ExportWordManager({
   initialSearch: string;
 }) {
   const router = useRouter();
+  const [filterTopicId, setFilterTopicId] = useState(initialTopicId);
   const [selectedIds, setSelectedIds] = useState<string[]>(() =>
     questions.slice(0, MAX_EXPORT_PER_FILE).map((q) => q.id),
   );
   const [includeKeys, setIncludeKeys] = useState(true);
   const [title, setTitle] = useState(() => {
     const topic = topics.find((t) => t.id === initialTopicId);
-    return topic ? `Soal ${topic.name}` : "Daftar Soal NusaCBT";
+    return topic ? `Soal ${formatTopicLabel(topic)}` : "Daftar Soal NusaCBT";
   });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const topicOptions = useMemo<ComboboxOption[]>(
+    () => topics.map((t) => ({ value: t.id, label: t.name, tags: t.tags ?? [] })),
+    [topics],
+  );
 
   const selectedSet = new Set(selectedIds);
   const batchCount = Math.max(1, Math.ceil(questions.length / MAX_EXPORT_PER_FILE));
@@ -134,14 +142,17 @@ export function ExportWordManager({
             <label htmlFor="export-topic" className="mb-1 block text-xs font-semibold">
               Topik / Mata Pelajaran
             </label>
-            <select id="export-topic" name="topik" defaultValue={initialTopicId} className={inputClass}>
-              <option value="">Semua topik</option>
-              {topics.map((topic) => (
-                <option key={topic.id} value={topic.id}>
-                  {topic.name}
-                </option>
-              ))}
-            </select>
+            <SearchableCombobox
+              id="export-topic"
+              name="topik"
+              options={topicOptions}
+              value={filterTopicId}
+              onChange={setFilterTopicId}
+              placeholder="Semua topik"
+              searchPlaceholder="Cari nama mata pelajaran atau tag..."
+              emptyOptionLabel="Semua topik"
+              allowClear
+            />
           </div>
           <div>
             <label htmlFor="export-search" className="mb-1 block text-xs font-semibold">
@@ -246,6 +257,9 @@ export function ExportWordManager({
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-bold text-muted-foreground">#{idx + 1}</span>
                         <Badge variant="outline" className="text-[11px]">{item.topicName}</Badge>
+                        {(item.topicTags ?? []).map((tag) => (
+                          <Badge key={tag} variant="outline" className="rounded-full text-[10px] font-medium">{tag}</Badge>
+                        ))}
                         <Badge variant="secondary" className="text-[11px]">Kunci {item.correctOption}</Badge>
                         {imgCount > 0 && (
                           <Badge variant="outline" className="gap-1 text-[11px]">

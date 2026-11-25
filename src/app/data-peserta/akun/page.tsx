@@ -19,11 +19,12 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const canManageAccounts = adminHasPermission(admin, "participant_accounts.manage");
   const canManagePasswords = adminHasPermission(admin, "participant_passwords.manage");
   const params = await searchParams;
+  const supplied = params.periode !== undefined;
   const periodId = validDataId(params.periode);
   let data: AccountPageData;
   try {
-    data = await loadAccountPage(periodId);
-    if (params.periode !== undefined && !periodId) data.identities.selectionMissing = true;
+    data = await loadAccountPage(periodId, { defaultToFirst: !supplied });
+    if (supplied && !periodId) data.identities.selectionMissing = true;
   } catch {
     return <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9">
       <p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data peserta</p>

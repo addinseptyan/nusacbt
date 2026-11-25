@@ -29,7 +29,9 @@ async function snapshot(tables, sequences) {
     // Semua kolom versi 019, termasuk status ragu, harus identik;
     // academic_year_id ditambahkan pada migrasi 024 dan diperiksa terpisah.
     const object = table === "exam_periods"
-      ? "(to_jsonb(r)-'academic_year_id')"
+      ? "(to_jsonb(r)-'academic_year_id'-'is_active')"
+      : table === "question_topics"
+        ? "(to_jsonb(r)-'tags'-'tags_signature')"
       : table === "admin_users"
         ? "(to_jsonb(r)-'full_name'-'is_superuser'-'is_active'-'role_id'-'updated_at'-'last_login_at')"
         : "to_jsonb(r)";

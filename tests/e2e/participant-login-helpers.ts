@@ -63,9 +63,11 @@ export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture>
     if (settingYear.rowCount !== 1 || settingYear.rows[0].id !== null) throw new Error("Tahun aktif database uji harus kosong sebelum fixture.");
     const yearId = (await client.query<{ id: string }>('INSERT INTO academic_years(name) VALUES($1) RETURNING id::text AS id', [`Fixture ${suffix}`])).rows[0].id;
     await client.query('UPDATE academic_year_settings SET active_year_id=$1,revision=revision+1 WHERE id=1', [yearId]);
+    const activeCheck = await client.query("SELECT id FROM exam_periods WHERE is_active = true FOR UPDATE");
+    if (activeCheck.rowCount !== 0) throw new Error("Database uji masih memiliki periode aktif sebelum fixture.");
     const periodAName = `Periode A ${suffix}`; const periodBName = `Periode B ${suffix}`;
     const periods = (await client.query<{ id: string; name: string }>(
-      "INSERT INTO exam_periods(name,start_date,end_date,academic_year_id) VALUES($1,'2025-01-01','2025-12-31',$3),($2,'2027-01-01','2027-12-31',$3) RETURNING id::text AS id,name",
+      "INSERT INTO exam_periods(name,start_date,end_date,academic_year_id,is_active) VALUES($1,'2025-01-01','2025-12-31',$3,true),($2,'2027-01-01','2027-12-31',$3,false) RETURNING id::text AS id,name",
       [periodAName, periodBName, yearId],
     )).rows;
     const periodA = periods.find((p) => p.name === periodAName)!.id; const periodB = periods.find((p) => p.name === periodBName)!.id;
@@ -125,6 +127,7 @@ export async function seedLoginFixture(client: pg.Client): Promise<LoginFixture>
 export async function cleanupLoginFixture(client: pg.Client, f: LoginFixture, extraBuckets: Array<{ period: string; username: string }> = []) {
   const periods = [f.periodA, f.periodB];
   await client.query("DELETE FROM participant_sessions WHERE participant_identity_id=ANY($1::bigint[])", [[f.identityA, f.identityB]]);
+  await client.query("UPDATE exam_periods SET is_active=false WHERE id=ANY($1::bigint[])", [periods]);
   await client.query("UPDATE participant_login_settings SET period_id=NULL WHERE id=1 AND period_id=ANY($1::bigint[])", [periods]);
   const buckets = [
     participantAttemptBucket(f.periodA, f.username.toLowerCase()), participantAttemptBucket(f.periodB, f.username.toLowerCase()),
@@ -171,7 +174,24 @@ export async function activateLoginPeriod(admin: Page, periodName: string) {
   await admin.goto("/data-peserta/periode");
   await admin.getByRole("button", { name: `Aktifkan login ${periodName}` }).click();
   const dialog = admin.getByRole("dialog", { name: "Aktifkan periode login?" });
-  await expect(dialog).toContainText("Semua sesi peserta sebelumnya diakhiri");
+  await expect(dialog).toContainText("Periode lain yang sedang aktif tetap aktif");
   await dialog.getByRole("button", { name: "Ya, aktifkan login" }).click();
+  await expect(dialog).toBeHidden();
+}
+
+export async function deactivateLoginPeriod(admin: Page, periodName: string) {
+  await admin.goto("/data-peserta/periode");
+  await admin.getByRole("button", { name: `Nonaktifkan login ${periodName}` }).click();
+  const dialog = admin.getByRole("dialog", { name: "Nonaktifkan periode login?" });
+  await expect(dialog).toContainText("seluruh sesinya diakhiri");
+  await dialog.getByRole("button", { name: "Ya, nonaktifkan periode" }).click();
+  await expect(dialog).toBeHidden();
+}
+
+export async function clearAllLoginPeriods(admin: Page) {
+  await admin.goto("/data-peserta/periode");
+  await admin.getByRole("button", { name: "Nonaktifkan semua login", exact: true }).click();
+  const dialog = admin.getByRole("dialog", { name: "Nonaktifkan semua login peserta?" });
+  await dialog.getByRole("button", { name: "Ya, nonaktifkan semua" }).click();
   await expect(dialog).toBeHidden();
 }

@@ -38,16 +38,17 @@ export default async function ExportWordPage({ searchParams }: { searchParams: P
     }
     if (search) {
       values.push(`%${search.replace(/[%_\\]/g, "\\$&")}%`);
-      where.push(`(q.prompt_text ILIKE $${values.length} ESCAPE '\\' OR t.name ILIKE $${values.length} ESCAPE '\\')`);
+      where.push(`(q.prompt_text ILIKE $${values.length} ESCAPE '\\' OR t.name ILIKE $${values.length} ESCAPE '\\' OR array_to_string(t.tags, ' ') ILIKE $${values.length} ESCAPE '\\')`);
     }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
     const [topicResult, questionResult] = await Promise.all([
-      pool.query<QuestionTopicOption>("SELECT id::text AS id, name FROM question_topics ORDER BY lower(name), name, id"),
+      pool.query<QuestionTopicOption>("SELECT id::text AS id, name, tags FROM question_topics ORDER BY lower(name), tags_signature, name, id"),
       pool.query<{
         id: string;
         topicId: string;
         topicName: string;
+        topicTags: string[];
         promptPreview: string;
         hasPromptImage: boolean;
         optionImageCount: number;
@@ -56,6 +57,7 @@ export default async function ExportWordPage({ searchParams }: { searchParams: P
         `SELECT q.id::text AS id,
           q.topic_id::text AS "topicId",
           t.name AS "topicName",
+          t.tags AS "topicTags",
           left(q.prompt_text, 240) AS "promptPreview",
           (q.prompt_image IS NOT NULL) AS "hasPromptImage",
           ((q.option_a_image IS NOT NULL)::int + (q.option_b_image IS NOT NULL)::int + (q.option_c_image IS NOT NULL)::int + (q.option_d_image IS NOT NULL)::int + (q.option_e_image IS NOT NULL)::int) AS "optionImageCount",

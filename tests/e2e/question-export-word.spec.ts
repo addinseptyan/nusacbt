@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 
 import { readQuestionDocx } from "../../src/lib/question-docx.mjs";
 import { loginAsAdmin } from "./helpers";
-import { cleanupTopics, createTopic, suffix, testDatabase } from "./question-helpers";
+import { cleanupTopics, createTopic, selectComboboxOption, suffix, testDatabase } from "./question-helpers";
 
 const templateDocx = path.join(process.cwd(), "public/templates/template-soal-nusacbt.docx");
 
@@ -23,7 +23,7 @@ test("ekspor soal Word menyertakan rumus, tabel, Arab, gambar, dan dapat diimpor
 
     // 1. Impor 4 soal kaya dari template ke topicA
     await page.goto("/data-modul/import-soal");
-    await page.getByLabel("Topik / mata pelajaran").selectOption({ label: topicA });
+    await selectComboboxOption(page, "Topik / mata pelajaran", topicA);
     await page.getByLabel("File Word").setInputFiles(templateDocx);
     await page.getByRole("button", { name: "Periksa pratinjau" }).click();
     await expect(page.getByRole("heading", { name: "Pratinjau soal" })).toBeVisible();
@@ -55,7 +55,7 @@ test("ekspor soal Word menyertakan rumus, tabel, Arab, gambar, dan dapat diimpor
 
     // 4. Impor ulang file hasil ekspor tersebut ke topicB lewat UI Import Soal Word
     await page.goto("/data-modul/import-soal");
-    await page.getByLabel("Topik / mata pelajaran").selectOption({ label: topicB });
+    await selectComboboxOption(page, "Topik / mata pelajaran", topicB);
     await page.getByLabel("File Word").setInputFiles({
       name: "roundtrip.docx",
       mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
