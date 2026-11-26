@@ -25,7 +25,7 @@ test("dua tab pembagian menolak versi usang tanpa menimpa hasil pemenang",async(
     expect((await client.query<{revision:string}>("SELECT revision::text FROM exam_session_plans WHERE period_id=$1",[f.periodA])).rows[0].revision).toBe("1");
     expect((await client.query("SELECT 1 FROM exam_session_assignments WHERE period_id=$1 AND student_id=$2",[f.periodA,f.studentA])).rowCount).toBe(1);
     await page.getByRole("button",{name:"Acak pembagian"}).click();
-    await expect(page.getByRole("list",{name:"Pratinjau pembagian sesi"}).getByLabel(`Sesi ${f.studentAName} ${nisn}`)).toHaveValue("1");
+    await expect(page.getByLabel(`Sesi ${f.studentAName} ${nisn}`)).toHaveValue("1");
   } finally { await other.close(); await cleanupLoginFixture(client,f); await client.end(); }
 });
 
@@ -171,16 +171,15 @@ test("kelompok dan pelaksanaan dapat diatur pada layar kecil, termasuk kapasitas
     await page.getByLabel("Kapasitas sesi 1").fill("2"); await page.getByRole("button",{name:"Tambah sesi"}).click(); await page.getByLabel("Kapasitas sesi 2").fill("1");
     await page.getByLabel(`Pilih ${longName} ${firstNisn}`).check(); await page.getByLabel(`Pilih ${extraName} ${nisn}`).check();
     await page.getByRole("button",{name:"Acak pembagian"}).click();
-    let preview=page.getByRole("list",{name:"Pratinjau pembagian sesi"});
-    await preview.getByLabel(`Sesi ${longName} ${firstNisn}`).selectOption("1"); await preview.getByLabel(`Sesi ${extraName} ${nisn}`).selectOption("1");
+    await page.getByLabel(`Sesi ${longName} ${firstNisn}`).selectOption("1"); await page.getByLabel(`Sesi ${extraName} ${nisn}`).selectOption("1");
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click(); let dialog=page.getByRole("dialog",{name:"Simpan pembagian sesi?"});
     await dialog.getByRole("button",{name:"Ya, simpan pembagian"}).click(); await expect(dialog).toBeHidden();
     await expect(page.getByLabel("Kapasitas sesi 1")).toHaveValue("2");
-    await page.getByLabel("Kapasitas sesi 1").fill("1"); await page.getByRole("button",{name:"Acak pembagian"}).click();
+    await page.getByLabel("Kapasitas sesi 1").fill("1");
     await expect(page.getByRole("alert").filter({hasText:"melebihi kapasitas"})).toBeVisible();
     await expect(page.getByRole("button",{name:"Simpan pembagian sesi"})).toBeDisabled();
-    preview=page.getByRole("list",{name:"Pratinjau pembagian sesi"}); await preview.getByLabel(`Sesi ${extraName} ${nisn}`).selectOption("2");
+    await page.getByLabel(`Sesi ${extraName} ${nisn}`).selectOption("2");
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click(); dialog=page.getByRole("dialog",{name:"Simpan pembagian sesi?"});
     await dialog.getByRole("button",{name:"Ya, simpan pembagian"}).click(); await expect(dialog).toBeHidden();
     const assigned=(await client.query<{student:string;session:number}>("SELECT student_id::text AS student,session_number AS session FROM exam_session_assignments WHERE period_id=$1 ORDER BY student_id",[f.periodA])).rows;

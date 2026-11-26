@@ -21,10 +21,10 @@ test("batas 5.000 siswa dapat dibagi, disimpan, dan dirilis tanpa daftar parsial
     const exam=(await client.query<{id:string}>("INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes) VALUES($1,$2,'2048-01-01 00:00Z','WIB',60) RETURNING id::text AS id",[period,`Tes kapasitas ${f.suffix}`])).rows[0].id;
     await client.query("INSERT INTO exam_test_questions(exam_test_id,question_id,position) VALUES($1,$2,1)",[exam,f.questionId]);
     await loginAsAdmin(page); await page.goto(`/data-tes/daftar/sesi?periode=${period}`);
-    await page.getByLabel("Kapasitas sesi 1").fill("5000"); await page.getByLabel("Kelas untuk ditambahkan").selectOption(f.classId);
-    await page.getByRole("button",{name:"Tambahkan kelas"}).click(); await expect(page.getByText("5000 siswa dipilih")).toBeVisible();
+    await page.getByLabel("Kapasitas sesi 1").fill("5000"); await page.getByLabel(`Pilih kelas X ${f.majorName}`).check();
+    await expect(page.getByText("5000 siswa dipilih")).toBeVisible();
     await page.getByRole("button",{name:"Acak pembagian"}).click();
-    await expect(page.getByRole("list",{name:"Pratinjau pembagian sesi"}).getByRole("listitem")).toHaveCount(25);
+    await expect(page.getByRole("list",{name:`Daftar siswa kelas X ${f.majorName}`}).getByRole("listitem")).toHaveCount(25);
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click(); let dialog=page.getByRole("dialog",{name:"Simpan pembagian sesi?"});
     await expect(dialog).toContainText("5000 siswa"); await dialog.getByRole("button",{name:"Ya, simpan pembagian"}).click(); await expect(dialog).toBeHidden({timeout:60_000});
     expect((await client.query<{n:number}>("SELECT count(*)::int AS n FROM exam_session_assignments WHERE period_id=$1",[period])).rows[0].n).toBe(5000);

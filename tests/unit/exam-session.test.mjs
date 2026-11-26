@@ -1,5 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {
+  applyClassCheckboxToggle,
+  applyClassSessionAssignment,
+  filterSessionClassGroups,
+  groupSessionStudentsByClass,
+  summarizeClassSelection,
+} from "../../src/lib/exam-session-grouping.mjs";
 import { distributeExamSessions, sessionRandomInt, validateSessionPlan } from "../../src/lib/exam-session-validation.mjs";
 
 function seeded(seed = 1) {
@@ -77,4 +84,59 @@ test("batas 5.000 siswa dan 24 sesi tidak menghilangkan siswa atau melebihi kapa
 test("generator acak mengembalikan bilangan dalam rentang", () => {
   for (const n of [1,2,3,17,5000]) for (let i=0;i<40;i+=1) { const x=sessionRandomInt(n); assert.ok(Number.isInteger(x) && x>=0 && x<n); }
   assert.throws(()=>sessionRandomInt(0));
+});
+
+test("pengelompokan per kelas, multiselect kelas, dan penyesuaian sesi per kelas atau siswa", () => {
+  const students = [
+    { studentId: "1", studentName: "Andi", nisn: "0000000001", placementId: "11", classId: "20", classLabel: "10 TKR", active: true, sessionNumber: null },
+    { studentId: "2", studentName: "Budi", nisn: "0000000002", placementId: "12", classId: "10", classLabel: "10 RPL", active: true, sessionNumber: null },
+    { studentId: "3", studentName: "Citra", nisn: "0000000003", placementId: "13", classId: "10", classLabel: "10 RPL", active: true, sessionNumber: null },
+    { studentId: "4", studentName: "Dina", nisn: "0000000004", placementId: "14", classId: "10", classLabel: "10 RPL", active: false, sessionNumber: 2 },
+  ];
+  const groups = groupSessionStudentsByClass(students);
+  assert.deepEqual(groups.map((g) => g.classLabel), ["10 RPL", "10 TKR"]);
+  assert.deepEqual(groups[0].students.map((s) => s.studentId), ["2", "3", "4"]);
+
+  let chosen = new Set(["4"]);
+  let assignments = new Map([["4", 2]]);
+  let summary = summarizeClassSelection(groups[0].students, chosen, assignments, 2);
+  assert.equal(summary.allActiveChecked, false);
+  assert.equal(summary.indeterminate, true);
+
+  // Centang kelas 10 RPL -> seluruh siswa aktif di bawahnya auto tercentang (4 tidak aktif tetap aman).
+  ({ nextChosen: chosen, nextAssignments: assignments } = applyClassCheckboxToggle(groups[0].students, chosen, assignments, true, 1));
+  assert.deepEqual([...chosen].sort(), ["2", "3", "4"]);
+  assert.equal(assignments.get("2"), 1);
+  assert.equal(assignments.get("3"), 1);
+  assert.equal(assignments.get("4"), 2);
+  summary = summarizeClassSelection(groups[0].students, chosen, assignments, 2);
+  assert.equal(summary.allActiveChecked, true);
+  assert.equal(summary.indeterminate, false);
+  assert.equal(summary.classSessionValue, "1");
+
+  // Sesuaikan sesi satu kelas penuh ke Sesi 2.
+  ({ nextChosen: chosen, nextAssignments: assignments } = applyClassSessionAssignment(groups[0].students, chosen, assignments, 2));
+  assert.equal(assignments.get("2"), 2);
+  assert.equal(assignments.get("3"), 2);
+  assert.equal(summarizeClassSelection(groups[0].students, chosen, assignments, 2).classSessionValue, "2");
+
+  // Ubah satu siswa saja ke Sesi 1 -> status kelas menjadi campuran.
+  assignments.set("2", 1);
+  assert.equal(summarizeClassSelection(groups[0].students, chosen, assignments, 2).classSessionValue, "mixed");
+
+  // Pencarian & filter tampilan tetap menjaga struktur kelompok.
+  const onlySesi2 = filterSessionClassGroups(groups, "", "session:2", chosen, assignments);
+  assert.deepEqual(onlySesi2.map((g) => g.classLabel), ["10 RPL"]);
+  assert.deepEqual(onlySesi2[0].students.map((s) => s.studentId), ["3", "4"]);
+
+  // Pilih sesi pada kelas yang belum dicentang -> auto mencentang seluruh siswa aktif kelas tsb.
+  ({ nextChosen: chosen, nextAssignments: assignments } = applyClassSessionAssignment(groups[1].students, chosen, assignments, 2));
+  assert.equal(chosen.has("1"), true);
+  assert.equal(assignments.get("1"), 2);
+
+  // Hapus centang kelas -> membersihkan siswa aktif di kelas tersebut.
+  ({ nextChosen: chosen, nextAssignments: assignments } = applyClassCheckboxToggle(groups[0].students, chosen, assignments, false, 1));
+  assert.equal(chosen.has("2"), false);
+  assert.equal(chosen.has("3"), false);
+  assert.equal(chosen.has("4"), true);
 });
