@@ -83,8 +83,8 @@ test("kelompok campuran tetap, rilis selektif, susulan/remidi, perubahan kelas, 
     await page.getByRole("combobox",{name:/^Periode/}).selectOption(f.periodA);
     await expect(page).toHaveURL(new RegExp(`periode=${f.periodA}$`));
     await page.getByLabel("Kapasitas sesi 1").fill("2"); await page.getByRole("button",{name:"Tambah sesi"}).click(); await page.getByLabel("Kapasitas sesi 2").fill("2");
-    await page.getByLabel("Kelas untuk ditambahkan").selectOption(tkr.klass); await page.getByRole("button",{name:"Tambahkan kelas"}).click();
-    await page.getByLabel("Kelas untuk ditambahkan").selectOption(rpl.klass); await page.getByRole("button",{name:"Tambahkan kelas"}).click();
+    await page.getByLabel(`Pilih kelas ${tkr.label}`).check();
+    await page.getByLabel(`Pilih kelas ${rpl.label}`).check();
     await page.getByLabel(`Pilih ${f.studentAName} ${(await client.query<{nisn:string}>("SELECT nisn FROM school_students WHERE id=$1",[f.studentA])).rows[0].nisn}`).check();
     await page.getByLabel(`Pilih ${removed.name} ${removed.nisn}`).uncheck();
     await expect(page.getByText("5 siswa dipilih")).toBeVisible();
@@ -93,11 +93,10 @@ test("kelompok campuran tetap, rilis selektif, susulan/remidi, perubahan kelas, 
     expect((await client.query("SELECT 1 FROM exam_session_plans WHERE period_id=$1",[f.periodA])).rowCount).toBe(0);
     await page.getByLabel("Kapasitas sesi 1").fill("3"); await page.getByLabel("Kapasitas sesi 2").fill("3");
     await page.getByRole("button",{name:"Acak pembagian"}).click();
-    const preview=page.getByRole("list",{name:"Pratinjau pembagian sesi"}); await expect(preview.getByRole("listitem")).toHaveCount(5);
     const fNisn=(await client.query<{nisn:string}>("SELECT nisn FROM school_students WHERE id=$1",[f.studentA])).rows[0].nisn;
     // Penyesuaian manual sengaja menjaga campuran dua jurusan pada dua sesi.
     for(const [name,nisn,session] of [[f.studentAName,fNisn,"1"],[t1.name,t1.nisn,"1"],[r2.name,r2.nisn,"1"],[t2.name,t2.nisn,"2"],[r1.name,r1.nisn,"2"]]) {
-      await preview.getByLabel(`Sesi ${name} ${nisn}`).selectOption(session);
+      await page.getByLabel(`Sesi ${name} ${nisn}`).selectOption(session);
     }
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click();
     const confirmation=page.getByRole("dialog",{name:"Simpan pembagian sesi?"}); await expect(confirmation).toContainText("5 siswa");
@@ -183,8 +182,8 @@ test("kelompok campuran tetap, rilis selektif, susulan/remidi, perubahan kelas, 
       WHERE exam_test_id=$1 AND label IN ('Susulan A','Susulan RPL','Remidi khusus','Remidi default')`,[exam]);
 
     // Kelompok yang sudah dirilis tidak dapat dipindah diam-diam.
-    await page.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`); await page.getByRole("button",{name:"Acak pembagian"}).click();
-    await page.getByRole("list",{name:"Pratinjau pembagian sesi"}).getByLabel(`Sesi ${f.studentAName} ${fNisn}`).selectOption("2");
+    await page.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`);
+    await page.getByLabel(`Sesi ${f.studentAName} ${fNisn}`).selectOption("2");
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click();
     await page.getByRole("dialog",{name:"Simpan pembagian sesi?"}).getByRole("button",{name:"Ya, simpan pembagian"}).click();
     await expect(page.getByRole("alert").filter({hasText:"Pembagian belum disimpan"})).toContainText("sudah memiliki jadwal reguler dirilis");
