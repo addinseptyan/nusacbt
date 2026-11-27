@@ -116,39 +116,72 @@ internal static class PreflightRunner
 
     public static async Task<PreflightStatus> CheckAsync()
     {
-        var (exit, stdout, stderr) = await RunCliAsync("check");
-        if (string.IsNullOrWhiteSpace(stdout))
+        try
+        {
+            var (exit, stdout, stderr) = await RunCliAsync("check");
+            var jsonLine = ExtractLastJsonLine(stdout);
+            if (string.IsNullOrWhiteSpace(jsonLine))
+            {
+                return new PreflightStatus
+                {
+                    Ok = false,
+                    DataDir = AppPaths.DataDir,
+                    AppDir = AppPaths.AppDir,
+                    Error = string.IsNullOrWhiteSpace(stderr) ? $"Gagal memeriksa dependensi (kode {exit})." : stderr.Trim(),
+                };
+            }
+            return JsonSerializer.Deserialize<PreflightStatus>(jsonLine, JsonOpts)
+                ?? new PreflightStatus { Ok = false, Error = "Respons check tidak valid." };
+        }
+        catch (Exception ex)
         {
             return new PreflightStatus
             {
                 Ok = false,
                 DataDir = AppPaths.DataDir,
                 AppDir = AppPaths.AppDir,
-                Error = string.IsNullOrWhiteSpace(stderr) ? $"Gagal memeriksa dependensi (kode {exit})." : stderr.Trim(),
+                Error = $"Gagal membaca status preflight: {ex.Message}",
             };
         }
-        return JsonSerializer.Deserialize<PreflightStatus>(stdout.Trim(), JsonOpts) ?? new PreflightStatus { Ok = false, Error = "Respons check tidak valid." };
     }
 
     public static async Task<CliActionResult> SetupAsync(SetupRequest req)
     {
-        var json = JsonSerializer.Serialize(req);
-        var (_, stdout, stderr) = await RunCliAsync("setup", json);
-        if (string.IsNullOrWhiteSpace(stdout))
+        try
         {
-            return new CliActionResult { Ok = false, Error = string.IsNullOrWhiteSpace(stderr) ? "Setup gagal dijalankan." : stderr.Trim() };
+            var json = JsonSerializer.Serialize(req);
+            var (_, stdout, stderr) = await RunCliAsync("setup", json);
+            var jsonLine = ExtractLastJsonLine(stdout);
+            if (string.IsNullOrWhiteSpace(jsonLine))
+            {
+                return new CliActionResult { Ok = false, Error = string.IsNullOrWhiteSpace(stderr) ? "Setup gagal dijalankan." : stderr.Trim() };
+            }
+            return JsonSerializer.Deserialize<CliActionResult>(jsonLine, JsonOpts)
+                ?? new CliActionResult { Ok = false, Error = "Respons setup tidak valid." };
         }
-        return JsonSerializer.Deserialize<CliActionResult>(stdout.Trim(), JsonOpts) ?? new CliActionResult { Ok = false, Error = "Respons setup tidak valid." };
+        catch (Exception ex)
+        {
+            return new CliActionResult { Ok = false, Error = ex.Message };
+        }
     }
 
     public static async Task<CliActionResult> MigrateAsync()
     {
-        var (_, stdout, stderr) = await RunCliAsync("migrate");
-        if (string.IsNullOrWhiteSpace(stdout))
+        try
         {
-            return new CliActionResult { Ok = false, Error = string.IsNullOrWhiteSpace(stderr) ? "Migrasi gagal dijalankan." : stderr.Trim() };
+            var (_, stdout, stderr) = await RunCliAsync("migrate");
+            var jsonLine = ExtractLastJsonLine(stdout);
+            if (string.IsNullOrWhiteSpace(jsonLine))
+            {
+                return new CliActionResult { Ok = false, Error = string.IsNullOrWhiteSpace(stderr) ? "Migrasi gagal dijalankan." : stderr.Trim() };
+            }
+            return JsonSerializer.Deserialize<CliActionResult>(jsonLine, JsonOpts)
+                ?? new CliActionResult { Ok = false, Error = "Respons migrasi tidak valid." };
         }
-        return JsonSerializer.Deserialize<CliActionResult>(stdout.Trim(), JsonOpts) ?? new CliActionResult { Ok = false, Error = "Respons migrasi tidak valid." };
+        catch (Exception ex)
+        {
+            return new CliActionResult { Ok = false, Error = ex.Message };
+        }
     }
 
     public static async Task<int> GetActiveExamsCountAsync()
@@ -156,13 +189,29 @@ internal static class PreflightRunner
         try
         {
             var (_, stdout, _) = await RunCliAsync("active-exams");
-            if (string.IsNullOrWhiteSpace(stdout)) return 0;
-            var res = JsonSerializer.Deserialize<CliActionResult>(stdout.Trim(), JsonOpts);
+            var jsonLine = ExtractLastJsonLine(stdout);
+            if (string.IsNullOrWhiteSpace(jsonLine)) return 0;
+            var res = JsonSerializer.Deserialize<CliActionResult>(jsonLine, JsonOpts);
             return res?.ActiveAttempts ?? 0;
         }
         catch
         {
             return 0;
         }
+    }
+
+    private static string? ExtractLastJsonLine(string? stdout)
+    {
+        if (string.IsNullOrWhiteSpace(stdout)) return null;
+        var lines = stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var trimmed = lines[i].Trim();
+            if (trimmed.StartsWith('{') && trimmed.EndsWith('}'))
+            {
+                return trimmed;
+            }
+        }
+        return stdout.Trim();
     }
 }

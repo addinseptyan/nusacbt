@@ -11,7 +11,7 @@ const projectDir = typeof __dirname === "string"
   : dirname(fileURLToPath(import.meta.url));
 process.env.NUSACBT_INTERNAL_PROJECT_ROOT = projectDir;
 
-let packageVersion = "1.0.0";
+let packageVersion = "1.0.1";
 try {
   const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf8"));
   if (typeof pkg?.version === "string" && pkg.version.trim()) {

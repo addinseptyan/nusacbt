@@ -1,6 +1,11 @@
+﻿import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 import { loginAsAdmin } from "./helpers";
+
+const pkgVersion = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")).version as string;
+const pkgTag = `v${pkgVersion}`;
 
 test("/api/health, versi rilis sidebar, dan tombol cek pembaruan manual berfungsi dengan benar", async ({ page, request }) => {
   const healthRes = await request.get("/api/health");
@@ -8,20 +13,20 @@ test("/api/health, versi rilis sidebar, dan tombol cek pembaruan manual berfungs
   expect(healthRes.headers()["cache-control"]).toContain("no-store");
   const health = await healthRes.json();
   expect(health.ok).toBe(true);
-  expect(health.version).toBe("1.0.0");
-  expect(health.tag).toBe("v1.0.0");
+  expect(health.version).toBe(pkgVersion);
+  expect(health.tag).toBe(pkgTag);
   expect(health.database).toBe("ready");
   expect(JSON.stringify(health)).not.toMatch(/password|secret|key/i);
 
   await loginAsAdmin(page);
   const sidebarFooter = page.locator('[data-slot="sidebar-footer"]');
-  await expect(sidebarFooter).toContainText("v1.0.0");
+  await expect(sidebarFooter).toContainText(pkgTag);
   await expect(sidebarFooter).not.toContainText("v0.1.0");
 
   await page.goto("/pengaturan/aplikasi");
   const updateCard = page.locator("#versi-pembaruan");
   await expect(updateCard).toBeVisible();
-  await expect(updateCard).toContainText("v1.0.0");
+  await expect(updateCard).toContainText(pkgTag);
   await expect(updateCard).toContainText("addinseptyan/nusacbt");
   await expect(updateCard).toContainText("tanpa auto-update");
 

@@ -8,7 +8,7 @@
     <ApplicationIcon>..\..\public\favicon.ico</ApplicationIcon>
     <AssemblyName>NusaCBT-Server</AssemblyName>
     <RootNamespace>NusaCBT.Server</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>NusaCBT</Authors>
     <Product>NusaCBT Server Launcher</Product>
     <Description>Launcher, pemeriksa dependensi, dan pembaruan aplikasi NusaCBT Server untuk Windows</Description>

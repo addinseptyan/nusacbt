@@ -16,15 +16,15 @@ internal sealed class MainForm : Form
 
     private readonly JobObject _job = new();
     private readonly NotifyIcon _trayIcon = new();
-    private readonly Label _versionBadge = new() { AutoSize = true, BackColor = Color.FromArgb(226, 232, 240), Padding = new Padding(8, 4, 8, 4) };
-    private readonly Label _stateBadge = new() { AutoSize = true, Padding = new Padding(10, 4, 10, 4), ForeColor = Color.White };
+    private readonly Label _versionBadge = new() { AutoSize = true, BackColor = Color.FromArgb(226, 232, 240), Padding = new Padding(8, 4, 8, 4), Margin = new Padding(8, 6, 4, 4) };
+    private readonly Label _stateBadge = new() { AutoSize = true, Padding = new Padding(10, 4, 10, 4), ForeColor = Color.White, Margin = new Padding(4, 6, 4, 4) };
 
-    private readonly Label _depRuntimeLbl = new() { AutoSize = true };
-    private readonly Label _depPostgresLbl = new() { AutoSize = true };
-    private readonly Label _depDbLbl = new() { AutoSize = true };
-    private readonly Label _depConfigLbl = new() { AutoSize = true };
-    private readonly Label _depSchemaLbl = new() { AutoSize = true };
-    private readonly Label _depPortLbl = new() { AutoSize = true };
+    private readonly Label _depRuntimeLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Memeriksa runtime..." };
+    private readonly Label _depPostgresLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Memeriksa service PostgreSQL..." };
+    private readonly Label _depDbLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Menunggu pemeriksaan..." };
+    private readonly Label _depConfigLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Menunggu pemeriksaan..." };
+    private readonly Label _depSchemaLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Menunggu pemeriksaan..." };
+    private readonly Label _depPortLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Memeriksa port..." };
 
     private readonly Button _startPgBtn = new() { Text = "Nyalakan PostgreSQL", AutoSize = true, Enabled = false };
     private readonly Button _downloadPgBtn = new() { Text = "Unduh PostgreSQL", AutoSize = true, Visible = false };
@@ -33,16 +33,19 @@ internal sealed class MainForm : Form
     private readonly NumericUpDown _portInput = new() { Minimum = 80, Maximum = 65535, Value = 3000, Width = 80 };
     private readonly Button _firewallBtn = new() { Text = "Izinkan Port Firewall", AutoSize = true };
 
+    private readonly Panel _guidancePanel = new() { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.FromArgb(239, 246, 255), Padding = new Padding(12, 8, 12, 8), Margin = new Padding(0, 6, 0, 4) };
+    private readonly Label _guidanceLabel = new() { AutoSize = true, MaximumSize = new Size(920, 0), ForeColor = Color.FromArgb(30, 58, 138), Font = new Font(Control.DefaultFont, FontStyle.Bold), Text = "Memeriksa kesiapan dependensi server..." };
+
     private readonly Button _startBtn = new() { Text = "Mulai Server", AutoSize = true, Padding = new Padding(14, 7, 14, 7) };
     private readonly Button _stopBtn = new() { Text = "Hentikan Server", AutoSize = true, Enabled = false, Padding = new Padding(14, 7, 14, 7) };
     private readonly Button _openDashBtn = new() { Text = "Buka Dashboard Admin", AutoSize = true, Enabled = false, Padding = new Padding(10, 7, 10, 7) };
     private readonly Button _copyStudentUrlBtn = new() { Text = "Salin Link Peserta", AutoSize = true, Enabled = false, Padding = new Padding(10, 7, 10, 7) };
     private readonly Button _refreshBtn = new() { Text = "Refresh Status", AutoSize = true, Padding = new Padding(10, 7, 10, 7) };
-    private readonly Button _checkUpdateBtn = new() { Text = "Cek Update", AutoSize = true, Padding = new Padding(10, 7, 10, 7) };
-    private readonly Button _offlineZipBtn = new() { Text = "Update dari ZIP", AutoSize = true, Padding = new Padding(10, 7, 10, 7) };
-    private readonly CheckBox _autoOpenCheck = new() { Text = "Buka browser otomatis saat server siap", Checked = true, AutoSize = true };
+    private readonly Button _checkUpdateBtn = new() { Text = "Cek Update", AutoSize = true, Padding = new Padding(10, 6, 10, 6) };
+    private readonly Button _offlineZipBtn = new() { Text = "Update dari ZIP", AutoSize = true, Padding = new Padding(10, 6, 10, 6) };
+    private readonly CheckBox _autoOpenCheck = new() { Text = "Buka browser otomatis saat server siap", Checked = true, AutoSize = true, Margin = new Padding(8, 8, 4, 4) };
 
-    private readonly Label _urlInfoLabel = new() { AutoSize = true, ForeColor = Color.FromArgb(30, 64, 175) };
+    private readonly Label _urlInfoLabel = new() { AutoSize = true, MaximumSize = new Size(920, 0), ForeColor = Color.FromArgb(30, 64, 175) };
     private readonly TextBox _logBox = new()
     {
         Multiline = true,
@@ -69,8 +72,8 @@ internal sealed class MainForm : Form
         Text = $"NusaCBT Server Launcher ({VersionUtils.CurrentTag})";
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(920, 680);
-        MinimumSize = new Size(820, 600);
+        ClientSize = new Size(980, 760);
+        MinimumSize = new Size(880, 680);
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
         BuildUi();
@@ -89,42 +92,59 @@ internal sealed class MainForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(14), ColumnCount = 1, RowCount = 5 };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(14), ColumnCount = 1, RowCount = 6, AutoScroll = true };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        // 1. Header
-        var header = new Panel { Dock = DockStyle.Fill, Height = 46 };
-        var titleLbl = new Label { Text = "NusaCBT Server PC", Font = new Font(Font.FontFamily, 14F, FontStyle.Bold), AutoSize = true, Location = new Point(0, 6) };
-        _versionBadge.Text = VersionUtils.CurrentTag;
-        _versionBadge.Location = new Point(195, 8);
-        _stateBadge.Location = new Point(275, 8);
+        // 1. Header (FlowLayout DPI-safe tanpa koordinat piksel statis)
+        var header = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Margin = new Padding(0, 0, 0, 6) };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-        var headerRight = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
+        var headerLeft = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
+        var titleLbl = new Label { Text = "NusaCBT Server PC", Font = new Font(Font.FontFamily, 14F, FontStyle.Bold), AutoSize = true, Margin = new Padding(0, 3, 4, 3) };
+        _versionBadge.Text = VersionUtils.CurrentTag;
+        headerLeft.Controls.Add(titleLbl);
+        headerLeft.Controls.Add(_versionBadge);
+        headerLeft.Controls.Add(_stateBadge);
+
+        var headerRight = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
         _offlineZipBtn.Click += (_, _) => OpenUpdateDialog(checkOnlineImmediately: false);
         _checkUpdateBtn.Click += (_, _) => OpenUpdateDialog(checkOnlineImmediately: true);
         headerRight.Controls.Add(_offlineZipBtn);
         headerRight.Controls.Add(_checkUpdateBtn);
 
-        header.Controls.Add(titleLbl);
-        header.Controls.Add(_versionBadge);
-        header.Controls.Add(_stateBadge);
-        header.Controls.Add(headerRight);
+        header.Controls.Add(headerLeft, 0, 0);
+        header.Controls.Add(headerRight, 1, 0);
         root.Controls.Add(header, 0, 0);
 
-        // 2. Checklist Dependensi
-        var depBox = new GroupBox { Text = "Pemeriksaan Dependensi & Kesiapan Server", Dock = DockStyle.Fill, Padding = new Padding(12) };
-        var depTable = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, AutoSize = true };
-        depTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        // 2. Checklist Dependensi (AutoSize=true agar semua 6 baris tampil penuh tanpa terpotong)
+        var depBox = new GroupBox
+        {
+            Text = "Pemeriksaan Dependensi & Kesiapan Server",
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(12, 8, 12, 10),
+        };
+        var depTable = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 3,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        };
+        depTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
         depTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         depTable.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         AddDepRow(depTable, "1. Runtime Node & App", _depRuntimeLbl, new Label { AutoSize = true });
 
-        var pgActionPanel = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty };
+        var pgActionPanel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
         _startPgBtn.Click += async (_, _) => await StartPostgresClickedAsync();
         _downloadPgBtn.Click += (_, _) => Process.Start(new ProcessStartInfo("https://www.enterprisedb.com/downloads/postgres-postgresql-downloads") { UseShellExecute = true });
         pgActionPanel.Controls.Add(_startPgBtn);
@@ -139,7 +159,7 @@ internal sealed class MainForm : Form
         _migrateBtn.Click += async (_, _) => await RunMigrateClickedAsync();
         AddDepRow(depTable, "5. Skema DB & Admin", _depSchemaLbl, _migrateBtn);
 
-        var portPanel = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty };
+        var portPanel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
         _portInput.Value = _settings.Port;
         _portInput.ValueChanged += (_, _) =>
         {
@@ -161,8 +181,13 @@ internal sealed class MainForm : Form
         depBox.Controls.Add(depTable);
         root.Controls.Add(depBox, 0, 1);
 
-        // 3. Kontrol Server
-        var ctrlPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(0, 4, 0, 4) };
+        // 3. Banner Panduan Aksi Berikutnya
+        _guidanceLabel.Dock = DockStyle.Top;
+        _guidancePanel.Controls.Add(_guidanceLabel);
+        root.Controls.Add(_guidancePanel, 0, 2);
+
+        // 4. Kontrol Server
+        var ctrlPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(0, 4, 0, 4) };
         _startBtn.Click += async (_, _) => await StartServerAsync();
         _stopBtn.Click += async (_, _) => await StopServerWithGuardAsync();
         _openDashBtn.Click += (_, _) => OpenUrl($"http://localhost:{(int)_portInput.Value}/");
@@ -177,15 +202,22 @@ internal sealed class MainForm : Form
         ctrlPanel.Controls.Add(_copyStudentUrlBtn);
         ctrlPanel.Controls.Add(_refreshBtn);
         ctrlPanel.Controls.Add(_autoOpenCheck);
-        root.Controls.Add(ctrlPanel, 0, 2);
+        root.Controls.Add(ctrlPanel, 0, 3);
 
-        // 4. Info URL LAN
-        var urlBox = new GroupBox { Text = "Alamat Akses Server (Lokal & Jaringan Sekolah)", Dock = DockStyle.Fill, Padding = new Padding(12, 20, 12, 10) };
-        _urlInfoLabel.Dock = DockStyle.Fill;
+        // 5. Info URL LAN
+        var urlBox = new GroupBox
+        {
+            Text = "Alamat Akses Server (Lokal & Jaringan Sekolah)",
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(12, 8, 12, 10),
+        };
+        _urlInfoLabel.Dock = DockStyle.Top;
         urlBox.Controls.Add(_urlInfoLabel);
-        root.Controls.Add(urlBox, 0, 3);
+        root.Controls.Add(urlBox, 0, 4);
 
-        // 5. Log Server
+        // 6. Log Server
         var logBox = new GroupBox { Text = "Log Aktivitas Server", Dock = DockStyle.Fill, Padding = new Padding(10) };
         var logToolbar = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true };
         var openDataBtn = new Button { Text = "Buka Folder Data", AutoSize = true };
@@ -200,7 +232,7 @@ internal sealed class MainForm : Form
 
         logBox.Controls.Add(_logBox);
         logBox.Controls.Add(logToolbar);
-        root.Controls.Add(logBox, 0, 4);
+        root.Controls.Add(logBox, 0, 5);
 
         Controls.Add(root);
     }
@@ -293,7 +325,7 @@ internal sealed class MainForm : Form
                 _depConfigLbl.Text = "Belum diperiksa.";
                 _depSchemaLbl.ForeColor = Color.DarkRed;
                 _depSchemaLbl.Text = "Belum diperiksa.";
-                UpdateStartAvailability();
+                UpdateGuidanceAndStartAvailability(hasNode && hasEntry);
                 UpdateNetworkUrlInfo();
                 return;
             }
@@ -308,7 +340,7 @@ internal sealed class MainForm : Form
             {
                 _depConfigLbl.ForeColor = Color.DarkRed;
                 _depConfigLbl.Text = !st.EnvExists
-                    ? "[PERLU SETUP] Klik 'Setup Awal / DB' untuk membuat .env.local, kunci, dan admin awal."
+                    ? "[PERLU SETUP] Klik 'Setup Awal / DB' di sebelah kanan untuk membuat .env.local, kunci, dan admin awal."
                     : $"[MASALAH KUNCI] participant={st.Keys.ParticipantReason}, token={st.Keys.TokenReason}.";
             }
 
@@ -357,8 +389,14 @@ internal sealed class MainForm : Form
                     ? $"[TERSEDIA] Port {port} siap digunakan (pastikan firewall LAN diizinkan)."
                     : $"[BENTROK] Port {port} sedang dipakai aplikasi lain! Ganti nomor port.";
 
-            UpdateStartAvailability();
+            UpdateGuidanceAndStartAvailability(hasNode && hasEntry);
             UpdateNetworkUrlInfo();
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Gagal memeriksa dependensi: {ex.Message}");
+            SetGuidance($"Gagal memeriksa dependensi: {ex.Message}", Color.FromArgb(254, 242, 242), Color.DarkRed);
+            _startBtn.Enabled = false;
         }
         finally
         {
@@ -366,21 +404,73 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void UpdateStartAvailability()
+    private void UpdateGuidanceAndStartAvailability(bool runtimeOk)
     {
-        var ready = _runState == ServerRunState.Stopped
-            && File.Exists(AppPaths.NodeExe)
-            && File.Exists(AppPaths.ServerEntry)
-            && _lastStatus is not null
-            && _lastStatus.Ok
-            && _lastStatus.EnvExists
-            && _lastStatus.Keys.ParticipantOk
-            && _lastStatus.Keys.TokenOk
-            && _lastStatus.Keys.KeysDistinct
-            && _lastStatus.Db.Connected
-            && _lastStatus.Db.IsUtf8
-            && _lastStatus.Db.AdminCount > 0;
-        _startBtn.Enabled = ready;
+        var port = (int)_portInput.Value;
+        var st = _lastStatus;
+        var envAndKeysReady = st is not null && st.Ok && st.EnvExists && st.Keys.ParticipantOk && st.Keys.TokenOk && st.Keys.KeysDistinct;
+        var dbReady = st is not null && st.Ok && st.Db.Connected && st.Db.IsUtf8;
+        var adminReady = st is not null && st.Ok && st.Db.AdminCount > 0;
+        var portFree = _runState != ServerRunState.Stopped || WindowsSystemHelper.IsTcpPortAvailable(port);
+
+        var canStart = _runState == ServerRunState.Stopped && runtimeOk && envAndKeysReady && dbReady && adminReady && portFree;
+        _startBtn.Enabled = canStart;
+
+        _setupBtn.BackColor = !envAndKeysReady && _runState == ServerRunState.Stopped ? Color.FromArgb(37, 99, 235) : SystemColors.Control;
+        _setupBtn.ForeColor = !envAndKeysReady && _runState == ServerRunState.Stopped ? Color.White : SystemColors.ControlText;
+
+        if (_runState == ServerRunState.Starting)
+        {
+            SetGuidance("Menyalakan server NusaCBT... mohon tunggu hingga status berubah menjadi BERJALAN.", Color.FromArgb(255, 251, 235), Color.FromArgb(180, 83, 9));
+            return;
+        }
+        if (_runState == ServerRunState.Running)
+        {
+            SetGuidance($"Server sedang BERJALAN di port {port}. Klik 'Buka Dashboard Admin' untuk membuka aplikasi di browser.", Color.FromArgb(240, 253, 244), Color.FromArgb(22, 101, 52));
+            return;
+        }
+
+        if (!runtimeOk)
+        {
+            SetGuidance("Runtime Node atau aplikasi belum lengkap. Pasang ulang installer NusaCBT.", Color.FromArgb(254, 242, 242), Color.DarkRed);
+        }
+        else if (st is null || !st.Ok)
+        {
+            SetGuidance($"Preflight belum dapat dijalankan: {st?.Error ?? "Periksa log aktivitas di bawah."}", Color.FromArgb(254, 242, 242), Color.DarkRed);
+        }
+        else if (!envAndKeysReady)
+        {
+            SetGuidance("Langkah pertama: klik tombol 'Setup Awal / DB' pada baris 4 untuk mengatur koneksi PostgreSQL, membuat kunci enkripsi di ProgramData, dan akun admin awal.", Color.FromArgb(239, 246, 255), Color.FromArgb(30, 58, 138));
+        }
+        else if (!dbReady)
+        {
+            var stoppedPg = _pgServices.Count > 0 && !_pgServices.Any(s => s.IsRunning);
+            SetGuidance(
+                stoppedPg
+                    ? "Service PostgreSQL lokal belum menyala. Klik 'Nyalakan PostgreSQL' pada baris 2, lalu klik 'Refresh Status'."
+                    : $"Database belum terhubung ({st.Db.Error}). Klik 'Setup Awal / DB' untuk memperbarui pengaturan database.",
+                Color.FromArgb(254, 242, 242),
+                Color.DarkRed);
+        }
+        else if (!adminReady)
+        {
+            SetGuidance("Belum ada akun admin di database. Klik 'Setup Awal / DB' pada baris 4 untuk membuat akun Superadmin pertama.", Color.FromArgb(254, 242, 242), Color.DarkRed);
+        }
+        else if (!portFree)
+        {
+            SetGuidance($"Port {port} sedang digunakan oleh aplikasi lain. Ubah angka port pada baris 6 lalu klik 'Refresh Status'.", Color.FromArgb(254, 242, 242), Color.DarkRed);
+        }
+        else
+        {
+            SetGuidance("Semua dependensi siap! Klik 'Mulai Server' untuk menyalakan NusaCBT agar dapat diakses melalui browser.", Color.FromArgb(240, 253, 244), Color.FromArgb(22, 101, 52));
+        }
+    }
+
+    private void SetGuidance(string text, Color bg, Color fg)
+    {
+        _guidancePanel.BackColor = bg;
+        _guidanceLabel.ForeColor = fg;
+        _guidanceLabel.Text = text;
     }
 
     private void UpdateNetworkUrlInfo()
@@ -472,6 +562,7 @@ internal sealed class MainForm : Form
         _logWriter = new StreamWriter(new FileStream(logFile, FileMode.Append, FileAccess.Write, FileShare.ReadWrite), Encoding.UTF8) { AutoFlush = true };
 
         UpdateRunStateUi(ServerRunState.Starting);
+        UpdateGuidanceAndStartAvailability(runtimeOk: true);
         AppendLog($"Memulai NusaCBT Server {VersionUtils.CurrentTag} di port {port}...");
 
         var psi = new ProcessStartInfo(AppPaths.NodeExe)
@@ -502,9 +593,11 @@ internal sealed class MainForm : Form
         var healthy = await WaitForServerHealthAsync(port, TimeSpan.FromSeconds(30));
         if (_serverProcess is null || _serverProcess.HasExited) return;
 
+        UpdateRunStateUi(ServerRunState.Running);
+        UpdateGuidanceAndStartAvailability(runtimeOk: true);
+
         if (healthy)
         {
-            UpdateRunStateUi(ServerRunState.Running);
             AppendLog($"Server siap! Dashboard: http://localhost:{port}/");
             if (_autoOpenCheck.Checked)
             {
@@ -513,7 +606,6 @@ internal sealed class MainForm : Form
         }
         else
         {
-            UpdateRunStateUi(ServerRunState.Running);
             AppendLog("Server berjalan, namun health check belum merespons dalam 30 detik. Periksa log di atas.");
         }
     }
