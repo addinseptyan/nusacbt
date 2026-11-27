@@ -7,7 +7,7 @@ import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import type { QuestionLetter, QuestionTopicOption } from "@/lib/question-types";
 
-export const metadata = { title: "Export Soal Word — NusaCBT" };
+export const metadata = { title: "Export Soal Word" };
 export const dynamic = "force-dynamic";
 
 type Search = Record<string, string | string[] | undefined>;

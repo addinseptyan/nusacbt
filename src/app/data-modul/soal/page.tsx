@@ -8,7 +8,7 @@ import { validDataId } from "@/lib/class-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import type { Question, QuestionLetter, QuestionTopicOption } from "@/lib/question-types";
 
-export const metadata = { title: "Bank Soal — NusaCBT" };
+export const metadata = { title: "Bank Soal" };
 export const dynamic = "force-dynamic";
 
 type QuestionRow = {

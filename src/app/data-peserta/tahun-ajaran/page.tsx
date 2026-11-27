@@ -6,7 +6,7 @@ import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import { AcademicYearManager, type YearItem } from "./year-manager";
 
-export const metadata = { title: "Tahun Ajaran — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Tahun Ajaran", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function AcademicYearsPage() {

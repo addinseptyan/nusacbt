@@ -16,7 +16,7 @@ import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 import { participantView, type ParticipantView } from "@/lib/participant-auth";
 import { participantPageNumber } from "@/lib/participant-login-validation.mjs";
 
-export const metadata = { title: "Ruang Peserta — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Ruang Peserta", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ halaman?: string | string[] }> };

@@ -8,7 +8,7 @@ import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import type { PlacementPeriod } from "@/lib/student-types";
 
-export const metadata = { title: "Import Data Peserta — NusaCBT" };
+export const metadata = { title: "Import Data Peserta" };
 
 export default async function ImportPage() {
   const { allowed } = await requireAdminAccess("students.manage");

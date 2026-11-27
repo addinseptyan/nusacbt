@@ -115,6 +115,35 @@ test("badge draf dan dirilis berbeda, menghormati reduced motion, dan mengikuti 
     const unpublish = page.getByRole("dialog", { name: "Tarik rilis jadwal?" });
     await unpublish.getByRole("button", { name: "Ya, tarik rilis" }).click(); await expect(unpublish).toBeHidden();
     await expect(draftRow.locator('[data-status="draft"]')).toHaveText("Draf");
+
+    // Tombol Tambah per kategori mengunci Jenis pelaksanaan ke kategorinya; Tambah pelaksanaan umum tetap bebas
+    await regSection.getByRole("button", { name: "Tambah Reguler" }).click();
+    let editor = page.getByRole("dialog", { name: "Tambah pelaksanaan" });
+    await expect(editor.getByLabel("Jenis pelaksanaan")).toHaveValue("regular");
+    await expect(editor.getByLabel("Jenis pelaksanaan")).toBeDisabled();
+    await editor.getByRole("button", { name: "Batal" }).click();
+
+    await remSection.getByRole("button", { name: "Tambah Remidi" }).click();
+    editor = page.getByRole("dialog", { name: "Tambah pelaksanaan" });
+    await expect(editor.getByLabel("Jenis pelaksanaan")).toHaveValue("remedial");
+    await expect(editor.getByLabel("Jenis pelaksanaan")).toBeDisabled();
+    await editor.getByRole("button", { name: "Batal" }).click();
+
+    const susulanLockedLabel = `Susulan Terkunci ${f.suffix}`;
+    await susSection.getByRole("button", { name: "Tambah Susulan" }).click();
+    editor = page.getByRole("dialog", { name: "Tambah pelaksanaan" });
+    await expect(editor.getByLabel("Jenis pelaksanaan")).toHaveValue("makeup");
+    await expect(editor.getByLabel("Jenis pelaksanaan")).toBeDisabled();
+    await editor.getByLabel("Nama pelaksanaan").fill(susulanLockedLabel);
+    await editor.getByRole("button", { name: "Pilih semua yang tersedia" }).click();
+    await editor.getByRole("button", { name: "Simpan draf" }).click();
+    await expect(editor).toBeHidden();
+    await expect(susSection).toContainText(`Susulan · ${susulanLockedLabel}`);
+
+    await page.getByRole("button", { name: "Tambah pelaksanaan" }).click();
+    editor = page.getByRole("dialog", { name: "Tambah pelaksanaan" });
+    await expect(editor.getByLabel("Jenis pelaksanaan")).toBeEnabled();
+    await editor.getByRole("button", { name: "Batal" }).click();
   } finally { await cleanupLoginFixture(client, f); await client.end(); }
 });
 

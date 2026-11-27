@@ -11,7 +11,7 @@ import type { ExamPeriodOption, ExamTest, ExamTimeZone } from "@/lib/exam-test-t
 import { getPostgresPool } from "@/lib/postgres";
 import type { Question, QuestionLetter, QuestionTopicOption } from "@/lib/question-types";
 
-export const metadata = { title: "Daftar Tes — NusaCBT" };
+export const metadata = { title: "Daftar Tes" };
 export const dynamic = "force-dynamic";
 
 type QuestionRow = {

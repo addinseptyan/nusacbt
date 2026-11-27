@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 import { activeParticipantLoginPeriods, type ActiveLoginPeriod } from "@/lib/participant-auth";
 
-export const metadata = { title: "Masuk Peserta — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Masuk Peserta", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ error?: string; sesi?: string }> };

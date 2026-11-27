@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 import { participantSharedScores, type ParticipantSharedScores } from "@/lib/participant-auth";
 import { participantPageNumber } from "@/lib/participant-login-validation.mjs";
 
-export const metadata = { title: "Nilai yang Dibagikan — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Nilai yang Dibagikan", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 /** Fallback tanpa JavaScript; dengan JavaScript daftar dibuka di modal /peserta. */

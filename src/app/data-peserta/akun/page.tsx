@@ -10,7 +10,7 @@ import { validDataId } from "@/lib/class-validation.mjs";
 import { loadAccountPage } from "@/lib/participant-account-service";
 import type { AccountPageData } from "@/lib/participant-account-types";
 
-export const metadata = { title: "Akun Peserta — NusaCBT" };
+export const metadata = { title: "Akun Peserta" };
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage({ searchParams }: { searchParams: Promise<{ periode?: string | string[] }> }) {

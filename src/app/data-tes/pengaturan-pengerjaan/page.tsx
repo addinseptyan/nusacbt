@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 
-export const metadata = { title: "Pengaturan Pengerjaan — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Pengaturan Pengerjaan", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function WorkSettingsPage() {

@@ -12,7 +12,7 @@ import { parseCardFilters } from "@/lib/participant-card-filter.mjs";
 import type { CardPageData } from "@/lib/participant-card-types";
 import "./card-print.css";
 
-export const metadata = { title: "Cetak Kartu Peserta — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Cetak Kartu Peserta", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 type Search = Record<string, string | string[] | undefined>;

@@ -72,6 +72,7 @@ function RunEditor({
   plan,
   run,
   initialKind = "regular",
+  lockKind = false,
   defaultTimeZone = "WIB",
   questions,
   onClose,
@@ -80,11 +81,13 @@ function RunEditor({
   plan:SessionPlanPage;
   run:ExamRun|null;
   initialKind?:ExamRunKind;
+  lockKind?:boolean;
   defaultTimeZone?:ExamTimeZone;
   questions:Question[];
   onClose:()=>void;
 }) {
   const router=useRouter(); const [pending,startSaving]=useTransition(); const [error,setError]=useState<Notice>(null);
+  const isKindLocked = Boolean(run) || lockKind;
   const [kind,setKind]=useState<ExamRunKind>(run?.kind ?? initialKind);
   const [label,setLabel]=useState(run?.label ?? ((run?.kind ?? initialKind)==="regular" ? "Sesi 1" : kindLabel[run?.kind ?? initialKind]));
   const [sessionNumber,setSessionNumber]=useState<number | null>(run?.sessionNumber ?? plan.groups[0]?.sessionNumber ?? null);
@@ -142,7 +145,17 @@ function RunEditor({
     <DialogHeader><DialogTitle>{run ? "Ubah draf pelaksanaan" : "Tambah pelaksanaan"}</DialogTitle><DialogDescription>Rancangan {test.name} · {test.periodName}. Draf tidak terlihat peserta sampai dirilis.</DialogDescription></DialogHeader>
     <form onSubmit={submit} className="space-y-5 pt-1">
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5"><label htmlFor="run-kind" className="text-xs font-semibold">Jenis pelaksanaan</label><select id="run-kind" value={kind} disabled={pending||Boolean(run)} onChange={(e)=>changeKind(e.target.value as ExamRunKind)} className={selectClass}><option value="regular">Reguler</option><option value="makeup">Susulan</option><option value="remedial">Remidi</option></select></div>
+        <div className="space-y-1.5">
+          <label htmlFor="run-kind" className="text-xs font-semibold">Jenis pelaksanaan</label>
+          <select id="run-kind" value={kind} disabled={pending||isKindLocked} onChange={(e)=>changeKind(e.target.value as ExamRunKind)} className={selectClass}>
+            <option value="regular">Reguler</option>
+            <option value="makeup">Susulan</option>
+            <option value="remedial">Remidi</option>
+          </select>
+          {lockKind && !run && (
+            <p className="text-[11px] text-muted-foreground">Jenis pelaksanaan terkunci mengikuti kategori {kindLabel[kind]} yang dipilih.</p>
+          )}
+        </div>
         <div className="space-y-1.5"><label htmlFor="run-label" className="text-xs font-semibold">Nama pelaksanaan</label><Input id="run-label" value={label} maxLength={200} required disabled={pending} onChange={(e)=>setLabel(e.target.value)} placeholder="Contoh: Sesi 1" className="h-10" /></div>
         {kind==="regular" && <div className="space-y-1.5 sm:col-span-2"><label htmlFor="run-session" className="text-xs font-semibold">Kelompok sesi periode</label><select id="run-session" value={sessionNumber ?? ""} disabled={pending} onChange={(e)=>changeGroup(e.target.value)} className={selectClass}><option value="">Pilih kelompok sesi</option>{plan.groups.map((g)=><option key={g.sessionNumber} value={g.sessionNumber}>Sesi {g.sessionNumber} · kapasitas {g.capacity}</option>)}</select>{!plan.groups.length && <p className="text-xs text-destructive">Belum ada kelompok. Tutup dialog dan <Link href={`/data-tes/daftar/sesi?periode=${test.periodId}`} className="font-semibold underline">atur kelompok sesi</Link> terlebih dahulu.</p>}</div>}
         <div className="space-y-1.5"><label htmlFor="run-start" className="text-xs font-semibold">Tanggal dan waktu mulai</label><Input id="run-start" type="datetime-local" min="2000-01-01T00:00" max="2100-12-31T23:59" step={60} value={startLocal} required disabled={pending} onChange={(e)=>setStartLocal(e.target.value)} className="h-10" /></div>
@@ -222,7 +235,7 @@ export function ExamRunManager({
 }) {
   // Draf yang dipilih dari timeline langsung dibuka. Jadwal dirilis hanya
   // ditunjukkan pada daftarnya; pengubahan tetap mengikuti aturan rilis.
-  const [editorState,setEditorState]=useState<{ run: ExamRun | null; initialKind?: ExamRunKind } | undefined>(() => {
+  const [editorState,setEditorState]=useState<{ run: ExamRun | null; initialKind?: ExamRunKind; lockKind?: boolean } | undefined>(() => {
     const initialDraft = runs.find((run) => run.id === initialRunId && !run.publishedAt);
     return initialDraft ? { run: initialDraft } : undefined;
   });
@@ -262,7 +275,7 @@ export function ExamRunManager({
                   </div>
                   <p className="text-[11px] opacity-80">{kindHint[kind]}</p>
                 </div>
-                <Button type="button" size="sm" variant="outline" aria-label={`Tambah ${kindLabel[kind]}`} onClick={()=>setEditorState({ run: null, initialKind: kind })} className="bg-background/80 hover:bg-background">
+                <Button type="button" size="sm" variant="outline" aria-label={`Tambah ${kindLabel[kind]}`} onClick={()=>setEditorState({ run: null, initialKind: kind, lockKind: true })} className="bg-background/80 hover:bg-background">
                   <Plus className="size-3.5" /> Tambah
                 </Button>
               </div>
@@ -336,7 +349,7 @@ export function ExamRunManager({
         })}
       </div>
     </Card>
-    {editorState!==undefined && <RunEditor key={editorState.run?.id ?? `new-${editorState.initialKind ?? "regular"}`} test={test} plan={plan} run={editorState.run} initialKind={editorState.initialKind} defaultTimeZone={defaultTimeZone} questions={questions} onClose={()=>setEditorState(undefined)} />}
+    {editorState!==undefined && <RunEditor key={editorState.run?.id ?? `new-${editorState.initialKind ?? "regular"}-${editorState.lockKind ? "locked" : "open"}`} test={test} plan={plan} run={editorState.run} initialKind={editorState.initialKind} lockKind={editorState.lockKind} defaultTimeZone={defaultTimeZone} questions={questions} onClose={()=>setEditorState(undefined)} />}
     {action && <RunActionDialog test={test} run={action.run} students={plan.students} planRevision={plan.revision} operation={action.operation} onClose={()=>setAction(null)} />}
   </div>;
 }

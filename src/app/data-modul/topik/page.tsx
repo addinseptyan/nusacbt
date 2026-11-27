@@ -8,7 +8,7 @@ import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import type { QuestionTopic } from "@/lib/topic-types";
 
-export const metadata = { title: "Mata Pelajaran — NusaCBT" };
+export const metadata = { title: "Mata Pelajaran" };
 export const dynamic = "force-dynamic";
 
 export default async function TopicsPage() {

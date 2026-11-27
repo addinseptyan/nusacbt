@@ -7,7 +7,7 @@ import { requireAdminAccess } from "@/lib/admin-auth";
 import type { SchoolClass, SchoolMajor } from "@/lib/class-types";
 import { getPostgresPool } from "@/lib/postgres";
 
-export const metadata = { title: "Kelas / Jurusan — NusaCBT" };
+export const metadata = { title: "Kelas / Jurusan" };
 
 export default async function ClassesPage() {
   const { allowed } = await requireAdminAccess("classes.manage");
