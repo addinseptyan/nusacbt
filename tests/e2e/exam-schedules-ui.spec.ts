@@ -74,6 +74,8 @@ test("badge draf dan dirilis berbeda, menghormati reduced motion, dan mengikuti 
     )).rows[0].id;
     await client.query("INSERT INTO exam_schedule_participants(run_id,exam_test_id,period_id,kind,student_id,placement_id) VALUES($1,$2,$3,'makeup',$4,$5)", [run, f.activeTest, f.periodA, f.studentA, f.placementA]);
     await loginAsAdmin(page); await page.setViewportSize({ width: 1366, height: 800 }); await page.goto(`/data-tes/daftar/${f.activeTest}`);
+    await expect(page.getByText(/Jadwal dasar rancangan:/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Tambah pelaksanaan" })).toBeVisible();
     const list = page.getByLabel("Daftar pelaksanaan tes", { exact: true });
     const regSection = list.getByRole("region", { name: "Kategori Reguler" });
     const susSection = list.getByRole("region", { name: "Kategori Susulan" });
@@ -82,6 +84,14 @@ test("badge draf dan dirilis berbeda, menghormati reduced motion, dan mengikuti 
     expect(b1 && b2 && b3).toBeTruthy();
     expect(b2!.x).toBeGreaterThan(b1!.x + b1!.width - 2);
     expect(b3!.x).toBeGreaterThan(b2!.x + b2!.width - 2);
+    const [regHeaderBg, susHeaderBg, remHeaderBg] = await Promise.all([
+      regSection.locator("> div").first().evaluate((el) => getComputedStyle(el).backgroundColor),
+      susSection.locator("> div").first().evaluate((el) => getComputedStyle(el).backgroundColor),
+      remSection.locator("> div").first().evaluate((el) => getComputedStyle(el).backgroundColor),
+    ]);
+    expect(regHeaderBg).not.toBe(susHeaderBg);
+    expect(susHeaderBg).not.toBe(remHeaderBg);
+    expect(regHeaderBg).not.toBe(remHeaderBg);
     const draftRow = list.locator("tr").filter({ has: page.getByRole("heading", { name: `Susulan · ${label}` }) });
     const publishedRow = list.locator("tr").filter({ has: page.getByRole("heading", { name: "Susulan · Jadwal fiktif" }) });
     const draft = draftRow.locator('[data-status="draft"]');

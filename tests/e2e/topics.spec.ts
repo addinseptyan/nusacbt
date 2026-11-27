@@ -545,14 +545,56 @@ test("nama mata pelajaran sama boleh dibuat dengan tag berbeda, sedangkan kombin
     await expect(topicRow(page, subjectName)).toHaveCount(1);
     await expect(topicRow(page, subjectName)).toContainText(tagX);
 
-    // 5. Klik "Kelola soal" pada mata pelajaran kedua -> membuka /data-modul/soal?topik=... dengan breadcrumb & filter aktif
+    // 5. Tambahkan 1 soal di topik pertama untuk memastikan hitungan total saat Kelola soal topik kedua hanya menghitung soal topik kedua
+    await client.query(
+      `INSERT INTO question_bank(topic_id,prompt_text,option_a_text,option_b_text,option_c_text,option_d_text,option_e_text,correct_option)
+       VALUES($1,$2,'A','B','C','D','E','A')`,
+      [stored.rows[0].id, `Soal Topik Pertama ${suffix}`],
+    );
+
+    // Klik "Kelola soal" pada mata pelajaran kedua -> membuka /data-modul/soal?topik=... dengan cakupan khusus topik tersebut
     await page.locator("[aria-label='Filter menurut tag']").getByRole("button", { name: "Semua", exact: true }).click();
     const secondTopicRow = topicRow(page, subjectName).filter({ hasText: tagXI });
     await secondTopicRow.getByRole("link", { name: `Kelola soal ${subjectName}` }).click();
     await expect(page).toHaveURL(new RegExp(`/data-modul/soal\\?topik=${stored.rows[1].id}$`));
     await expect(page.getByRole("link", { name: "Kembali ke Mata Pelajaran" })).toBeVisible();
 
-    // 6. SearchableCombobox di /data-modul/soal membedakan kedua mata pelajaran dan mendukung pencarian multi-keyword tag
+    // Filter mata pelajaran dihapus saat masuk dari Kelola soal, dan total hanya menghitung soal topik kedua (0 soal, bukan 0 dari 1)
+    await expect(page.getByLabel("Filter mata pelajaran")).toHaveCount(0);
+    await expect(page.getByText("0 soal", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/0 dari \d+ soal/)).toHaveCount(0);
+
+    // Tambah soal otomatis memilih mata pelajaran kedua dan input topik dinonaktifkan
+    await page.getByRole("button", { name: "Tambah soal", exact: true }).click();
+    const addDialog = page.getByRole("dialog", { name: "Tambah soal", exact: true });
+    await expect(addDialog).toBeVisible();
+    const lockedCombo = addDialog.getByRole("combobox", { name: /Topik \/ mata pelajaran/ });
+    await expect(lockedCombo).toBeDisabled();
+    await expect(lockedCombo).toContainText(subjectName);
+    await addDialog.getByRole("textbox", { name: "Isi soal", exact: true }).fill(`Soal Khusus ${suffix}`);
+    for (const [idx, letter] of ["A", "B", "C", "D", "E"].entries()) {
+      await addDialog.getByLabel(`Pilihan ${letter}`, { exact: true }).fill(`Opsi ${idx + 1}`);
+    }
+    await addDialog.getByLabel("Jawaban A benar").check();
+    await addDialog.getByRole("button", { name: "Simpan soal" }).click();
+    await expect(addDialog).toBeHidden();
+
+    // Tabel kini menampilkan "1 soal" (hanya topik ini), tidak menampilkan "ID #", serta nomor urut berwarna berbeda dengan tags
+    await expect(page.getByText("1 soal", { exact: true }).first()).toBeVisible();
+    const listCard = page.getByRole("list", { name: "Daftar soal" });
+    await expect(listCard).not.toContainText(/ID #\d+/);
+    const numBadge = listCard.getByLabel("Nomor 1");
+    const tagBadge = listCard.getByText(tagXI, { exact: true });
+    await expect(numBadge).toBeVisible();
+    await expect(tagBadge).toBeVisible();
+    expect(await numBadge.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(
+      await tagBadge.evaluate((el) => getComputedStyle(el).backgroundColor),
+    );
+
+    // 6. Kembali ke Mata Pelajaran -> Semua Bank Soal memiliki SearchableCombobox dengan pencarian multi-keyword tag
+    await page.getByRole("link", { name: "Kembali ke Mata Pelajaran" }).click();
+    await page.getByRole("link", { name: "Semua Bank Soal", exact: true }).click();
+    await expect(page).toHaveURL(/\/data-modul\/soal$/);
     const combo = page.getByLabel("Filter mata pelajaran");
     const listId = await combo.getAttribute("aria-controls");
     await combo.click();
@@ -563,6 +605,7 @@ test("nama mata pelajaran sama boleh dibuat dengan tag berbeda, sedangkan kombin
     await expect(listbox.getByRole("option").first()).toContainText(subjectName);
     await expect(listbox.getByRole("option").first()).toContainText(tagXI);
   } finally {
+    await client.query("DELETE FROM question_bank WHERE topic_id IN (SELECT id FROM question_topics WHERE position(lower($1) in lower(name)) > 0)", [suffix]);
     await cleanup(client, suffix);
     await client.end();
   }

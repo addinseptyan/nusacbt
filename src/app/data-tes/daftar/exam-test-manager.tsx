@@ -31,6 +31,30 @@ const selectClass = "h-11 w-full rounded-xl border border-input bg-background px
 const dialogClass = "max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-4xl";
 type Notice = { message: string; reload?: boolean } | null;
 
+const RUN_SUMMARY_KINDS = [
+  {
+    key: "regular",
+    label: "Reguler",
+    dot: "bg-emerald-600 dark:bg-emerald-400",
+    published: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-100",
+    draft: "border-emerald-300 bg-emerald-50/40 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-200",
+  },
+  {
+    key: "makeup",
+    label: "Susulan",
+    dot: "bg-blue-600 dark:bg-blue-400",
+    published: "border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-700 dark:bg-blue-950/70 dark:text-blue-100",
+    draft: "border-blue-300 bg-blue-50/40 text-blue-800 dark:border-blue-700 dark:bg-blue-950/35 dark:text-blue-200",
+  },
+  {
+    key: "remedial",
+    label: "Remidi",
+    dot: "bg-amber-600 dark:bg-amber-400",
+    published: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/70 dark:text-amber-100",
+    draft: "border-amber-300 bg-amber-50/40 text-amber-800 dark:border-amber-700 dark:bg-amber-950/35 dark:text-amber-200",
+  },
+] as const;
+
 function formatLocal(value: string) {
   return `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)} ${value.slice(11, 16)}`;
 }
@@ -398,7 +422,35 @@ export function ExamTestManager({
       </div>
       {!visible.length ? <div className="flex flex-col items-center px-6 py-14 text-center"><span className="flex size-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><ClipboardList className="size-6" /></span><h3 className="mt-4 text-sm font-bold">{tests.length ? "Tidak ada tes yang cocok" : "Belum ada rancangan tes"}</h3><p className="mt-1.5 max-w-sm text-[12px] leading-6 text-muted-foreground">{tests.length ? "Ubah pencarian atau filter periode." : "Buat rancangan setelah periode ujian tersedia."}</p></div> : <ul aria-label="Daftar rancangan tes" className="divide-y divide-border">{visible.map((test) => {
         const outOfPeriod = checkExamDateAgainstPeriod(test.startLocal, test.endLocal, test.periodStartDate, test.periodEndDate);
-        return <li key={test.id} className="flex flex-col gap-4 p-5 sm:px-6 lg:flex-row lg:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-sm font-bold">{test.name}</h3><Badge variant="outline" className="rounded-full text-[10px]">Rancangan</Badge>{(test.tags ?? []).map((tag) => <Badge key={tag} variant="secondary" className="rounded-full text-[10px] font-medium">{tag}</Badge>)}</div><p className="mt-1 break-words text-xs text-muted-foreground">#{test.id} · {test.periodName} · {test.questionIds.length} soal</p><p className="mt-2 text-xs leading-5 text-muted-foreground">Mulai: <strong className="text-foreground">{formatLocal(test.startLocal)} {defaultTimeZone}</strong> · Akhir: <strong className="text-foreground">{formatLocal(test.endLocal)} {defaultTimeZone}</strong> · {test.durationMinutes} menit</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Acak soal: {test.shuffleQuestions ? "aktif" : "tidak"} · Acak pilihan: {test.shuffleOptions ? "aktif" : "tidak"}</p>{outOfPeriod && <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"><AlertTriangle className="size-3.5 shrink-0" /> {outOfPeriod}</p>}</div><div className="flex flex-wrap shrink-0 gap-2"><Tooltip><TooltipTrigger asChild><Button asChild variant="default" size="sm"><Link href={`/data-tes/daftar/${test.id}`} aria-label={`Pelaksanaan tes ${test.id}`}>Pelaksanaan</Link></Button></TooltipTrigger><TooltipContent sideOffset={6}>Atur jadwal, peserta, dan rilis tes ini.</TooltipContent></Tooltip><Button type="button" variant="outline" size="sm" aria-label={`Ubah tes ${test.id}`} onClick={() => openEditor(test)}><Pencil className="size-3.5" /> Ubah</Button><Button type="button" variant="outline" size="sm" aria-label={`Hapus tes ${test.id}`} onClick={() => setDeleting(test)} className="text-destructive hover:text-destructive"><Trash2 className="size-3.5" /> Hapus</Button></div></li>;
+        const runSummary = test.runSummary ?? {
+          regular: { draft: 0, published: 0 },
+          makeup: { draft: 0, published: 0 },
+          remedial: { draft: 0, published: 0 },
+        };
+        const totalRuns =
+          runSummary.regular.draft + runSummary.regular.published +
+          runSummary.makeup.draft + runSummary.makeup.published +
+          runSummary.remedial.draft + runSummary.remedial.published;
+        return <li key={test.id} className="flex flex-col gap-4 p-5 sm:px-6 lg:flex-row lg:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-sm font-bold">{test.name}</h3><Badge variant="outline" className="rounded-full text-[10px]">Rancangan</Badge>{(test.tags ?? []).map((tag) => <Badge key={tag} variant="secondary" className="rounded-full text-[10px] font-medium">{tag}</Badge>)}</div><div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label={`Status pelaksanaan tes ${test.id}`}>{totalRuns === 0 ? <Badge variant="outline" className="rounded-full border-dashed text-[10px] font-medium text-muted-foreground">Belum ada pelaksanaan</Badge> : RUN_SUMMARY_KINDS.flatMap((kindMeta) => {
+          const item = runSummary[kindMeta.key];
+          const badges = [];
+          if (item.published > 0) {
+            badges.push(
+              <Badge key={`${kindMeta.key}-pub`} variant="outline" className={`rounded-full text-[10px] font-semibold ${kindMeta.published}`}>
+                <span aria-hidden="true" className={`size-1.5 rounded-full ${kindMeta.dot}`} />
+                {kindMeta.label} · {item.published} dirilis
+              </Badge>,
+            );
+          }
+          if (item.draft > 0) {
+            badges.push(
+              <Badge key={`${kindMeta.key}-draft`} variant="outline" className={`rounded-full border-dashed text-[10px] font-semibold ${kindMeta.draft}`}>
+                {kindMeta.label} · {item.draft} draf
+              </Badge>,
+            );
+          }
+          return badges;
+        })}</div><p className="mt-1.5 break-words text-xs text-muted-foreground">#{test.id} · {test.periodName} · {test.questionIds.length} soal</p><p className="mt-1.5 text-xs leading-5 text-muted-foreground">Mulai: <strong className="text-foreground">{formatLocal(test.startLocal)} {defaultTimeZone}</strong> · Akhir: <strong className="text-foreground">{formatLocal(test.endLocal)} {defaultTimeZone}</strong> · {test.durationMinutes} menit</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Acak soal: {test.shuffleQuestions ? "aktif" : "tidak"} · Acak pilihan: {test.shuffleOptions ? "aktif" : "tidak"}</p>{outOfPeriod && <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"><AlertTriangle className="size-3.5 shrink-0" /> {outOfPeriod}</p>}</div><div className="flex flex-wrap shrink-0 gap-2"><Tooltip><TooltipTrigger asChild><Button asChild variant="default" size="sm"><Link href={`/data-tes/daftar/${test.id}`} aria-label={`Pelaksanaan tes ${test.id}`}>Pelaksanaan</Link></Button></TooltipTrigger><TooltipContent sideOffset={6}>Atur jadwal, peserta, dan rilis tes ini.</TooltipContent></Tooltip><Button type="button" variant="outline" size="sm" aria-label={`Ubah tes ${test.id}`} onClick={() => openEditor(test)}><Pencil className="size-3.5" /> Ubah</Button><Button type="button" variant="outline" size="sm" aria-label={`Hapus tes ${test.id}`} onClick={() => setDeleting(test)} className="text-destructive hover:text-destructive"><Trash2 className="size-3.5" /> Hapus</Button></div></li>;
       })}</ul>}
       {filtered.length > PAGE_SIZE && <div className="flex items-center justify-between gap-2 border-t border-border p-5 text-xs sm:px-6"><span>Halaman {currentPage + 1} dari {pages}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft className="size-4" /> Sebelumnya</Button><Button type="button" variant="outline" size="sm" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>Berikutnya <ChevronRight className="size-4" /></Button></div></div>}
     </Card>

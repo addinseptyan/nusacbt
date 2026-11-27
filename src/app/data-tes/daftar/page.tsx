@@ -47,8 +47,35 @@ export default async function ExamTestsPage() {
          to_char(e.starts_at AT TIME ZONE $1, 'YYYY-MM-DD"T"HH24:MI') AS "startLocal",
          to_char((e.starts_at + e.duration_minutes * interval '1 minute') AT TIME ZONE $1, 'YYYY-MM-DD"T"HH24:MI') AS "endLocal",
          $2::text AS "timeZone", e.duration_minutes AS "durationMinutes", e.shuffle_questions AS "shuffleQuestions", e.shuffle_options AS "shuffleOptions",
-         COALESCE((SELECT array_agg(eq.question_id::text ORDER BY eq.position) FROM exam_test_questions eq WHERE eq.exam_test_id=e.id), ARRAY[]::text[]) AS "questionIds"
-       FROM exam_tests e JOIN exam_periods p ON p.id=e.period_id ORDER BY e.starts_at DESC, e.id DESC`,
+         COALESCE((SELECT array_agg(eq.question_id::text ORDER BY eq.position) FROM exam_test_questions eq WHERE eq.exam_test_id=e.id), ARRAY[]::text[]) AS "questionIds",
+         json_build_object(
+           'regular', json_build_object(
+             'draft', COALESCE(rs."regularDraft", 0),
+             'published', COALESCE(rs."regularPublished", 0)
+           ),
+           'makeup', json_build_object(
+             'draft', COALESCE(rs."makeupDraft", 0),
+             'published', COALESCE(rs."makeupPublished", 0)
+           ),
+           'remedial', json_build_object(
+             'draft', COALESCE(rs."remedialDraft", 0),
+             'published', COALESCE(rs."remedialPublished", 0)
+           )
+         ) AS "runSummary"
+       FROM exam_tests e
+       JOIN exam_periods p ON p.id=e.period_id
+       LEFT JOIN (
+         SELECT exam_test_id,
+           count(*) FILTER (WHERE kind = 'regular' AND published_at IS NULL)::int AS "regularDraft",
+           count(*) FILTER (WHERE kind = 'regular' AND published_at IS NOT NULL)::int AS "regularPublished",
+           count(*) FILTER (WHERE kind = 'makeup' AND published_at IS NULL)::int AS "makeupDraft",
+           count(*) FILTER (WHERE kind = 'makeup' AND published_at IS NOT NULL)::int AS "makeupPublished",
+           count(*) FILTER (WHERE kind = 'remedial' AND published_at IS NULL)::int AS "remedialDraft",
+           count(*) FILTER (WHERE kind = 'remedial' AND published_at IS NOT NULL)::int AS "remedialPublished"
+         FROM exam_schedule_runs
+         GROUP BY exam_test_id
+       ) rs ON rs.exam_test_id = e.id
+       ORDER BY e.starts_at DESC, e.id DESC`,
       [ianaZone, defaultTimeZone],
     );
     const timelineResult = await client.query<TimelineItem>(

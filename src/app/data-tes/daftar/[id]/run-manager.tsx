@@ -30,6 +30,39 @@ const kindHint:Record<ExamRunKind,string>={
   makeup:"Untuk peserta yang belum mengikuti reguler.",
   remedial:"Dapat memakai durasi dan soal khusus.",
 };
+const kindColors: Record<ExamRunKind, {
+  section: string;
+  header: string;
+  dot: string;
+  badge: string;
+  thead: string;
+  divider: string;
+}> = {
+  regular: {
+    section: "border-emerald-300 bg-emerald-50/45 dark:border-emerald-800 dark:bg-emerald-950/25",
+    header: "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/75 dark:text-emerald-100",
+    dot: "bg-emerald-600 dark:bg-emerald-400",
+    badge: "border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-100",
+    thead: "border-emerald-200 bg-emerald-100/60 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
+    divider: "divide-emerald-200/70 dark:divide-emerald-800/60",
+  },
+  makeup: {
+    section: "border-blue-300 bg-blue-50/45 dark:border-blue-800 dark:bg-blue-950/25",
+    header: "border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-800 dark:bg-blue-950/75 dark:text-blue-100",
+    dot: "bg-blue-600 dark:bg-blue-400",
+    badge: "border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-700 dark:bg-blue-900/70 dark:text-blue-100",
+    thead: "border-blue-200 bg-blue-100/60 text-blue-900 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-200",
+    divider: "divide-blue-200/70 dark:divide-blue-800/60",
+  },
+  remedial: {
+    section: "border-amber-300 bg-amber-50/45 dark:border-amber-800 dark:bg-amber-950/25",
+    header: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/75 dark:text-amber-100",
+    dot: "bg-amber-600 dark:bg-amber-400",
+    badge: "border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-900/70 dark:text-amber-100",
+    thead: "border-amber-200 bg-amber-100/60 text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200",
+    divider: "divide-amber-200/70 dark:divide-amber-800/60",
+  },
+};
 const local=(v:string)=>`${v.slice(8,10)}/${v.slice(5,7)}/${v.slice(0,4)} ${v.slice(11,16)}`;
 type Notice={message:string;reload?:boolean}|null;
 function ErrorNotice({error,onReload}:{error:NonNullable<Notice>;onReload:()=>void}) { return <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertDescription>{error.message}{error.reload && <Button type="button" size="sm" variant="outline" className="mt-3 block" onClick={onReload}>Muat ulang</Button>}</AlertDescription></Alert>; }
@@ -162,8 +195,8 @@ function RunActionDialog({test,run,students,planRevision,operation,onClose}:{tes
 
 function RunStatusBadge({ published }: { published: boolean }) {
   return <Badge variant="outline" data-status={published ? "published" : "draft"} className={published
-    ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-    : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"}>
+    ? "border-emerald-400 bg-emerald-100 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"
+    : "border-amber-400 bg-amber-100 text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"}>
     <span aria-hidden="true" className="relative inline-flex size-1.5 shrink-0">
       {!published && <span className="absolute inline-flex size-full rounded-full bg-amber-500 opacity-60 motion-safe:animate-ping motion-safe:[animation-iteration-count:3]" />}
       <span className={`relative inline-flex size-1.5 rounded-full ${published ? "bg-emerald-600 dark:bg-emerald-400" : "bg-amber-600 dark:bg-amber-400"}`} />
@@ -203,29 +236,33 @@ export function ExamRunManager({
 
   return <div className="space-y-5"><div className="flex flex-wrap gap-2"><Button asChild variant="ghost" size="sm"><Link href="/data-tes/daftar"><ArrowLeft className="size-4" /> Daftar Tes</Link></Button><Button asChild variant="outline" size="sm"><Link href={`/data-tes/daftar/sesi?periode=${test.periodId}`}><CalendarRange className="size-4" /> Atur kelompok sesi periode</Link></Button></div>
     <Alert className="rounded-2xl border-[#e3e6fa] bg-[#f2f3ff] text-[#4b5893] dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200"><Info className="size-4" /><AlertTitle>Sesi tetap, jadwal per tes</AlertTitle><AlertDescription className="text-xs leading-5">Siswa memakai kelompok sesi reguler yang sama sepanjang periode. Atur waktu tiap sesi untuk tes ini, lalu rilis satu per satu. Susulan dan remidi dapat memilih peserta berbeda. Setelah peserta mulai, pelaksanaan tidak dapat ditarik untuk melindungi riwayat pengerjaan.</AlertDescription></Alert>
-    <Card className="gap-0 rounded-2xl p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="break-words text-base font-bold">{test.name}</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">{test.periodName} · {test.questionIds.length} soal · {test.durationMinutes} menit · acak soal {test.shuffleQuestions ? "aktif" : "tidak"} · acak pilihan {test.shuffleOptions ? "aktif" : "tidak"}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Jadwal dasar rancangan: {local(test.startLocal)} {defaultTimeZone}. Waktu pelaksanaan diatur terpisah mengikuti zona sekolah ({defaultTimeZone}); token khusus tetap satu untuk tes induk dan semua pelaksanaannya.</p></div><Button type="button" onClick={()=>setEditorState({ run: null, initialKind: "regular" })}><Plus className="size-4" /> Tambah pelaksanaan</Button></div></Card>
     <Card className="gap-0 rounded-2xl p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Daftar pelaksanaan</h2>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-base font-bold">Daftar pelaksanaan</h2>
+            <Badge variant="secondary" className="rounded-full text-xs">{runs.length} pelaksanaan</Badge>
+          </div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">Dikelompokkan menyamping per kategori. Draf tidak ditampilkan peserta. Rilis memeriksa bentrok jadwal untuk setiap peserta.</p>
         </div>
-        <Badge variant="secondary" className="rounded-full text-xs">{runs.length} pelaksanaan</Badge>
+        <Button type="button" onClick={()=>setEditorState({ run: null, initialKind: "regular" })}><Plus className="size-4" /> Tambah pelaksanaan</Button>
       </div>
       <div aria-label="Daftar pelaksanaan tes" className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
         {RUN_KINDS.map((kind) => {
           const categoryRuns = runsByKind[kind];
+          const palette = kindColors[kind];
           return (
-            <section key={kind} aria-label={`Kategori ${kindLabel[kind]}`} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-3">
+            <section key={kind} aria-label={`Kategori ${kindLabel[kind]}`} className={`flex min-w-0 flex-col overflow-hidden rounded-xl border ${palette.section}`}>
+              <div className={`flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 ${palette.header}`}>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
+                    <i aria-hidden="true" className={`size-2 shrink-0 rounded-full ${palette.dot}`} />
                     <h3 className="text-sm font-bold">{kindLabel[kind]}</h3>
-                    <Badge variant="secondary" className="rounded-full text-[10px]">{categoryRuns.length}</Badge>
+                    <Badge variant="outline" className={`rounded-full text-[10px] font-semibold ${palette.badge}`}>{categoryRuns.length}</Badge>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">{kindHint[kind]}</p>
+                  <p className="text-[11px] opacity-80">{kindHint[kind]}</p>
                 </div>
-                <Button type="button" size="sm" variant="outline" aria-label={`Tambah ${kindLabel[kind]}`} onClick={()=>setEditorState({ run: null, initialKind: kind })}>
+                <Button type="button" size="sm" variant="outline" aria-label={`Tambah ${kindLabel[kind]}`} onClick={()=>setEditorState({ run: null, initialKind: kind })} className="bg-background/80 hover:bg-background">
                   <Plus className="size-3.5" /> Tambah
                 </Button>
               </div>
@@ -234,13 +271,13 @@ export function ExamRunManager({
               ) : (
                 <div className="overflow-x-auto">
                   <table aria-label={`Tabel pelaksanaan ${kindLabel[kind]}`} className="w-full text-left text-xs">
-                    <thead className="border-b bg-muted/15 text-[11px] font-semibold text-muted-foreground">
+                    <thead className={`border-b text-[11px] font-semibold ${palette.thead}`}>
                       <tr>
                         <th className="px-3.5 py-2.5">Pelaksanaan &amp; jadwal</th>
                         <th className="px-3.5 py-2.5 text-right">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border">
+                    <tbody className={`divide-y ${palette.divider}`}>
                       {categoryRuns.map((run) => {
                         const outOfPeriod = checkExamDateAgainstPeriod(run.startLocal, run.endLocal, test.periodStartDate, test.periodEndDate);
                         return (

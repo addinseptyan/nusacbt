@@ -57,18 +57,21 @@ function ImageField({ question, slot, hasImage, disabled }: { question: Question
 function QuestionEditor({
   question,
   defaultTopicId,
+  lockedTopicId = "",
   topicOptions,
   open,
   onOpenChange,
 }: {
   question: Question | null;
   defaultTopicId: string;
+  lockedTopicId?: string;
   topicOptions: ComboboxOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [selectedTopicId, setSelectedTopicId] = useState(question?.topicId ?? defaultTopicId);
+  const isTopicLocked = Boolean(lockedTopicId) && !question;
+  const [selectedTopicId, setSelectedTopicId] = useState(isTopicLocked ? lockedTopicId : (question?.topicId ?? defaultTopicId));
   const [error, setError] = useState<QuestionError>(null);
   const [pending, startTransition] = useTransition();
 
@@ -80,12 +83,13 @@ function QuestionEditor({
   function reload() { setError(null); onOpenChange(false); router.refresh(); }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedTopicId) {
+    const topicToSubmit = isTopicLocked ? lockedTopicId : selectedTopicId;
+    if (!topicToSubmit) {
       setError({ message: "Pilih topik / mata pelajaran terlebih dahulu." });
       return;
     }
     const data = new FormData(event.currentTarget);
-    data.set("topicId", selectedTopicId);
+    data.set("topicId", topicToSubmit);
     // Field file yang tidak dipilih harus dihapus sebelum serialisasi Server Action;
     // beberapa runtime memberi nama "blob" pada File kosong setelah transport.
     for (const slot of QUESTION_IMAGE_SLOTS) {
@@ -120,7 +124,7 @@ function QuestionEditor({
           <DialogTitle className="text-lg font-bold">{question ? "Ubah soal" : "Tambah soal"}</DialogTitle>
           <DialogDescription>Pilih satu mata pelajaran, isi soal dan lima pilihan, lalu tandai tepat satu jawaban benar. Setiap bagian boleh berupa teks, satu gambar, atau keduanya. Perubahan baru tersimpan setelah tombol Simpan soal berhasil.</DialogDescription>
         </DialogHeader>
-        <form key={`${question?.id ?? "baru"}-${defaultTopicId}-${open}`} onSubmit={submit} className="space-y-5 pt-1">
+        <form key={`${question?.id ?? "baru"}-${lockedTopicId || defaultTopicId}-${open}`} onSubmit={submit} className="space-y-5 pt-1">
           <p className="text-[11px] leading-5 text-muted-foreground">Untuk rumus Word, aktifkan “Copy MathML to the clipboard as plain text”, lalu salin satu Equation dan tempel pada posisi kursor. Salin teks/tabel terpisah dari rumus. Word 2013 belum diuji langsung.</p>
           <div className="space-y-2">
             <label htmlFor="question-topic" className="text-sm font-semibold">Topik / mata pelajaran <span className="text-destructive">*</span></label>
@@ -129,12 +133,17 @@ function QuestionEditor({
               name="topicId"
               options={topicOptions}
               value={selectedTopicId}
-              onChange={setSelectedTopicId}
+              onChange={(val) => {
+                if (!isTopicLocked) setSelectedTopicId(val);
+              }}
               placeholder="Pilih satu mata pelajaran"
               searchPlaceholder="Cari nama mata pelajaran atau tag (multi kata)..."
               required
-              disabled={pending}
+              disabled={pending || isTopicLocked}
             />
+            {isTopicLocked && (
+              <p className="text-[11px] text-muted-foreground">Topik otomatis mengikuti mata pelajaran yang sedang dibuka dan tidak dapat diganti.</p>
+            )}
           </div>
           <div className="space-y-2">
             <label htmlFor="question-prompt" className="text-sm font-semibold">Isi soal</label>
@@ -179,7 +188,7 @@ function QuestionDetail({ question, onClose }: { question: Question | null; onCl
         {question && <div className="space-y-5 py-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary" className="max-w-full break-words">{question.topicName}</Badge>
-            {(question.topicTags ?? []).map((tag) => <Badge key={tag} variant="outline" className="rounded-full text-[10px]">{tag}</Badge>)}
+            {(question.topicTags ?? []).map((tag) => <Badge key={tag} variant="outline" className="rounded-full border-amber-300 bg-amber-50 text-[10px] font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200">{tag}</Badge>)}
           </div>
           <div><h3 className="text-sm font-bold">Isi soal</h3><div className="mt-2 text-sm"><QuestionRichDisplay document={question.promptRich} fallback={question.prompt} /></div>{question.hasPromptImage && <QuestionImage question={question} slot="prompt" alt="Gambar soal" />}</div>
           <div className="space-y-2"><h3 className="text-sm font-bold">Pilihan jawaban</h3>{question.options.map((option) => <div key={option.letter} className="rounded-xl border border-border p-3"><div className="flex items-center gap-2"><span className="text-sm font-bold">{option.letter}.</span>{option.letter === question.correctOption && <Badge className="rounded-full">Jawaban benar</Badge>}</div><div className="mt-1 text-sm"><QuestionRichDisplay document={option.rich} fallback={option.text} /></div>{option.hasImage && <QuestionImage question={question} slot={option.letter} alt={`Gambar pilihan ${option.letter}`} />}</div>)}</div>
@@ -220,7 +229,7 @@ function DeleteQuestionDialog({
   return (
     <Dialog open={question !== null} onOpenChange={(next) => { if (!next) close(); }}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-md" showCloseButton={!pending} onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}>
-        <DialogHeader><DialogTitle className="text-lg font-bold">Hapus soal?</DialogTitle><DialogDescription>Soal <strong className="break-words text-foreground">#{question?.id}</strong> beserta gambar yang tersimpan akan dihapus permanen. Jika masih direferensikan, penghapusan standar ditolak.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle className="text-lg font-bold">Hapus soal?</DialogTitle><DialogDescription>Soal ini beserta gambar yang tersimpan akan dihapus permanen. Jika masih direferensikan, penghapusan standar ditolak.</DialogDescription></DialogHeader>
         {error && <ErrorNotice error={error} onReload={reload} />}
         <DialogFooter className="flex-wrap gap-2 rounded-b-2xl">
           <Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button>
@@ -258,6 +267,7 @@ export function QuestionManager({
   questions: Question[];
   initialTopicId?: string;
 }) {
+  const isTopicScoped = Boolean(initialTopicId);
   const [query, setQuery] = useState("");
   const [topicId, setTopicId] = useState(initialTopicId);
   const [page, setPage] = useState(0);
@@ -272,10 +282,14 @@ export function QuestionManager({
     [topics],
   );
 
-  const filtered = questions.filter((question) =>
-    (!topicId || question.topicId === topicId) &&
+  const scopedQuestions = useMemo(
+    () => (isTopicScoped ? questions.filter((question) => question.topicId === initialTopicId) : questions),
+    [initialTopicId, isTopicScoped, questions],
+  );
+
+  const filtered = scopedQuestions.filter((question) =>
+    (isTopicScoped || !topicId || question.topicId === topicId) &&
     matchesMultiKeyword(query, [
-      question.id,
       question.prompt,
       question.topicName,
       ...(question.topicTags ?? []),
@@ -285,7 +299,13 @@ export function QuestionManager({
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
   const visible = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  const selectedTopic = topicId ? topics.find((item) => item.id === topicId) ?? null : null;
+  const activeTopicId = isTopicScoped ? initialTopicId : topicId;
+  const selectedTopic = activeTopicId ? topics.find((item) => item.id === activeTopicId) ?? null : null;
+  const headerTotalBadge = isTopicScoped
+    ? query.trim()
+      ? `${filtered.length} dari ${scopedQuestions.length} soal`
+      : `${scopedQuestions.length} soal`
+    : `${filtered.length}${topicId ? ` dari ${questions.length}` : ""} soal`;
 
   function openEditor(question: Question | null) { setEditing(question); setEditorOpen(true); }
 
@@ -299,7 +319,7 @@ export function QuestionManager({
         </Button>
         {selectedTopic && (
           <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">
-            Filter aktif: {formatTopicLabel(selectedTopic)} ({filtered.length} soal)
+            Mata pelajaran: {formatTopicLabel(selectedTopic)} ({scopedQuestions.length} soal)
           </Badge>
         )}
       </div>
@@ -310,43 +330,44 @@ export function QuestionManager({
       {topics.length === 0 && <Alert className="mb-6 max-w-4xl rounded-2xl"><Info className="size-4" /><AlertTitle>Siapkan kategori terlebih dahulu</AlertTitle><AlertDescription>Buka <Link href="/data-modul/topik">Mata Pelajaran</Link> untuk menambah mata pelajaran sebelum membuat soal.</AlertDescription></Alert>}
       <Card className="max-w-5xl gap-0 overflow-hidden rounded-[18px] bg-card py-0 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border p-5 sm:px-6">
-          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2.5"><h2 className="text-[15px] font-bold">Daftar soal</h2><Badge variant="secondary" className="rounded-full text-[10px]">{filtered.length}{topicId ? ` dari ${questions.length}` : ""} soal</Badge></div><p className="mt-1 text-[12px] text-muted-foreground">Kelola soal pilihan ganda untuk rancangan dan pelaksanaan tes.</p></div>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2.5"><h2 className="text-[15px] font-bold">Daftar soal</h2><Badge variant="secondary" className="rounded-full text-[10px]">{headerTotalBadge}</Badge></div><p className="mt-1 text-[12px] text-muted-foreground">Kelola soal pilihan ganda untuk rancangan dan pelaksanaan tes.</p></div>
           <Button onClick={() => openEditor(null)} disabled={topics.length === 0} className="h-10 rounded-xl px-4 font-semibold"><Plus className="size-4" /> Tambah soal</Button>
         </div>
-        <div className="grid gap-4 border-b border-border px-5 py-4 sm:grid-cols-2 sm:px-6">
+        <div className={isTopicScoped ? "grid gap-4 border-b border-border px-5 py-4 sm:px-6" : "grid gap-4 border-b border-border px-5 py-4 sm:grid-cols-2 sm:px-6"}>
           <div><label htmlFor="question-search" className="mb-2 block text-[12px] font-semibold">Cari soal</label><div className="relative"><Search className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" /><Input id="question-search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Cari teks soal, pilihan, atau tag (multi kata)" className="h-11 rounded-xl pl-9" /></div></div>
-          <div>
-            <label htmlFor="question-filter-topic" className="mb-2 block text-[12px] font-semibold">Filter mata pelajaran</label>
-            <SearchableCombobox
-              id="question-filter-topic"
-              options={topicOptions}
-              value={topicId}
-              onChange={(val) => { setTopicId(val); setPage(0); }}
-              placeholder="Semua mata pelajaran"
-              searchPlaceholder="Cari nama mata pelajaran atau tag (multi kata)..."
-              emptyOptionLabel="Semua mata pelajaran"
-              allowClear
-            />
-          </div>
-          {(query || topicId) && <p aria-live="polite" className="text-[11px] text-muted-foreground sm:col-span-2">{filtered.length} soal ditemukan</p>}
+          {!isTopicScoped && (
+            <div>
+              <label htmlFor="question-filter-topic" className="mb-2 block text-[12px] font-semibold">Filter mata pelajaran</label>
+              <SearchableCombobox
+                id="question-filter-topic"
+                options={topicOptions}
+                value={topicId}
+                onChange={(val) => { setTopicId(val); setPage(0); }}
+                placeholder="Semua mata pelajaran"
+                searchPlaceholder="Cari nama mata pelajaran atau tag (multi kata)..."
+                emptyOptionLabel="Semua mata pelajaran"
+                allowClear
+              />
+            </div>
+          )}
+          {(query || (!isTopicScoped && topicId)) && <p aria-live="polite" className={`text-[11px] text-muted-foreground${isTopicScoped ? "" : " sm:col-span-2"}`}>{filtered.length} soal ditemukan</p>}
         </div>
-        {visible.length === 0 ? <div className="flex flex-col items-center px-6 py-12 text-center"><BookOpenCheck className="size-7 text-muted-foreground" /><h3 className="mt-4 text-sm font-bold">{questions.length === 0 ? "Belum ada soal" : "Soal tidak ditemukan"}</h3><p className="mt-1.5 text-[12px] leading-6 text-muted-foreground">{questions.length === 0 ? "Tambahkan soal pilihan ganda pertama." : "Coba kata kunci atau mata pelajaran lain."}</p></div> : (
+        {visible.length === 0 ? <div className="flex flex-col items-center px-6 py-12 text-center"><BookOpenCheck className="size-7 text-muted-foreground" /><h3 className="mt-4 text-sm font-bold">{scopedQuestions.length === 0 ? "Belum ada soal" : "Soal tidak ditemukan"}</h3><p className="mt-1.5 text-[12px] leading-6 text-muted-foreground">{scopedQuestions.length === 0 ? "Tambahkan soal pilihan ganda pertama." : isTopicScoped ? "Coba kata kunci lain." : "Coba kata kunci atau mata pelajaran lain."}</p></div> : (
           <ul aria-label="Daftar soal" className="divide-y divide-border">
             {visible.map((question, idx) => {
               const rowNumber = currentPage * PAGE_SIZE + idx + 1;
               return (
                 <li key={question.id} data-question-id={question.id} className="flex min-w-0 flex-col gap-3 p-5 sm:flex-row sm:items-start sm:gap-5 sm:px-6">
                   <div className="flex min-w-0 flex-1 items-start gap-3">
-                    <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold tabular-nums text-foreground" aria-label={`Nomor ${rowNumber}`}>
+                    <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-700 text-xs font-bold tabular-nums text-white shadow-xs dark:bg-emerald-500 dark:text-slate-950" aria-label={`Nomor ${rowNumber}`}>
                       {rowNumber}.
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Badge variant="secondary" className="max-w-full break-words">{question.topicName}</Badge>
                         {(question.topicTags ?? []).map((tag) => (
-                          <Badge key={tag} variant="outline" className="rounded-full text-[10px] font-medium">{tag}</Badge>
+                          <Badge key={tag} variant="outline" className="rounded-full border-amber-300 bg-amber-50 text-[10px] font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200">{tag}</Badge>
                         ))}
-                        <span className="text-[11px] text-muted-foreground">ID #{question.id}</span>
                         {question.hasPromptImage && <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><ImageIcon className="size-3.5" /> Bergambar</span>}
                       </div>
                       <p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-[13px] leading-6 font-semibold">{question.prompt || "Soal bergambar tanpa teks"}</p>
@@ -361,7 +382,7 @@ export function QuestionManager({
         )}
         {pages > 1 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-4 text-[12px] text-muted-foreground sm:px-6"><span>Halaman {currentPage + 1} dari {pages} · {filtered.length} soal</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)} aria-label="Halaman sebelumnya"><ChevronLeft className="size-4" /> Sebelumnya</Button><Button variant="outline" size="sm" disabled={currentPage >= pages - 1} onClick={() => setPage(currentPage + 1)} aria-label="Halaman berikutnya">Berikutnya <ChevronRight className="size-4" /></Button></div></div>}
       </Card>
-      <QuestionEditor key={`${editing?.id ?? "new"}-${topicId}-${editorOpen}`} question={editing} defaultTopicId={topicId} topicOptions={topicOptions} open={editorOpen} onOpenChange={setEditorOpen} />
+      <QuestionEditor key={`${editing?.id ?? "new"}-${activeTopicId}-${editorOpen}`} question={editing} defaultTopicId={activeTopicId} lockedTopicId={initialTopicId} topicOptions={topicOptions} open={editorOpen} onOpenChange={setEditorOpen} />
       <QuestionDetail question={viewing} onClose={() => setViewing(null)} />
       <DeleteQuestionDialog question={deleting} onClose={() => setDeleting(null)} onRequestCascade={(item) => setCascadeTarget(item)} />
       <DevCascadeDeleteDialog

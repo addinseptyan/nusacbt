@@ -56,7 +56,16 @@ test("pratinjau Word fiktif, simpan atomik dan pengulangan operasi tidak menggan
   const tag = suffix(); const name = `Impor Word ${tag}`; const client = testDatabase(); await client.connect(); const topics: string[] = [];
   try {
     topics.push(await createTopic(client, name));
-    await loginAsAdmin(page); await previewFile(page, name);
+    await loginAsAdmin(page);
+    await page.goto(destination);
+    const topicCombo = page.getByLabel("Topik / mata pelajaran");
+    await topicCombo.click();
+    const listbox = page.locator(`[id="${await topicCombo.getAttribute("aria-controls")}"]`);
+    await expect(listbox.getByRole("option").filter({ hasText: name })).toContainText("0 soal");
+    await topicCombo.click();
+
+    await previewFile(page, name);
+    await expect(page.getByLabel("Topik / mata pelajaran")).toContainText("0 soal");
     const list = page.getByRole("list", { name: "Pratinjau impor soal" });
     await expect(list).toContainText("السُّؤَالُ");
     await expect(list.locator("table")).toHaveCount(1);
@@ -71,6 +80,7 @@ test("pratinjau Word fiktif, simpan atomik dan pengulangan operasi tidak menggan
     await confirmSave(page);
     const request = await requestPromise; const response = await responsePromise;
     await expect(page.getByRole("status").filter({ hasText: "4 soal berhasil ditambahkan" })).toBeVisible();
+    await expect(page.getByLabel("Topik / mata pelajaran")).toContainText("4 soal");
     const rows = await client.query("SELECT prompt_text,prompt_rich,prompt_image IS NOT NULL AS image,correct_option FROM question_bank WHERE topic_id=$1 ORDER BY id", [topics[0]]);
     expect(rows.rowCount).toBe(4);
     expect(rows.rows[0].prompt_text).toBe("السُّؤَالُ: مَا لَوْنُ السَّمَاءِ؟");

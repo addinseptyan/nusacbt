@@ -18,7 +18,13 @@ export default async function ImportQuestionPage() {
   }
   let topics: QuestionTopicOption[];
   try {
-    const result = await getPostgresPool().query<QuestionTopicOption>("SELECT id::text AS id, name, tags FROM question_topics ORDER BY lower(name), tags_signature, name, id");
+    const result = await getPostgresPool().query<QuestionTopicOption>(
+      `SELECT t.id::text AS id, t.name, COALESCE(t.tags, ARRAY[]::text[]) AS tags, count(q.id)::int AS "questionCount"
+       FROM question_topics t
+       LEFT JOIN question_bank q ON q.topic_id = t.id
+       GROUP BY t.id
+       ORDER BY lower(t.name), t.tags_signature, t.name, t.id`,
+    );
     topics = result.rows;
   } catch {
     return <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9"><h1 className="text-[29px] font-bold">Import Soal Word</h1><Alert variant="destructive" className="mt-6 max-w-2xl"><CircleAlert className="size-4" /><AlertTitle>Data belum dapat dimuat</AlertTitle><AlertDescription>Pastikan PostgreSQL berjalan dan migrasi terbaru sudah diterapkan. <Link href="/data-modul/soal" className="underline">Kembali ke Bank Soal</Link>.</AlertDescription></Alert></div>;
