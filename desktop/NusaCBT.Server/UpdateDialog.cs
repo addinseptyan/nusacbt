@@ -31,7 +31,7 @@ internal sealed class UpdateDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(580, 510);
+        ClientSize = new Size(620, 540);
 
         var root = new TableLayoutPanel
         {

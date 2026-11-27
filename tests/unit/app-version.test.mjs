@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  APP_DEFAULT_VERSION,
   checkGitHubLatestRelease,
   compareSemver,
   formatReleaseTag,
@@ -10,6 +12,8 @@ import {
   safeGitHubHttpsUrl,
   selectWindowsReleaseAssets,
 } from "../../src/lib/app-version.mjs";
+
+const pkgVersion = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version;
 
 test("parseSemver, formatReleaseTag & compareSemver mengurutkan versi SemVer dengan benar", () => {
   assert.deepEqual(parseSemver("v1.0.0"), {
@@ -74,10 +78,11 @@ test("selectWindowsReleaseAssets memilih installer, portable zip, dan checksums 
   assert.equal(picked.checksums?.name, "SHA256SUMS.txt");
 });
 
-test("getAppVersionInfo mengembalikan versi awal 1.0.0", () => {
+test("getAppVersionInfo mengembalikan versi sesuai package.json", () => {
   const info = getAppVersionInfo();
-  assert.equal(info.version, "1.0.0");
-  assert.equal(info.tag, "v1.0.0");
+  assert.equal(APP_DEFAULT_VERSION, pkgVersion);
+  assert.equal(info.version, pkgVersion);
+  assert.equal(info.tag, `v${pkgVersion}`);
   assert.equal(info.repo, "addinseptyan/nusacbt");
 });
 

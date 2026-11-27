@@ -11,10 +11,11 @@ internal sealed class SetupWizardForm : Form
     private readonly TextBox _pgAdminUserBox = new() { Text = "postgres", Dock = DockStyle.Fill };
     private readonly TextBox _pgAdminPassBox = new() { UseSystemPasswordChar = true, Dock = DockStyle.Fill };
     private readonly CheckBox _cookieSecureCheck = new() { Text = "Aktifkan cookie HTTPS saja (centang hanya jika memakai reverse proxy HTTPS)", Checked = false, AutoSize = true };
+    private readonly CheckBox _createAdminCheck = new() { Text = "Buat akun Superadmin baru (wajib jika database masih kosong)", Checked = true, AutoSize = true };
     private readonly TextBox _adminUserBox = new() { Text = "adminsekolah", Dock = DockStyle.Fill };
     private readonly TextBox _adminPassBox = new() { UseSystemPasswordChar = true, Dock = DockStyle.Fill };
     private readonly TextBox _adminConfirmBox = new() { UseSystemPasswordChar = true, Dock = DockStyle.Fill };
-    private readonly Label _statusLabel = new() { AutoSize = true, ForeColor = Color.DarkRed };
+    private readonly Label _statusLabel = new() { AutoSize = true, MaximumSize = new Size(540, 0), ForeColor = Color.DarkRed };
     private readonly Button _saveBtn = new() { Text = "Simpan, Migrasi & Siapkan Kunci", AutoSize = true, Padding = new Padding(12, 6, 12, 6) };
     private readonly Button _cancelBtn = new() { Text = "Batal", AutoSize = true, Padding = new Padding(12, 6, 12, 6) };
 
@@ -26,7 +27,7 @@ internal sealed class SetupWizardForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(560, 560);
+        ClientSize = new Size(600, 620);
 
         _hostBox.Text = string.IsNullOrWhiteSpace(current.Db.Host) ? "127.0.0.1" : current.Db.Host;
         if (current.Db.Port >= 1 && current.Db.Port <= 65535) _portNum.Value = current.Db.Port;
@@ -49,34 +50,30 @@ internal sealed class SetupWizardForm : Form
         AddRow(layout, "User Aplikasi Database:", _userBox);
         AddRow(layout, "Sandi User Database:", _passBox);
 
-        layout.Controls.Add(_createDbCheck, 0, layout.RowCount);
-        layout.SetColumnSpan(_createDbCheck, 2);
-        layout.RowCount++;
-
+        AddFullSpanRow(layout, _createDbCheck);
         AddRow(layout, "Superuser Postgres:", _pgAdminUserBox);
         AddRow(layout, "Sandi Superuser Postgres:", _pgAdminPassBox);
-
-        layout.Controls.Add(_cookieSecureCheck, 0, layout.RowCount);
-        layout.SetColumnSpan(_cookieSecureCheck, 2);
-        layout.RowCount++;
+        AddFullSpanRow(layout, _cookieSecureCheck);
 
         var adminNeeded = current.Db.AdminCount == 0;
-        var adminHeader = new Label
+        _createAdminCheck.Checked = adminNeeded;
+        _createAdminCheck.Enabled = adminNeeded;
+        if (!adminNeeded)
         {
-            Text = adminNeeded
-                ? "Akun Superadmin Pertama (Wajib jika DB baru):"
-                : "Akun Superadmin sudah ada di database (kosongkan jika tidak perlu):",
-            AutoSize = true,
-            Font = new Font(Font, FontStyle.Bold),
-            Padding = new Padding(0, 8, 0, 4),
-        };
-        layout.Controls.Add(adminHeader, 0, layout.RowCount);
-        layout.SetColumnSpan(adminHeader, 2);
-        layout.RowCount++;
+            _createAdminCheck.Text = $"Akun Superadmin sudah tersedia di database ({current.Db.AdminCount} akun)";
+        }
+        AddFullSpanRow(layout, _createAdminCheck);
 
-        _adminUserBox.Enabled = adminNeeded;
-        _adminPassBox.Enabled = adminNeeded;
-        _adminConfirmBox.Enabled = adminNeeded;
+        void SyncAdminFields()
+        {
+            var enabled = adminNeeded && _createAdminCheck.Checked;
+            _adminUserBox.Enabled = enabled;
+            _adminPassBox.Enabled = enabled;
+            _adminConfirmBox.Enabled = enabled;
+        }
+        SyncAdminFields();
+        _createAdminCheck.CheckedChanged += (_, _) => SyncAdminFields();
+
         AddRow(layout, "Username Admin Awal:", _adminUserBox);
         AddRow(layout, "Sandi Admin (12+ kar):", _adminPassBox);
         AddRow(layout, "Ulangi Sandi Admin:", _adminConfirmBox);
@@ -85,16 +82,12 @@ internal sealed class SetupWizardForm : Form
         {
             Text = $"Folder data persisten: {AppPaths.DataDir}\nKunci enkripsi akan dibuat otomatis di luar folder program dan tidak akan tertimpa saat update.",
             AutoSize = true,
+            MaximumSize = new Size(540, 0),
             ForeColor = Color.DimGray,
             Padding = new Padding(0, 6, 0, 6),
         };
-        layout.Controls.Add(note, 0, layout.RowCount);
-        layout.SetColumnSpan(note, 2);
-        layout.RowCount++;
-
-        layout.Controls.Add(_statusLabel, 0, layout.RowCount);
-        layout.SetColumnSpan(_statusLabel, 2);
-        layout.RowCount++;
+        AddFullSpanRow(layout, note);
+        AddFullSpanRow(layout, _statusLabel);
 
         var btnPanel = new FlowLayoutPanel
         {
@@ -104,7 +97,7 @@ internal sealed class SetupWizardForm : Form
             AutoSize = true,
         };
         _cancelBtn.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        _saveBtn.Click += async (_, _) => await RunSetupAsync(adminNeeded);
+        _saveBtn.Click += async (_, _) => await RunSetupAsync();
         btnPanel.Controls.Add(_cancelBtn);
         btnPanel.Controls.Add(_saveBtn);
 
@@ -129,7 +122,16 @@ internal sealed class SetupWizardForm : Form
         panel.Controls.Add(control, 1, row);
     }
 
-    private async Task RunSetupAsync(bool adminNeeded)
+    private static void AddFullSpanRow(TableLayoutPanel panel, Control control)
+    {
+        var row = panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        control.Margin = new Padding(0, 4, 0, 4);
+        panel.Controls.Add(control, 0, row);
+        panel.SetColumnSpan(control, 2);
+    }
+
+    private async Task RunSetupAsync()
     {
         _statusLabel.ForeColor = Color.DarkRed;
         if (string.IsNullOrWhiteSpace(_passBox.Text))
@@ -142,7 +144,9 @@ internal sealed class SetupWizardForm : Form
             _statusLabel.Text = "Kata sandi superuser Postgres wajib diisi jika pembuatan database otomatis dicentang.";
             return;
         }
-        if (adminNeeded)
+
+        var createAdmin = _createAdminCheck.Enabled && _createAdminCheck.Checked;
+        if (createAdmin)
         {
             if (_adminPassBox.Text.Length < 12)
             {
@@ -174,8 +178,8 @@ internal sealed class SetupWizardForm : Form
                 AdminUser = _pgAdminUserBox.Text.Trim(),
                 AdminPassword = _pgAdminPassBox.Text,
                 CookieSecure = _cookieSecureCheck.Checked,
-                InitialAdminUsername = _adminUserBox.Text.Trim(),
-                InitialAdminPassword = _adminPassBox.Text,
+                InitialAdminUsername = createAdmin ? _adminUserBox.Text.Trim() : "",
+                InitialAdminPassword = createAdmin ? _adminPassBox.Text : "",
             };
 
             var res = await PreflightRunner.SetupAsync(req);

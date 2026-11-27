@@ -33,7 +33,8 @@ function parseArgs(argv) {
 }
 
 function loadEnvFromDataDir(dataDir) {
-  nextEnv.loadEnvConfig(dataDir, false);
+  const silentLog = { info: () => {}, error: () => {} };
+  nextEnv.loadEnvConfig(dataDir, false, silentLog);
 }
 
 async function readAppVersion() {
@@ -46,7 +47,7 @@ async function readAppVersion() {
   } catch {
     // Abaikan dan kembalikan fallback default.
   }
-  return "1.0.0";
+  return "1.0.1";
 }
 
 async function getMigrationFiles() {
@@ -248,11 +249,21 @@ function cleanSingleLineEnvValue(val, label) {
   return val.trim();
 }
 
-function formatEnvLine(key, val) {
-  if (/[\s"'#\\$`]/.test(val)) {
-    return `${key}="${val.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+export function formatEnvLine(key, val) {
+  const dollarSafe = val.replace(/\$/g, "\\$");
+  if (!/[\s"'#`$]/.test(val)) {
+    return `${key}=${dollarSafe}`;
   }
-  return `${key}=${val}`;
+  if (!val.includes("'")) {
+    return `${key}='${dollarSafe}'`;
+  }
+  if (!val.includes('"')) {
+    return `${key}="${dollarSafe}"`;
+  }
+  if (!val.includes("`")) {
+    return `${key}=\`${dollarSafe}\``;
+  }
+  throw new Error(`Nilai ${key} mengandung kombinasi tanda kutip yang tidak didukung.`);
 }
 
 async function readStdinJson() {
@@ -446,12 +457,14 @@ async function main() {
   throw new Error(`Perintah tidak dikenal: ${cmd}`);
 }
 
-main().catch((error) => {
-  console.log(
-    JSON.stringify({
-      ok: false,
-      error: error instanceof Error ? error.message : "Terjadi kesalahan launcher.",
-    }),
-  );
-  process.exitCode = 1;
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.log(
+      JSON.stringify({
+        ok: false,
+        error: error instanceof Error ? error.message : "Terjadi kesalahan launcher.",
+      }),
+    );
+    process.exitCode = 1;
+  });
+}
