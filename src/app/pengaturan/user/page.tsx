@@ -9,7 +9,7 @@ import { requireAdminAccess } from "@/lib/admin-auth";
 import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { loadAdminUsersPageData } from "@/lib/admin-users-service";
 
-export const metadata = { title: "Pengaturan User — NusaCBT" };
+export const metadata = { title: "Pengaturan User" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {

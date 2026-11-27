@@ -9,7 +9,7 @@ import type { SessionPlanPage as SessionPlanData } from "@/lib/exam-session-type
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SessionPlanManager } from "./session-plan-manager";
 
-export const metadata = { title: "Kelompok Sesi — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Kelompok Sesi", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function SessionPlanPage({ searchParams }: { searchParams: Promise<{ periode?: string | string[] }> }) {

@@ -12,7 +12,7 @@ import { validDataId } from "@/lib/class-validation.mjs";
 import { examQuestionPosition } from "@/lib/exam-attempt-validation.mjs";
 import { loadExamAttempt, type AttemptView } from "@/lib/exam-attempt-work";
 
-export const metadata = { title: "Pengerjaan Tes — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Pengerjaan Tes", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ attemptId: string }>; searchParams: Promise<{ soal?: string | string[] }> };

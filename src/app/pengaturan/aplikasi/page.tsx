@@ -7,7 +7,7 @@ import { requireAdminAccess } from "@/lib/admin-auth";
 import { loadAdminAppSettings } from "@/lib/app-settings-service";
 import type { AdminAppSettings } from "@/lib/app-settings-types";
 
-export const metadata = { title: "Pengaturan Aplikasi — NusaCBT" };
+export const metadata = { title: "Pengaturan Aplikasi" };
 export const dynamic = "force-dynamic";
 
 export default async function AppSettingsPage() {

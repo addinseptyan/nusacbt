@@ -9,7 +9,7 @@ import { validDataId } from "@/lib/class-validation.mjs";
 import { loadPasswordPage } from "@/lib/participant-password-service";
 import type { PasswordPageData } from "@/lib/participant-password-types";
 
-export const metadata = { title: "Sandi Peserta — NusaCBT" };
+export const metadata = { title: "Sandi Peserta" };
 export const dynamic = "force-dynamic";
 
 export default async function PasswordPage({ searchParams }: { searchParams: Promise<{ periode?: string | string[] }> }) {

@@ -18,7 +18,7 @@ import { MONITOR_MAX_EXPORT, MONITOR_PAGE_SIZE, MonitoringPermissionDenied, Moni
 import { durationLabel, kindLabels, statusLabels } from "./monitoring-workbook";
 import { SearchableTest } from "./searchable-test";
 
-export const metadata = { title: "Hasil / Monitoring Tes — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Hasil / Monitoring Tes", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 type Search = Record<string, string | string[] | undefined>;
 function paramsOf(input: Search) { const result = new URLSearchParams(); for (const [key,value] of Object.entries(input)) if (Array.isArray(value)) value.forEach((v) => result.append(key,v)); else if (value !== undefined) result.append(key,value); return result; }

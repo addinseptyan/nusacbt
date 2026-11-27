@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { requireAdminAccess } from "@/lib/admin-auth";
 import { loadToolDashboardData } from "@/lib/database-backup-service";
 
-export const metadata = { title: "Upload Database — NusaCBT" };
+export const metadata = { title: "Upload Database" };
 export const dynamic = "force-dynamic";
 
 export default async function RestoreDatabasePage() {

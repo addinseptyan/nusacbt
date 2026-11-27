@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 import { validDataId } from "@/lib/class-validation.mjs";
 import { loadExamStartScreen } from "@/lib/exam-start-screen";
 
-export const metadata = { title: "Mulai Tes — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Mulai Tes", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function StartExamPage({ params }: { params: Promise<{ runId: string }> }) {

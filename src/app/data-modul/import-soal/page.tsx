@@ -8,7 +8,7 @@ import { requireAdminAccess } from "@/lib/admin-auth";
 import { getPostgresPool } from "@/lib/postgres";
 import type { QuestionTopicOption } from "@/lib/question-types";
 
-export const metadata = { title: "Import Soal Word — NusaCBT" };
+export const metadata = { title: "Import Soal Word" };
 export const dynamic = "force-dynamic";
 
 export default async function ImportQuestionPage() {

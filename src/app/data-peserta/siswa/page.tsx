@@ -7,7 +7,7 @@ import { getPostgresPool } from "@/lib/postgres";
 import type { Student } from "@/lib/student-types";
 import { YearStudentManager, type YearEnrollment } from "./year-student-manager";
 
-export const metadata = { title: "Data Siswa — NusaCBT" };
+export const metadata = { title: "Data Siswa" };
 export const dynamic = "force-dynamic";
 
 type Search = { tahun?: string | string[] };

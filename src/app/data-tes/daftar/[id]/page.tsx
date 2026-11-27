@@ -17,7 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ExamRunManager } from "./run-manager";
 
-export const metadata = { title: "Pelaksanaan Tes — NusaCBT", robots: { index: false, follow: false } };
+export const metadata = { title: "Pelaksanaan Tes", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 class SchedulePermissionDenied extends Error {}
 type QuestionRow = {

@@ -13,7 +13,7 @@ import { MatrixKindFilter } from "./matrix-kind-filter";
 import { MatrixReportTable } from "./matrix-report-table";
 import { MatrixTestFilter } from "./matrix-test-filter";
 
-export const metadata = { title:"Rekap Hasil Tes — NusaCBT",robots:{index:false,follow:false} };
+export const metadata = { title:"Rekap Hasil Tes",robots:{index:false,follow:false} };
 export const dynamic = "force-dynamic";
 type Search = Record<string,string|string[]|undefined>;
 function paramsOf(input:Search) { const p=new URLSearchParams(); for(const [k,v] of Object.entries(input)) if(Array.isArray(v))v.forEach((x)=>p.append(k,x));else if(v!==undefined)p.append(k,v);return p; }

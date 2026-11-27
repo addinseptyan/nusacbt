@@ -13,9 +13,32 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getPublicAppSettingsSafe();
+  const logoVersion = encodeURIComponent(settings.revision);
+  const icons: Metadata["icons"] = settings.hasLogo
+    ? {
+        icon: [
+          { url: `/api/branding/logo?v=${logoVersion}` },
+          { url: "/favicon.ico", sizes: "32x32", type: "image/x-icon" },
+        ],
+        shortcut: [`/api/branding/logo?v=${logoVersion}`],
+        apple: [{ url: `/api/branding/logo?v=${logoVersion}` }],
+      }
+    : {
+        icon: [
+          { url: "/icon.svg", type: "image/svg+xml" },
+          { url: "/favicon.ico", sizes: "32x32", type: "image/x-icon" },
+        ],
+        shortcut: ["/favicon.ico"],
+        apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+      };
+
   return {
-    title: `${settings.appName} — Panel Admin`,
+    title: {
+      default: `${settings.appName} — Panel Admin`,
+      template: `%s — ${settings.appName}`,
+    },
     description: settings.appDescription || "Aplikasi ujian berbasis jaringan lokal untuk sekolah.",
+    icons,
   };
 }
 

@@ -9,7 +9,7 @@ import { validDataId } from "@/lib/class-validation.mjs";
 import { loadIdentityPage } from "@/lib/participant-identity-service";
 import type { IdentityPageData } from "@/lib/participant-identity-types";
 
-export const metadata = { title: "Identitas Peserta — NusaCBT" };
+export const metadata = { title: "Identitas Peserta" };
 
 export default async function IdentityPage({ searchParams }: { searchParams: Promise<{ periode?: string | string[] }> }) {
   const { allowed } = await requireAdminAccess("participant_accounts.manage");

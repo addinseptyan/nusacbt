@@ -7,7 +7,7 @@ import { requireAdminAccess } from "@/lib/admin-auth";
 import type { ExamPeriod } from "@/lib/period-types";
 import { getPostgresPool } from "@/lib/postgres";
 
-export const metadata = { title: "Periode Ujian — NusaCBT" };
+export const metadata = { title: "Periode Ujian" };
 export const dynamic = "force-dynamic";
 
 export default async function PeriodPage() {

@@ -66,7 +66,18 @@ test("pengaturan aplikasi menyimpan identitas, zona waktu bawaan, palet, logo, s
     await loginAsAdmin(page);
     await page.goto("/pengaturan/aplikasi");
     await expect(page.getByRole("heading", { name: "Pengaturan Aplikasi" })).toBeVisible();
+    await expect(page).toHaveTitle("Pengaturan Aplikasi — NusaCBT");
     await expect(page.locator("#letterhead-file")).toHaveCount(0);
+
+    // Favicon default tersedia pada <head> dan rute aset statis merespons 200
+    const defaultIcons = await page.locator('head link[rel="icon"]').evaluateAll((els) =>
+      els.map((el) => el.getAttribute("href")),
+    );
+    expect(defaultIcons).toContain("/icon.svg");
+    expect(defaultIcons).toContain("/favicon.ico");
+    expect((await page.request.get("/icon.svg")).status()).toBe(200);
+    expect((await page.request.get("/favicon.ico")).status()).toBe(200);
+    expect((await page.request.get("/apple-icon.png")).status()).toBe(200);
 
     await page.getByLabel(/Nama aplikasi/).fill("CBT Harapan");
     await page.getByLabel("Nama sekolah").fill("SMA Harapan Nusantara");
@@ -96,11 +107,17 @@ test("pengaturan aplikasi menyimpan identitas, zona waktu bawaan, palet, logo, s
     expect(logoResp.headers()["x-content-type-options"]).toBe("nosniff");
     expect((await page.request.get("/api/branding/letterhead")).status()).toBe(404);
 
-    // Zona waktu terpusat diterapkan pada halaman token & daftar tes
+    // Zona waktu terpusat diterapkan pada halaman token & daftar tes; title tab & favicon mengikuti branding terbaru
     await page.goto("/data-tes/token");
     await expect(page.getByText("Zona WITA")).toBeVisible();
+    await expect(page).toHaveTitle("Token — CBT Harapan");
     await page.goto("/data-tes/daftar");
     await expect(page.getByLabel("Timeline tes", { exact: true })).toContainText("Zona WITA");
+    await expect(page).toHaveTitle("Daftar Tes — CBT Harapan");
+    const customIcons = await page.locator('head link[rel="icon"]').evaluateAll((els) =>
+      els.map((el) => el.getAttribute("href")),
+    );
+    expect(customIcons.some((href) => typeof href === "string" && href.startsWith("/api/branding/logo?v="))).toBe(true);
 
     // Halaman kartu peserta menampilkan logo dan nama sekolah pada kartu (tanpa kop surat)
     await page.goto("/data-peserta/kartu");
@@ -113,9 +130,14 @@ test("pengaturan aplikasi menyimpan identitas, zona waktu bawaan, palet, logo, s
     await expect(card).toContainText("SMA Harapan Nusantara");
     await page.getByRole("button", { name: "Tutup" }).click();
 
-    // Halaman login peserta menampilkan logo, palet, dan informasi peserta
+    // Halaman login peserta menampilkan logo, palet, informasi peserta, title tab, dan favicon
     await page.goto("/peserta/login");
     await expect(page.locator("html")).toHaveAttribute("data-palette", "indigo");
+    await expect(page).toHaveTitle("Masuk Peserta — CBT Harapan");
+    const participantIcons = await page.locator('head link[rel="icon"]').evaluateAll((els) =>
+      els.map((el) => el.getAttribute("href")),
+    );
+    expect(participantIcons.some((href) => typeof href === "string" && href.startsWith("/api/branding/logo?v="))).toBe(true);
     await expect(page.getByTestId("participant-login-info")).toContainText(
       "Peserta dilarang membawa alat komunikasi ke ruang ujian.",
     );
@@ -132,6 +154,11 @@ test("pengaturan aplikasi menyimpan identitas, zona waktu bawaan, palet, logo, s
     await expect(page.getByText("Pengaturan aplikasi berhasil disimpan.")).toBeVisible();
     await expect(page.getByTestId("dev-mode-header-pill")).toContainText("Mode Dev");
     expect((await page.request.get("/api/branding/logo")).status()).toBe(404);
+    await page.reload();
+    const restoredIcons = await page.locator('head link[rel="icon"]').evaluateAll((els) =>
+      els.map((el) => el.getAttribute("href")),
+    );
+    expect(restoredIcons).toContain("/icon.svg");
   } finally {
     try {
       await client.query("UPDATE participant_login_settings SET period_id = NULL WHERE id = 1");

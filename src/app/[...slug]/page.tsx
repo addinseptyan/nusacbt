@@ -17,7 +17,7 @@ type PageProps = { params: Promise<{ slug: string[] }> };
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const page = findNavigationPage(`/${slug.join("/")}`);
-  return { title: page ? `${page.title} — NusaCBT` : "Halaman tidak ditemukan — NusaCBT" };
+  return { title: page ? page.title : "Halaman tidak ditemukan" };
 }
 
 export default async function ModulePage({ params }: PageProps) {

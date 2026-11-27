@@ -16,7 +16,7 @@ import { ExamTokenKeyProblem, readConfiguredTokenKey, tokenKeyMessage, tokenKeyS
 import type { AccessTokenRecord, TokenKeyStatus } from "@/lib/exam-token-types";
 import { getPostgresPool } from "@/lib/postgres";
 
-export const metadata = { title: "Riwayat Token — NusaCBT" };
+export const metadata = { title: "Riwayat Token" };
 export const dynamic = "force-dynamic";
 const HISTORY_SIZE = 20;
 class SessionExpired extends Error {}

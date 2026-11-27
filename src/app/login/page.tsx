@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Masuk Admin — NusaCBT" };
+export const metadata = { title: "Masuk Admin" };
 
 type LoginPageProps = { searchParams: Promise<{ error?: string; sesi?: string }> };
 
