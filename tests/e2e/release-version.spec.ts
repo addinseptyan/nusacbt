@@ -1,9 +1,10 @@
-import { readFileSync } from "node:fs";
+﻿import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 import { loginAsAdmin } from "./helpers";
 
-const pkgVersion = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version as string;
+const pkgVersion = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")).version as string;
 const pkgTag = `v${pkgVersion}`;
 
 test("/api/health, versi rilis sidebar, dan tombol cek pembaruan manual berfungsi dengan benar", async ({ page, request }) => {
