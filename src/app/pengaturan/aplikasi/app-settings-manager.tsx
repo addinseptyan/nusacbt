@@ -1,19 +1,42 @@
 "use client";
 
-import { AlertTriangle, CalendarDays, Check, CircleAlert, Image as ImageIcon, Info, Lock, Palette, Save, School, Trash2, Upload, Wrench } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  CircleAlert,
+  Clock,
+  Image as ImageIcon,
+  Info,
+  Lock,
+  Palette,
+  RotateCcw,
+  Save,
+  School,
+  Trash2,
+  Upload,
+  Wrench,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { saveAppSettingsAction } from "@/app/pengaturan/aplikasi/actions";
+import { resetDevDatabaseAction, saveAppSettingsAction } from "@/app/pengaturan/aplikasi/actions";
 import { useCurrentAdminUser } from "@/components/admin-user-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import type { AdminAppSettings } from "@/lib/app-settings-types";
-import { APP_COLOR_PALETTES, type AppModeId, type ColorPaletteId } from "@/lib/app-settings-validation.mjs";
+import {
+  APP_COLOR_PALETTES,
+  APP_TIME_ZONES,
+  type AppModeId,
+  type AppTimeZone,
+  type ColorPaletteId,
+} from "@/lib/app-settings-validation.mjs";
 
 const inputClass =
   "h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none transition focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30";
@@ -30,21 +53,23 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
   const [schoolName, setSchoolName] = useState(initialSettings.schoolName);
   const [participantInfo, setParticipantInfo] = useState(initialSettings.participantInfo);
   const [colorPalette, setColorPalette] = useState<ColorPaletteId>(initialSettings.colorPalette);
-  const [timelineDefaultDays, setTimelineDefaultDays] = useState<number>(initialSettings.timelineDefaultDays);
+  const [defaultTimeZone, setDefaultTimeZone] = useState<AppTimeZone>(initialSettings.defaultTimeZone);
   const [appMode, setAppMode] = useState<AppModeId>(initialSettings.appMode);
   const [devConfirmOpen, setDevConfirmOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetAck, setResetAck] = useState(false);
+  const [resetPhrase, setResetPhrase] = useState("");
+  const [resetPending, setResetPending] = useState(false);
+  const [resetError, setResetError] = useState("");
   const [removeLogo, setRemoveLogo] = useState(false);
-  const [removeLetterhead, setRemoveLetterhead] = useState(false);
   const [logoFileName, setLogoFileName] = useState("");
-  const [letterheadFileName, setLetterheadFileName] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const letterheadInputRef = useRef<HTMLInputElement>(null);
 
   async function submitSave() {
-    if (pending) return;
+    if (pending || resetPending) return;
     setPending(true);
     setError("");
 
@@ -54,16 +79,13 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
     formData.set("schoolName", schoolName);
     formData.set("participantInfo", participantInfo);
     formData.set("colorPalette", colorPalette);
-    formData.set("timelineDefaultDays", String(timelineDefaultDays));
+    formData.set("defaultTimeZone", defaultTimeZone);
     if (isSuperuser) formData.set("appMode", appMode);
     formData.set("revision", settings.revision);
     if (removeLogo) formData.set("removeLogo", "1");
-    if (removeLetterhead) formData.set("removeLetterhead", "1");
 
     const logoFile = logoInputRef.current?.files?.[0];
     if (logoFile && logoFile.size > 0) formData.set("logoFile", logoFile);
-    const letterheadFile = letterheadInputRef.current?.files?.[0];
-    if (letterheadFile && letterheadFile.size > 0) formData.set("letterheadFile", letterheadFile);
 
     try {
       const result = await saveAppSettingsAction(formData);
@@ -82,15 +104,12 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
       setSchoolName(result.settings.schoolName);
       setParticipantInfo(result.settings.participantInfo);
       setColorPalette(result.settings.colorPalette);
-      setTimelineDefaultDays(result.settings.timelineDefaultDays);
+      setDefaultTimeZone(result.settings.defaultTimeZone);
       setAppMode(result.settings.appMode);
       setDevConfirmOpen(false);
       setRemoveLogo(false);
-      setRemoveLetterhead(false);
       setLogoFileName("");
-      setLetterheadFileName("");
       if (logoInputRef.current) logoInputRef.current.value = "";
-      if (letterheadInputRef.current) letterheadInputRef.current.value = "";
       document.documentElement.setAttribute("data-palette", result.settings.colorPalette);
       toast.success(result.message);
       router.refresh();
@@ -103,12 +122,46 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || resetPending) return;
     if (isSuperuser && appMode === "dev" && settings.appMode !== "dev") {
       setDevConfirmOpen(true);
       return;
     }
     await submitSave();
+  }
+
+  async function handleResetDatabase() {
+    if (resetPending || pending) return;
+    setResetPending(true);
+    setResetError("");
+    try {
+      const result = await resetDevDatabaseAction({
+        acknowledged: resetAck,
+        confirmPhrase: resetPhrase,
+      });
+      if (!result.ok) {
+        if (result.sessionExpired) {
+          router.push("/login");
+          router.refresh();
+          return;
+        }
+        setResetError(result.error);
+        return;
+      }
+      setResetOpen(false);
+      setResetAck(false);
+      setResetPhrase("");
+      setRemoveLogo(false);
+      setLogoFileName("");
+      if (logoInputRef.current) logoInputRef.current.value = "";
+      document.documentElement.setAttribute("data-palette", "emerald");
+      toast.success(result.message);
+      router.refresh();
+    } catch {
+      setResetError("Reset database gagal diselesaikan. Periksa koneksi server dan coba lagi.");
+    } finally {
+      setResetPending(false);
+    }
   }
 
   return (
@@ -209,6 +262,39 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
           <Card className="gap-0 rounded-[20px] p-5 sm:p-6">
             <div className="flex items-start gap-3 border-b pb-4">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+                <Clock className="size-5" />
+              </span>
+              <div>
+                <h2 className="text-base font-bold">Zona Waktu Standar Platform</h2>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Satu pengaturan zona waktu terpusat untuk jadwal tes, pelaksanaan, token, monitoring, lini masa, rekap, dan dasbor.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 max-w-sm">
+              <label htmlFor="default-time-zone" className="mb-1.5 block text-xs font-semibold">
+                Zona waktu standar
+              </label>
+              <select
+                id="default-time-zone"
+                name="defaultTimeZone"
+                value={defaultTimeZone}
+                onChange={(e) => setDefaultTimeZone(e.target.value as AppTimeZone)}
+                className={inputClass}
+              >
+                {APP_TIME_ZONES.map((zone) => (
+                  <option key={zone.id} value={zone.id}>
+                    {zone.label} — {zone.detail}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Card>
+
+          <Card className="gap-0 rounded-[20px] p-5 sm:p-6">
+            <div className="flex items-start gap-3 border-b pb-4">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
                 <Palette className="size-5" />
               </span>
               <div>
@@ -256,40 +342,7 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
             </div>
           </Card>
 
-          <Card className="gap-0 rounded-[20px] p-5 sm:p-6">
-            <div className="flex items-start gap-3 border-b pb-4">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-                <CalendarDays className="size-5" />
-              </span>
-              <div>
-                <h2 className="text-base font-bold">Lini Masa Jadwal Tes</h2>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Mengatur rentang jumlah hari bawaan yang langsung terbuka pada kalender lini masa di halaman Daftar Tes.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 max-w-xs">
-              <label htmlFor="timeline-default-days" className="mb-1.5 block text-xs font-semibold">
-                Rentang bawaan lini masa
-              </label>
-              <select
-                id="timeline-default-days"
-                name="timelineDefaultDays"
-                value={timelineDefaultDays}
-                onChange={(e) => setTimelineDefaultDays(Number(e.target.value))}
-                className={inputClass}
-              >
-                {[1, 2, 3, 4, 5, 6, 7].map((days) => (
-                  <option key={days} value={days}>
-                    {days} hari {days === 7 ? "(bawaan penuh 1 minggu)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </Card>
-
-          <Card className="gap-0 rounded-[20px] p-5 sm:p-6">
+          <Card id="mode-aplikasi" className="gap-0 scroll-mt-24 rounded-[20px] p-5 sm:p-6">
             <div className="flex items-start gap-3 border-b pb-4">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
                 <Wrench className="size-5" />
@@ -302,7 +355,7 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
                   </Badge>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Pada Mode Dev, Superadmin dapat menghapus data master yang sudah berdependensi beserta seluruh riwayat terkait (dengan konfirmasi bertingkat). Gunakan Mode Production saat ujian berlangsung.
+                  Pada Mode Dev, Superadmin dapat menghapus data master yang sudah berdependensi beserta seluruh riwayat terkait, serta mereset seluruh data simulasi. Gunakan Mode Production saat ujian berlangsung.
                 </p>
               </div>
             </div>
@@ -358,7 +411,7 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
                     <span className="min-w-0">
                       <span className="block text-sm font-bold text-foreground">Dev (Pengembangan / Uji)</span>
                       <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                        Mengizinkan Superadmin menghapus data beserta dependensinya melalui multi-konfirmasi.
+                        Mengizinkan Superadmin menghapus data beserta dependensinya dan mereset database simulasi.
                       </span>
                     </span>
                   </label>
@@ -369,9 +422,37 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
                     <AlertTriangle className="size-4 text-amber-600 dark:text-amber-300" />
                     <AlertTitle className="text-xs font-bold">Mode Dev Aktif / Akan Diaktifkan</AlertTitle>
                     <AlertDescription className="text-xs leading-5">
-                      Penghapusan data saat Mode Dev tidak dapat dibatalkan, namun tetap menolak penghapusan jika masih ada peserta yang sedang mengerjakan ujian aktif.
+                      Penghapusan data saat Mode Dev tidak dapat dibatalkan. Kembalikan ke Mode Production sebelum pelaksanaan ujian resmi dimulai.
                     </AlertDescription>
                   </Alert>
+                )}
+
+                {settings.appMode === "dev" && (
+                  <div className="rounded-2xl border border-destructive/40 bg-destructive/5 p-4" data-testid="dev-reset-db-panel">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-destructive">Reset Database (Mode Dev)</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          Menghapus seluruh data operasional &amp; simulasi (tahun ajaran, periode, kelas, siswa, mapel, bank soal, tes, pelaksanaan, token, pengerjaan, nilai, dan logo) serta mereset pengaturan aplikasi ke bawaan, sambil mempertahankan akun admin, peran RBAC, dan log audit cadangan.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={pending || resetPending}
+                        onClick={() => {
+                          setResetError("");
+                          setResetAck(false);
+                          setResetPhrase("");
+                          setResetOpen(true);
+                        }}
+                        className="shrink-0 rounded-xl"
+                      >
+                        <RotateCcw className="size-3.5" /> Reset Database
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -383,135 +464,72 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
                 <ImageIcon className="size-5" />
               </span>
               <div>
-                <h2 className="text-base font-bold">Logo Sekolah &amp; Gambar Kop Surat</h2>
+                <h2 className="text-base font-bold">Logo Sekolah</h2>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   Gunakan berkas PNG atau JPEG statis. Gambar diproses ulang agar aman sebelum disimpan ke database.
                 </p>
               </div>
             </div>
 
-            <div className="mt-5 grid gap-6 sm:grid-cols-2">
-              <div className="space-y-3 rounded-2xl border border-border p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold">Logo sekolah</span>
-                  <Badge variant="outline" className="text-[10px]">
-                    {settings.hasLogo && !removeLogo ? "Terpasang" : "Kosong"}
-                  </Badge>
-                </div>
-                <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 p-3">
-                  {settings.hasLogo && !removeLogo ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={`/api/branding/logo?v=${settings.revision}`}
-                      alt="Logo sekolah saat ini"
-                      className="max-h-18 max-w-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {removeLogo ? "Akan dihapus saat disimpan" : "Belum ada logo"}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <label htmlFor="logo-file" className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Unggah PNG/JPEG (maks. 1 MiB)
-                  </label>
-                  <input
-                    ref={logoInputRef}
-                    id="logo-file"
-                    name="logoFile"
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      setLogoFileName(file ? file.name : "");
-                      if (file) setRemoveLogo(false);
-                    }}
-                    className="block w-full text-xs file:mr-3 file:rounded-lg file:border file:border-border file:bg-secondary file:px-3 file:py-1.5 file:text-xs file:font-semibold hover:file:bg-secondary/80"
+            <div className="mt-5 max-w-md space-y-3 rounded-2xl border border-border p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold">Logo sekolah</span>
+                <Badge variant="outline" className="text-[10px]">
+                  {settings.hasLogo && !removeLogo ? "Terpasang" : "Kosong"}
+                </Badge>
+              </div>
+              <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 p-3">
+                {settings.hasLogo && !removeLogo ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={`/api/branding/logo?v=${settings.revision}`}
+                    alt="Logo sekolah saat ini"
+                    className="max-h-18 max-w-full object-contain"
                   />
-                  {logoFileName && (
-                    <p className="mt-1 flex items-center gap-1 text-[11px] text-primary">
-                      <Upload className="size-3" /> Siap unggah: {logoFileName}
-                    </p>
-                  )}
-                </div>
-                {settings.hasLogo && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setRemoveLogo((prev) => !prev);
-                      if (logoInputRef.current) logoInputRef.current.value = "";
-                      setLogoFileName("");
-                    }}
-                    className="w-full rounded-xl text-xs"
-                  >
-                    <Trash2 className="size-3.5" /> {removeLogo ? "Batalkan hapus logo" : "Hapus logo saat ini"}
-                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {removeLogo ? "Akan dihapus saat disimpan" : "Belum ada logo"}
+                  </span>
                 )}
               </div>
-
-              <div className="space-y-3 rounded-2xl border border-border p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold">Gambar kop surat</span>
-                  <Badge variant="outline" className="text-[10px]">
-                    {settings.hasLetterhead && !removeLetterhead ? "Terpasang" : "Kosong"}
-                  </Badge>
-                </div>
-                <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 p-3">
-                  {settings.hasLetterhead && !removeLetterhead ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={`/api/branding/letterhead?v=${settings.revision}`}
-                      alt="Kop surat saat ini"
-                      className="max-h-18 max-w-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {removeLetterhead ? "Akan dihapus saat disimpan" : "Belum ada kop surat"}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <label htmlFor="letterhead-file" className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Unggah PNG/JPEG (maks. 2 MiB)
-                  </label>
-                  <input
-                    ref={letterheadInputRef}
-                    id="letterhead-file"
-                    name="letterheadFile"
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      setLetterheadFileName(file ? file.name : "");
-                      if (file) setRemoveLetterhead(false);
-                    }}
-                    className="block w-full text-xs file:mr-3 file:rounded-lg file:border file:border-border file:bg-secondary file:px-3 file:py-1.5 file:text-xs file:font-semibold hover:file:bg-secondary/80"
-                  />
-                  {letterheadFileName && (
-                    <p className="mt-1 flex items-center gap-1 text-[11px] text-primary">
-                      <Upload className="size-3" /> Siap unggah: {letterheadFileName}
-                    </p>
-                  )}
-                </div>
-                {settings.hasLetterhead && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setRemoveLetterhead((prev) => !prev);
-                      if (letterheadInputRef.current) letterheadInputRef.current.value = "";
-                      setLetterheadFileName("");
-                    }}
-                    className="w-full rounded-xl text-xs"
-                  >
-                    <Trash2 className="size-3.5" /> {removeLetterhead ? "Batalkan hapus kop" : "Hapus kop saat ini"}
-                  </Button>
+              <div>
+                <label htmlFor="logo-file" className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Unggah PNG/JPEG (maks. 1 MiB)
+                </label>
+                <input
+                  ref={logoInputRef}
+                  id="logo-file"
+                  name="logoFile"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    setLogoFileName(file ? file.name : "");
+                    if (file) setRemoveLogo(false);
+                  }}
+                  className="block w-full text-xs file:mr-3 file:rounded-lg file:border file:border-border file:bg-secondary file:px-3 file:py-1.5 file:text-xs file:font-semibold hover:file:bg-secondary/80"
+                />
+                {logoFileName && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-primary">
+                    <Upload className="size-3" /> Siap unggah: {logoFileName}
+                  </p>
                 )}
               </div>
+              {settings.hasLogo && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setRemoveLogo((prev) => !prev);
+                    if (logoInputRef.current) logoInputRef.current.value = "";
+                    setLogoFileName("");
+                  }}
+                  className="w-full rounded-xl text-xs"
+                >
+                  <Trash2 className="size-3.5" /> {removeLogo ? "Batalkan hapus logo" : "Hapus logo saat ini"}
+                </Button>
+              )}
             </div>
           </Card>
         </div>
@@ -523,16 +541,6 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
               Pratinjau teks yang akan dipakai pada panel admin, halaman login peserta, dan kartu peserta.
             </p>
             <div className="mt-4 rounded-2xl border border-border bg-muted/30 p-4">
-              {settings.hasLetterhead && !removeLetterhead && (
-                <div className="mb-3 border-b border-border pb-2 text-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/branding/letterhead?v=${settings.revision}`}
-                    alt="Pratinjau kop surat"
-                    className="mx-auto max-h-12 object-contain"
-                  />
-                </div>
-              )}
               <div className="flex items-center gap-3">
                 {settings.hasLogo && !removeLogo ? (
                   <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-white p-1">
@@ -554,7 +562,7 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
                   <p className="truncate text-sm font-bold">{schoolName.trim() || appName.trim() || "NusaCBT"}</p>
                   <p className="truncate text-[11px] text-muted-foreground">
                     {schoolName.trim() ? `${appName.trim() || "NusaCBT"} · ` : ""}
-                    {appDescription.trim() || "Platform ujian sekolah"}
+                    {appDescription.trim() || "Platform ujian sekolah"} · {defaultTimeZone}
                   </p>
                 </div>
               </div>
@@ -576,8 +584,9 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
               </AlertDescription>
             </Alert>
 
-            <Button type="submit" disabled={pending} className="mt-5 h-11 w-full rounded-xl font-semibold">
-              <Save className="size-4" /> {pending ? "Menyimpan pengaturan..." : "Simpan pengaturan aplikasi"}
+            <Button type="submit" disabled={pending || resetPending} className="mt-5 h-11 w-full rounded-xl font-semibold">
+              {pending ? <Spinner aria-hidden="true" className="size-4" /> : <Save className="size-4" />}
+              {pending ? "Menyimpan pengaturan..." : "Simpan pengaturan aplikasi"}
             </Button>
           </Card>
         </div>
@@ -590,7 +599,7 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
               <AlertTriangle className="size-5" /> Aktifkan Mode Dev?
             </DialogTitle>
             <DialogDescription>
-              Anda akan mengaktifkan <strong>Mode Dev</strong>. Dalam mode ini, Superadmin dapat menghapus Tahun Ajaran, Periode, Kelas/Jurusan, Siswa, Mata Pelajaran, Soal, dan Tes beserta seluruh dependensi dan riwayat nilai terkait.
+              Anda akan mengaktifkan <strong>Mode Dev</strong>. Dalam mode ini, Superadmin dapat menghapus Tahun Ajaran, Periode, Kelas/Jurusan, Siswa, Mata Pelajaran, Soal, dan Tes beserta seluruh dependensi dan riwayat nilai terkait, serta mereset seluruh database simulasi.
             </DialogDescription>
           </DialogHeader>
           <p className="text-xs leading-5 text-muted-foreground">
@@ -599,7 +608,83 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
           <DialogFooter>
             <Button type="button" variant="outline" disabled={pending} onClick={() => setDevConfirmOpen(false)}>Batal</Button>
             <Button type="button" variant="destructive" disabled={pending} onClick={() => void submitSave()}>
+              {pending && <Spinner aria-hidden="true" className="size-4" />}
               {pending ? "Menyimpan..." : "Ya, aktifkan Mode Dev"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetOpen} onOpenChange={(open) => { if (!resetPending) setResetOpen(open); }}>
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-lg"
+          showCloseButton={!resetPending}
+          onEscapeKeyDown={(e) => { if (resetPending) e.preventDefault(); }}
+          onInteractOutside={(e) => { if (resetPending) e.preventDefault(); }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-destructive">
+              <AlertTriangle className="size-5" /> Konfirmasi Reset Database
+            </DialogTitle>
+            <DialogDescription>
+              Tindakan ini akan menghapus permanen seluruh data operasional dan simulasi, mereset logo &amp; pengaturan aplikasi, dan mengembalikan aplikasi ke <strong>Mode Production</strong>. Akun admin, peran RBAC, sesi admin, dan log audit cadangan tetap dipertahankan.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {resetError && (
+              <Alert variant="destructive" role="alert" className="rounded-xl">
+                <CircleAlert className="size-4" />
+                <AlertDescription>{resetError}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs leading-5 text-muted-foreground">
+              Data yang akan dihapus permanen: tahun ajaran, periode ujian, kelas &amp; jurusan, siswa &amp; penempatan, akun peserta, mata pelajaran, bank soal &amp; gambar soal, rancangan &amp; pelaksanaan tes, token, pengerjaan ujian (termasuk yang sedang berjalan), serta nilai akhir.
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border p-3 text-xs leading-5">
+              <input
+                type="checkbox"
+                checked={resetAck}
+                disabled={resetPending}
+                onChange={(e) => setResetAck(e.target.checked)}
+                className="mt-0.5 size-4 accent-destructive"
+              />
+              <span>
+                Saya memahami bahwa seluruh data operasional akan dihapus permanen dan tidak dapat dikembalikan kecuali dari cadangan ZIP.
+              </span>
+            </label>
+
+            <div>
+              <label htmlFor="reset-db-phrase" className="mb-1.5 block text-xs font-semibold">
+                Ketik <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-destructive">RESET DATABASE</code> untuk mengonfirmasi:
+              </label>
+              <Input
+                id="reset-db-phrase"
+                value={resetPhrase}
+                disabled={resetPending}
+                onChange={(e) => setResetPhrase(e.target.value)}
+                placeholder="RESET DATABASE"
+                autoComplete="off"
+                spellCheck={false}
+                className="h-10 rounded-xl font-mono"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={resetPending} onClick={() => setResetOpen(false)}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={resetPending || !resetAck || resetPhrase.trim() !== "RESET DATABASE"}
+              onClick={() => void handleResetDatabase()}
+            >
+              {resetPending && <Spinner aria-hidden="true" className="size-4" />}
+              {resetPending ? "Mereset database..." : "Ya, reset database sekarang"}
             </Button>
           </DialogFooter>
         </DialogContent>

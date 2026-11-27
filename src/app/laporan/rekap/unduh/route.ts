@@ -13,8 +13,9 @@ export async function GET(request:Request) {
     const session = await getAdminSession();
     if (!session) return fail(401,"Sesi admin diperlukan.");
     if (!adminHasPermission(session, "reports.view")) return fail(403, PERMISSION_DENIED_MESSAGE);
-    const parsed = parseMatrixFilters(new URL(request.url).searchParams); if(!parsed.ok) return fail(400,parsed.error);
-    const workbook = await withMatrixSnapshot(parsed.filters,1,true,(data) => createMatrixWorkbook(data,parsed.filters));
+    const searchParams = new URL(request.url).searchParams;
+    const parsed = parseMatrixFilters(searchParams); if(!parsed.ok) return fail(400,parsed.error);
+    const workbook = await withMatrixSnapshot(parsed.filters,1,true,(data) => createMatrixWorkbook(data,data.effectiveFilters),{ zoneExplicit: searchParams.has("zona") });
     return new Response(new Uint8Array(workbook),{status:200,headers:{...headers,"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":'attachment; filename="rekap-hasil-nusacbt.xlsx"',"Content-Length":String(workbook.byteLength)}});
   } catch(error) {
     if(error instanceof MatrixSessionExpired) return fail(401,"Sesi admin telah berakhir.");

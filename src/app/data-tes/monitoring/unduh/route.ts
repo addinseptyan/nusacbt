@@ -13,8 +13,9 @@ export async function GET(request:Request) {
     const session = await getAdminSession();
     if (!session) return fail(401,"Sesi admin diperlukan.");
     if (!adminHasPermission(session, "monitoring.view")) return fail(403, PERMISSION_DENIED_MESSAGE);
-    const parsed = parseMonitoringFilters(new URL(request.url).searchParams); if (!parsed.ok) return fail(400,parsed.error);
-    const workbook = await withMonitoringSnapshot(parsed.filters,1,1,true,(data) => monitoringWorkbook(data,parsed.filters));
+    const searchParams = new URL(request.url).searchParams;
+    const parsed = parseMonitoringFilters(searchParams); if (!parsed.ok) return fail(400,parsed.error);
+    const workbook = await withMonitoringSnapshot(parsed.filters,1,1,true,(data) => monitoringWorkbook(data,data.effectiveFilters),{ zoneExplicit: searchParams.has("zona") });
     return new Response(new Uint8Array(workbook),{status:200,headers:{...headers,"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":'attachment; filename="monitoring-tes-nusacbt.xlsx"',"Content-Length":String(workbook.byteLength)}});
   } catch(error) {
     if (error instanceof MonitoringSessionExpired) return fail(401,"Sesi admin telah berakhir.");

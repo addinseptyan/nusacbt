@@ -6,7 +6,6 @@ import {
   CircleAlert,
   DatabaseZap,
   FileArchive,
-  Loader2,
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
@@ -36,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import type { RestorePreviewReport, ToolDashboardData } from "@/lib/database-backup-service";
 
 export function RestoreManager({ data }: { data: ToolDashboardData }) {
@@ -214,7 +214,7 @@ export function RestoreManager({ data }: { data: ToolDashboardData }) {
             >
               {inspecting ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" /> Memeriksa arsip…
+                  <Spinner aria-hidden="true" /> Memeriksa arsip…
                 </>
               ) : (
                 "Periksa pratinjau cadangan"
@@ -397,7 +397,7 @@ export function RestoreManager({ data }: { data: ToolDashboardData }) {
             >
               {restoring ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" /> Memulihkan…
+                  <Spinner aria-hidden="true" /> Memulihkan…
                 </>
               ) : (
                 "Ya, pulihkan database"

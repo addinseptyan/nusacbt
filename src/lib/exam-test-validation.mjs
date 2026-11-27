@@ -1,5 +1,5 @@
 import { validDataId } from "./class-validation.mjs";
-import { validTopicRevision } from "./topic-validation.mjs";
+import { validateTagList, validTopicRevision } from "./topic-validation.mjs";
 
 export const EXAM_TEST_MAX_QUESTIONS = 1000;
 export const EXAM_TEST_MAX_DURATION = 10080;
@@ -27,6 +27,39 @@ export function validateExamStart(local, zone) {
   }
   const safeZone = /** @type {"WIB" | "WITA" | "WIT"} */ (zone);
   return { ok: true, value: { local, zone: safeZone, startsAt: new Date(wall.getTime() - zoneMinutes[safeZone] * 60000).toISOString() } };
+}
+
+/**
+ * Validasi daftar tag rancangan tes (maksimal 10 tag unik, diurutkan alfabetis).
+ * @param {unknown} value
+ * @returns {{ok: true, value: string[], signature: string} | {ok: false, error: string}}
+ */
+export function validateExamTestTags(value) {
+  return validateTagList(value, "rancangan tes");
+}
+
+/**
+ * Peringatan non-blocking apabila tanggal jadwal lokal di luar rentang periode ujian.
+ * @param {string} startLocal
+ * @param {string | null} endLocal
+ * @param {string | null | undefined} periodStartDate
+ * @param {string | null | undefined} periodEndDate
+ * @returns {string | null}
+ */
+export function checkExamDateAgainstPeriod(startLocal, endLocal, periodStartDate, periodEndDate) {
+  if (!periodStartDate || !/^\d{4}-\d{2}-\d{2}/.test(startLocal)) return null;
+  const startDate = startLocal.slice(0, 10);
+  const endDate = endLocal && /^\d{4}-\d{2}-\d{2}/.test(endLocal) ? endLocal.slice(0, 10) : startDate;
+  if (startDate < periodStartDate) {
+    return `Tanggal mulai (${startDate}) lebih awal dari tanggal mulai periode (${periodStartDate}). Jadwal tetap dapat disimpan bila disengaja.`;
+  }
+  if (periodEndDate && endDate > periodEndDate) {
+    return `Tanggal selesai (${endDate}) melewati tanggal selesai periode (${periodEndDate}). Jadwal tetap dapat disimpan bila disengaja.`;
+  }
+  if (periodEndDate && startDate > periodEndDate) {
+    return `Tanggal mulai (${startDate}) melewati tanggal selesai periode (${periodEndDate}). Jadwal tetap dapat disimpan bila disengaja.`;
+  }
+  return null;
 }
 
 /**

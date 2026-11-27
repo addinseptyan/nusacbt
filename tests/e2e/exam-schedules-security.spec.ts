@@ -52,7 +52,7 @@ test("halaman privat dan aksi menolak asal asing, anonim, data palsu, serta oper
     await editor.getByRole("button",{name:"Simpan draf"}).click(); const savedRequest=await saveRequest; await expect(editor).toBeHidden();
     const saveAction=savedRequest.headers()["next-action"]; if(!saveAction) throw new Error("Action penyimpanan tidak tertangkap.");
     const saveEntries=await page.evaluate(()=>(window as Window & {capturedScheduleFields?:Entry[]}).capturedScheduleFields??[]);
-    const runs=page.getByRole("list",{name:"Daftar pelaksanaan tes"}); await expect(runs).toContainText(label); expect(await runs.locator("img,script").count()).toBe(0); expect(scriptDialog).toBe(false);
+    const runs=page.getByLabel("Daftar pelaksanaan tes",{exact:true}); await expect(runs).toContainText(label); expect(await runs.locator("img,script").count()).toBe(0); expect(scriptDialog).toBe(false);
     const headers={"content-type":`multipart/form-data; boundary=${BOUNDARY}`,"next-action":saveAction};
     const foreign=await page.request.post(`/data-tes/daftar/${exam}`,{headers:{...headers,origin:"https://penyerang.invalid"},data:multipart(saveEntries),failOnStatusCode:false});
     expect(foreign.status()).toBeGreaterThanOrEqual(400);
@@ -89,6 +89,7 @@ test("pembagian usang ditolak atomik dan tidak deadlock dengan urutan kunci pene
   try {
     const nisn=(await client.query<{nisn:string}>("SELECT nisn FROM school_students WHERE id=$1",[f.studentA])).rows[0].nisn;
     await loginAsAdmin(page); await page.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`);
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas X ${f.majorName}`}).click();
     await page.getByLabel(`Pilih ${f.studentAName} ${nisn}`).check(); await page.getByRole("button",{name:"Acak pembagian"}).click();
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click(); const dialog=page.getByRole("dialog",{name:"Simpan pembagian sesi?"});
     // Kunci siswa dahulu seperti impor; mutasi sesi akan menunggu siswa sambil
@@ -112,6 +113,7 @@ test("masa sesi admin yang habis saat menunggu membatalkan penyimpanan kelompok"
   try {
     const nisn=(await client.query<{nisn:string}>("SELECT nisn FROM school_students WHERE id=$1",[f.studentA])).rows[0].nisn;
     await loginAsAdmin(page); await page.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`);
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas X ${f.majorName}`}).click();
     await page.getByLabel(`Pilih ${f.studentAName} ${nisn}`).check(); await page.getByRole("button",{name:"Acak pembagian"}).click();
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click(); const dialog=page.getByRole("dialog",{name:"Simpan pembagian sesi?"});
     const digest=await sessionDigest(page); await client.query("UPDATE admin_sessions SET expires_at=clock_timestamp()+interval '4 seconds' WHERE token_hash=$1",[digest]);

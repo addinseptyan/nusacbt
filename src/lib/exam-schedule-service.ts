@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
 import { adminHasPermission } from "@/lib/admin-permissions.mjs";
+import { loadDefaultTimeZoneWithClient } from "@/lib/app-settings-service";
 import { lockSchedulePeriod } from "@/lib/exam-session-service";
 import { validateExamRun, validateExamRunOperation } from "@/lib/exam-schedule-validation.mjs";
 import type { ScheduleActionResult } from "@/lib/exam-session-types";
@@ -105,6 +106,8 @@ export async function saveExamRunValue(raw: unknown): Promise<ScheduleActionResu
     client = await getPostgresPool().connect(); await client.query("BEGIN");
     const admin = await lockActiveAdminSession(client); if (!admin) throw new ScheduleProblem("Sesi admin berakhir. Masuk kembali.");
     if (!adminHasPermission(admin, "exams.manage")) throw new ScheduleProblem(PERMISSION_DENIED_MESSAGE);
+    const appZone = await loadDefaultTimeZoneWithClient(client);
+    if (draft.timeZone !== appZone) throw new ScheduleProblem("Zona waktu aplikasi berubah. Muat ulang halaman sebelum menyimpan.", true);
     const test = await lockTest(client,draft.testId,draft.testRevision);
     let run: LockedRun | null = null;
     if (draft.runId && draft.runRevision) {

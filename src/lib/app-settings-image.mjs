@@ -2,7 +2,6 @@ import sharp from "sharp";
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 export const LOGO_MAX_BYTES = 1024 * 1024;
-export const LETTERHEAD_MAX_BYTES = 2 * 1024 * 1024;
 
 function isAnimatedPng(bytes) {
   let offset = PNG_SIGNATURE.length;
@@ -18,16 +17,19 @@ function isAnimatedPng(bytes) {
 }
 
 /**
- * Validasi dan proses ulang PNG/JPEG statis untuk logo atau kop surat.
+ * Validasi dan proses ulang PNG/JPEG statis untuk logo sekolah.
  * @param {Buffer} bytes
- * @param {"logo" | "letterhead"} kind
+ * @param {"logo"} [kind]
  */
-export async function normalizeBrandingImage(bytes, kind) {
-  const maxBytes = kind === "logo" ? LOGO_MAX_BYTES : LETTERHEAD_MAX_BYTES;
-  const maxWidth = kind === "logo" ? 2000 : 4000;
-  const maxHeight = kind === "logo" ? 2000 : 2000;
-  const label = kind === "logo" ? "Logo sekolah" : "Gambar kop surat";
-  const maxLabel = kind === "logo" ? "1 MiB" : "2 MiB";
+export async function normalizeBrandingImage(bytes, kind = "logo") {
+  if (kind !== "logo") {
+    return { ok: false, error: "Jenis gambar branding tidak didukung." };
+  }
+  const maxBytes = LOGO_MAX_BYTES;
+  const maxWidth = 2000;
+  const maxHeight = 2000;
+  const label = "Logo sekolah";
+  const maxLabel = "1 MiB";
 
   if (!Buffer.isBuffer(bytes) || bytes.length === 0 || bytes.length > maxBytes) {
     return { ok: false, error: `${label} harus berukuran 1 byte sampai ${maxLabel}.` };

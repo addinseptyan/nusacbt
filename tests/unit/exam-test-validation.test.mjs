@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EXAM_TEST_MAX_QUESTIONS, validateExamStart, validateExamTestDraft } from "../../src/lib/exam-test-validation.mjs";
+import { checkExamDateAgainstPeriod, EXAM_TEST_MAX_QUESTIONS, validateExamStart, validateExamTestDraft, validateExamTestTags } from "../../src/lib/exam-test-validation.mjs";
 
 const valid = (change = {}) => ({ name: "  Tes Matematika  ", periodId: "1", startLocal: "2026-11-17T08:30", timeZone: "WIB", durationMinutes: "90", shuffleQuestions: null, shuffleOptions: null, questionIds: [], questionRevisions: [], ...change });
 
@@ -50,3 +50,17 @@ test("versi dan identitas soal valid, unik, berurutan, dan maksimal 1000", () =>
     { questionIds: "1", questionRevisions: ["1"] },
   ]) assert.equal(validateExamTestDraft(valid(change)).ok, false, JSON.stringify(change));
 });
+
+test("tag tes diurutkan alfabetis dan pemeriksaan rentang tanggal periode bersifat informatif", () => {
+  const tags = validateExamTestTags("UAS, Kelas X, uas, Matematika");
+  assert.equal(tags.ok, true);
+  if (tags.ok) {
+    assert.deepEqual(tags.value, ["Kelas X", "Matematika", "UAS"]);
+    assert.equal(tags.signature, "kelas x\x1fmatematika\x1fuas");
+  }
+  assert.equal(checkExamDateAgainstPeriod("2026-01-05T08:00", "2026-01-05T09:00", "2026-01-01", "2026-01-31"), null);
+  assert.equal(checkExamDateAgainstPeriod("2025-12-31T08:00", "2025-12-31T09:00", "2026-01-01", "2026-01-31")?.includes("lebih awal"), true);
+  assert.equal(checkExamDateAgainstPeriod("2026-01-31T23:00", "2026-02-01T01:00", "2026-01-01", "2026-01-31")?.includes("melewati"), true);
+  assert.equal(checkExamDateAgainstPeriod("2026-02-15T08:00", "2026-02-15T09:00", "2026-01-01", null), null);
+});
+

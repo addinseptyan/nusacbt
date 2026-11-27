@@ -13,17 +13,15 @@ function testDatabase() {
   return new pg.Client(postgresConfig());
 }
 
-test("pengaturan aplikasi menyimpan identitas, palet, logo, kop surat, serta tampil di login, peserta, dan kartu", async ({ page }) => {
+test("pengaturan aplikasi menyimpan identitas, zona waktu bawaan, palet, logo, serta tampil di login, peserta, kartu, dan jadwal", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
   const tag = randomBytes(4).toString("hex");
   const client = testDatabase();
   await client.connect();
   const logoPng = await sharp({
     create: { width: 120, height: 120, channels: 3, background: { r: 30, g: 64, b: 175 } },
-  })
-    .png()
-    .toBuffer();
-  const letterheadPng = await sharp({
-    create: { width: 800, height: 180, channels: 3, background: { r: 220, g: 235, b: 252 } },
   })
     .png()
     .toBuffer();
@@ -68,22 +66,19 @@ test("pengaturan aplikasi menyimpan identitas, palet, logo, kop surat, serta tam
     await loginAsAdmin(page);
     await page.goto("/pengaturan/aplikasi");
     await expect(page.getByRole("heading", { name: "Pengaturan Aplikasi" })).toBeVisible();
+    await expect(page.locator("#letterhead-file")).toHaveCount(0);
 
     await page.getByLabel(/Nama aplikasi/).fill("CBT Harapan");
     await page.getByLabel("Nama sekolah").fill("SMA Harapan Nusantara");
     await page.getByLabel("Keterangan aplikasi").fill("Platform Ujian Resmi");
     await page.getByLabel("Informasi untuk peserta").fill("Peserta dilarang membawa alat komunikasi ke ruang ujian.");
+    await page.getByLabel("Zona waktu standar").selectOption("WITA");
     await page.getByRole("radio", { name: /Indigo/i }).check({ force: true });
 
     await page.locator("#logo-file").setInputFiles({
       name: "logo.png",
       mimeType: "image/png",
       buffer: logoPng,
-    });
-    await page.locator("#letterhead-file").setInputFiles({
-      name: "kop.png",
-      mimeType: "image/png",
-      buffer: letterheadPng,
     });
 
     await page.getByRole("button", { name: "Simpan pengaturan aplikasi" }).click();
@@ -94,24 +89,27 @@ test("pengaturan aplikasi menyimpan identitas, palet, logo, kop surat, serta tam
     await expect(page.locator("header")).toContainText("CBT Harapan");
     await expect(page.getByRole("link", { name: /CBT Harapan, ke dashboard/ })).toBeVisible();
 
-    // Verifikasi gambar branding tersaji aman dari /api/branding/*
+    // Verifikasi gambar branding tersaji aman dari /api/branding/logo dan rute letterhead mengembalikan 404
     const logoResp = await page.request.get("/api/branding/logo");
     expect(logoResp.status()).toBe(200);
     expect(logoResp.headers()["content-type"]).toBe("image/png");
     expect(logoResp.headers()["x-content-type-options"]).toBe("nosniff");
+    expect((await page.request.get("/api/branding/letterhead")).status()).toBe(404);
 
-    const letterResp = await page.request.get("/api/branding/letterhead");
-    expect(letterResp.status()).toBe(200);
-    expect(letterResp.headers()["content-type"]).toBe("image/png");
+    // Zona waktu terpusat diterapkan pada halaman token & daftar tes
+    await page.goto("/data-tes/token");
+    await expect(page.getByText("Zona WITA")).toBeVisible();
+    await page.goto("/data-tes/daftar");
+    await expect(page.getByLabel("Timeline tes", { exact: true })).toContainText("Zona WITA");
 
-    // Halaman kartu peserta menampilkan kop surat, logo, dan nama sekolah pada kartu
+    // Halaman kartu peserta menampilkan logo dan nama sekolah pada kartu (tanpa kop surat)
     await page.goto("/data-peserta/kartu");
     await page.getByLabel(new RegExp(`Siswa App ${tag}`)).check();
     await page.getByRole("button", { name: "Pratinjau kartu" }).click();
     const card = page.getByTestId("participant-card").first();
     await expect(card).toBeVisible();
-    await expect(card.getByAltText("Kop surat sekolah")).toBeVisible();
     await expect(card.getByAltText("Logo SMA Harapan Nusantara")).toBeVisible();
+    await expect(card.getByAltText("Kop surat sekolah")).toHaveCount(0);
     await expect(card).toContainText("SMA Harapan Nusantara");
     await page.getByRole("button", { name: "Tutup" }).click();
 
@@ -123,15 +121,9 @@ test("pengaturan aplikasi menyimpan identitas, palet, logo, kop surat, serta tam
     );
     await expect(page.getByText("SMA Harapan Nusantara", { exact: true })).toBeVisible();
 
-    // Hapus logo saat ini dan simpan
+    // Hapus logo saat ini dan aktifkan Mode Dev dengan konfirmasi bertingkat
     await page.goto("/pengaturan/aplikasi");
     await page.getByRole("button", { name: "Hapus logo saat ini" }).click();
-    await page.getByRole("button", { name: "Simpan pengaturan aplikasi" }).click();
-    await expect(page.getByText("Pengaturan aplikasi berhasil disimpan.")).toBeVisible();
-    expect((await page.request.get("/api/branding/logo")).status()).toBe(404);
-
-    // Uji pengubahan rentang bawaan lini masa (3 hari) dan aktivasi Mode Dev dengan konfirmasi bertingkat
-    await page.getByLabel("Rentang bawaan lini masa").selectOption("3");
     await page.getByRole("radio", { name: /Dev \(Pengembangan/i }).check({ force: true });
     await page.getByRole("button", { name: "Simpan pengaturan aplikasi" }).click();
     const devDialog = page.getByRole("dialog", { name: /Aktifkan Mode Dev\?/ });
@@ -139,13 +131,7 @@ test("pengaturan aplikasi menyimpan identitas, palet, logo, kop surat, serta tam
     await devDialog.getByRole("button", { name: "Ya, aktifkan Mode Dev" }).click();
     await expect(page.getByText("Pengaturan aplikasi berhasil disimpan.")).toBeVisible();
     await expect(page.getByTestId("dev-mode-header-pill")).toContainText("Mode Dev");
-
-    // /data-tes/daftar memakai default 3 hari pada timeline saat baru dibuka
-    await page.goto("/data-tes/daftar");
-    const fromVal = await page.locator("#timeline-from").inputValue();
-    const toVal = await page.locator("#timeline-to").inputValue();
-    const daySpan = Math.round((Date.parse(`${toVal}T00:00:00Z`) - Date.parse(`${fromVal}T00:00:00Z`)) / 86_400_000) + 1;
-    expect(daySpan).toBe(3);
+    expect((await page.request.get("/api/branding/logo")).status()).toBe(404);
   } finally {
     try {
       await client.query("UPDATE participant_login_settings SET period_id = NULL WHERE id = 1");
@@ -167,16 +153,92 @@ test("pengaturan aplikasi menyimpan identitas, palet, logo, kop surat, serta tam
              school_name = '',
              participant_info = '',
              color_palette = 'emerald',
+             default_time_zone = 'WIB',
              app_mode = 'production',
-             timeline_default_days = 7,
              logo_image = NULL,
              logo_image_mime = NULL,
-             letterhead_image = NULL,
-             letterhead_image_mime = NULL,
              revision = revision + 1
          WHERE id = 1`,
       );
       await client.end();
     }
+  }
+});
+
+test("superadmin di Mode Dev dapat mereset database operasional sambil mempertahankan akun admin dan RBAC", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const tag = randomBytes(4).toString("hex");
+  const client = testDatabase();
+  await client.connect();
+  try {
+    await client.query("UPDATE app_settings SET app_mode = 'production', revision = revision + 1 WHERE id = 1");
+    await client.query("INSERT INTO question_topics(name) VALUES($1)", [`Reset Topik ${tag}`]);
+    await client.query(
+      "INSERT INTO school_students(name, nisn) VALUES($1, $2)",
+      [`Reset Siswa ${tag}`, `77${Math.floor(10000000 + Math.random() * 89999999)}`],
+    );
+
+    await loginAsAdmin(page);
+    await page.goto("/pengaturan/aplikasi");
+
+    // Di mode production, tombol Reset Database belum muncul
+    await expect(page.getByRole("button", { name: "Reset Database" })).toHaveCount(0);
+
+    // Aktifkan Mode Dev
+    await page.getByRole("radio", { name: /Dev \(Pengembangan/i }).check({ force: true });
+    await page.getByRole("button", { name: "Simpan pengaturan aplikasi" }).click();
+    const devDialog = page.getByRole("dialog", { name: /Aktifkan Mode Dev\?/ });
+    await devDialog.getByRole("button", { name: "Ya, aktifkan Mode Dev" }).click();
+    await expect(page.getByTestId("dev-mode-header-pill")).toBeVisible();
+
+    // Klik Reset Database & verifikasi guard frasa RESET DATABASE
+    await page.getByRole("button", { name: "Reset Database" }).click();
+    const resetDialog = page.getByRole("dialog", { name: "Konfirmasi Reset Database" });
+    await expect(resetDialog).toBeVisible();
+    const confirmReset = resetDialog.getByRole("button", { name: "Ya, reset database sekarang" });
+    await expect(confirmReset).toBeDisabled();
+
+    await resetDialog.getByRole("checkbox").check();
+    await resetDialog.getByLabel(/Ketik RESET DATABASE/).fill("reset");
+    await expect(confirmReset).toBeDisabled();
+
+    await resetDialog.getByLabel(/Ketik RESET DATABASE/).fill("RESET DATABASE");
+    await expect(confirmReset).toBeEnabled();
+    await confirmReset.click();
+    await expect(resetDialog).toBeHidden({ timeout: 20_000 });
+    await expect(page.getByText(/Seluruh data operasional berhasil direset/)).toBeVisible();
+
+    // Data operasional terhapus, sedangkan akun admin & mode kembali production & singleton tetap utuh
+    expect((await client.query("SELECT count(*)::int AS n FROM question_topics")).rows[0].n).toBe(0);
+    expect((await client.query("SELECT count(*)::int AS n FROM school_students")).rows[0].n).toBe(0);
+    expect((await client.query("SELECT count(*)::int AS n FROM admin_users")).rows[0].n).toBeGreaterThanOrEqual(1);
+    expect((await client.query("SELECT count(*)::int AS n FROM admin_roles")).rows[0].n).toBeGreaterThanOrEqual(1);
+    expect((await client.query("SELECT app_mode FROM app_settings WHERE id = 1")).rows[0].app_mode).toBe("production");
+    expect((await client.query("SELECT count(*)::int AS n FROM exam_work_settings")).rows[0].n).toBe(1);
+    expect((await client.query("SELECT count(*)::int AS n FROM exam_score_category_visibility")).rows[0].n).toBe(3);
+
+    // Sesi admin masih aktif setelah reset
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: /Selamat datang di NusaCBT/ })).toBeVisible();
+  } finally {
+    await client.query("DELETE FROM question_topics WHERE name = $1", [`Reset Topik ${tag}`]).catch(() => {});
+    await client.query("DELETE FROM school_students WHERE name = $1", [`Reset Siswa ${tag}`]).catch(() => {});
+    await client.query(
+      `UPDATE app_settings
+       SET app_name = 'NusaCBT',
+           app_description = 'Platform ujian sekolah',
+           school_name = '',
+           participant_info = '',
+           color_palette = 'emerald',
+           default_time_zone = 'WIB',
+           app_mode = 'production',
+           logo_image = NULL,
+           logo_image_mime = NULL,
+           revision = revision + 1
+       WHERE id = 1`,
+    );
+    await client.end();
   }
 });

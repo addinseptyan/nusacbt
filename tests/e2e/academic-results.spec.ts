@@ -92,7 +92,7 @@ test('monitoring menampilkan belum mulai, seluruh pengulangan, filter zona dan e
     await expect(rows).toHaveCount(5);
     const testCombobox = page.getByRole('combobox', { name: 'Nama tes' });
     await testCombobox.click();
-    await page.getByPlaceholder('Cari nama tes atau periode...').fill('Matematika X');
+    await page.getByPlaceholder('Cari nama, tag, atau periode (multi kata)...').fill('Matematika X');
     await page.getByRole('option', { name: /Matematika X/ }).first().click();
     await page.getByLabel('Kategori tes').selectOption('makeup');await page.getByRole('button',{name:'Terapkan',exact:true}).click();
     await expect(page).toHaveURL(/kategori=makeup/);await expect(rows).toHaveCount(2);

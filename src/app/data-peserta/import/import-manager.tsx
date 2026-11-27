@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import type { ImportCounts, ImportPreview, ImportStatus } from "@/lib/student-import-types";
 import type { PlacementPeriod } from "@/lib/student-types";
 
@@ -162,7 +163,7 @@ export function ImportManager({ periods, classCount }: { periods: PlacementPerio
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-md" showCloseButton={!busy} onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onInteractOutside={(event) => { if (busy) event.preventDefault(); }}>
           <DialogHeader><DialogTitle className="text-lg font-bold">Simpan hasil impor?</DialogTitle><DialogDescription>Tahun ajaran <strong className="text-foreground">{preview?.periodName}</strong>. {preview?.counts.newStudents ?? 0} siswa baru dan {preview?.counts.newPlacements ?? 0} penempatan baru akan disimpan. Data yang sudah sesuai tidak diubah.</DialogDescription></DialogHeader>
           <p className="text-[12px] leading-5 text-muted-foreground">Jika data berubah sejak pratinjau, penyimpanan dibatalkan dan Anda perlu memeriksa ulang.</p>
-          <DialogFooter><Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => setConfirmOpen(false)}>Batal</Button><Button type="button" disabled={Boolean(busy)} onClick={handleSave}>{busy === "save" ? "Menyimpan..." : "Ya, simpan impor"}</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => setConfirmOpen(false)}>Batal</Button><Button type="button" disabled={Boolean(busy)} onClick={handleSave}>{busy === "save" && <Spinner aria-hidden="true" />}{busy === "save" ? "Menyimpan..." : "Ya, simpan impor"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

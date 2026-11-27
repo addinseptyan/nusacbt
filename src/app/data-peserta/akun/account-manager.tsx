@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import type { AccountPageData, LoginLock } from "@/lib/participant-account-types";
 import type { IdentityPeriod, ParticipantIdentityRow } from "@/lib/participant-identity-types";
 import type { PasswordDisplayRow } from "@/lib/participant-password-types";
@@ -51,7 +52,7 @@ function UnlockDialog({ selection, period, onClose }: { selection: UnlockSelecti
       <DialogHeader><DialogTitle>Buka kunci login peserta?</DialogTitle><DialogDescription><strong className="text-foreground">{row.studentName}</strong> · NISN {row.nisn} · username <strong className="text-foreground">{lock.username}</strong> · periode <strong className="text-foreground">{period.name}</strong>.</DialogDescription></DialogHeader>
       <Alert role="note"><Info className="size-4" /><AlertTitle>Periksa identitas peserta</AlertTitle><AlertDescription>Kunci login untuk peserta dan periode ini akan dibuka. Sandi, penempatan kelas, sesi peserta, dan pembatas global tidak diubah. Tindakan dicatat bersama admin dan waktunya.</AlertDescription></Alert>
       {error && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
-      <DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="button" disabled={pending} onClick={confirm}>{pending ? "Memproses..." : "Ya, buka kunci"}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="button" disabled={pending} onClick={confirm}>{pending && <Spinner aria-hidden="true" />}{pending ? "Memproses..." : "Ya, buka kunci"}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }

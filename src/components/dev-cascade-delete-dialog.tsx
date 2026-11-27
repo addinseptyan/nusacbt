@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import type { DevCascadeEntityType, DevCascadeInspection } from "@/lib/dev-cascade-delete-service";
 
 function DevCascadeDeleteContent({
@@ -221,7 +222,7 @@ function DevCascadeDeleteContent({
               disabled={!phraseMatch || pending}
               onClick={handleExecute}
             >
-              <Trash2 className="size-4" />
+              {pending ? <Spinner aria-hidden="true" /> : <Trash2 className="size-4" />}
               {pending ? "Menghapus permanen..." : "Ya, hapus permanen semua"}
             </Button>
           )}

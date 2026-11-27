@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import type { SchoolClass, SchoolMajor } from "@/lib/class-types";
 
 const dialogClass = "max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-md";
@@ -71,7 +72,7 @@ function MajorEditor({ major, open, onOpenChange }: { major: SchoolMajor | null;
           </div>
           <DialogFooter className="mt-5 -mx-4 -mb-4 rounded-b-2xl">
             <Button type="button" variant="outline" disabled={pending} onClick={() => handleOpenChange(false)}>Batal</Button>
-            <Button type="submit" disabled={pending}>{pending ? "Menyimpan..." : "Simpan jurusan"}</Button>
+            <Button type="submit" disabled={pending}>{pending && <Spinner aria-hidden="true" />}{pending ? "Menyimpan..." : "Simpan jurusan"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -135,7 +136,7 @@ function ClassEditor({ schoolClass, majors, open, onOpenChange }: { schoolClass:
           </div>
           <DialogFooter className="mt-5 -mx-4 -mb-4 rounded-b-2xl">
             <Button type="button" variant="outline" disabled={pending} onClick={() => handleOpenChange(false)}>Batal</Button>
-            <Button type="submit" disabled={pending}>{pending ? "Menyimpan..." : "Simpan kelas"}</Button>
+            <Button type="submit" disabled={pending}>{pending && <Spinner aria-hidden="true" />}{pending ? "Menyimpan..." : "Simpan kelas"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -209,7 +210,7 @@ function DeleteDialog({
               Hapus beserta dependensi (Mode Dev)
             </Button>
           )}
-          <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>{pending ? "Menghapus..." : `Ya, hapus ${title}`}</Button>
+          <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>{pending && <Spinner aria-hidden="true" />}{pending ? "Menghapus..." : `Ya, hapus ${title}`}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

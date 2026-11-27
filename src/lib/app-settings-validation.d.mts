@@ -1,5 +1,6 @@
 export type ColorPaletteId = "emerald" | "indigo" | "blue" | "violet" | "rose" | "amber";
 export type AppModeId = "production" | "dev";
+export type AppTimeZone = "WIB" | "WITA" | "WIT";
 
 export const APP_COLOR_PALETTES: ReadonlyArray<{
   id: ColorPaletteId;
@@ -11,20 +12,27 @@ export const APP_COLOR_PALETTES: ReadonlyArray<{
 
 export const APP_MODES: ReadonlyArray<AppModeId>;
 
+export const APP_TIME_ZONES: ReadonlyArray<{
+  id: AppTimeZone;
+  label: string;
+  detail: string;
+}>;
+
 export const DEFAULT_APP_SETTINGS: {
   appName: string;
   appDescription: string;
   schoolName: string;
   participantInfo: string;
   colorPalette: ColorPaletteId;
+  defaultTimeZone: AppTimeZone;
   hasLogo: boolean;
-  hasLetterhead: boolean;
   revision: string;
 };
 
 export function isValidPalette(raw: unknown): raw is ColorPaletteId;
 export function isValidAppMode(raw: unknown): raw is AppModeId;
-export function parseTimelineDefaultDays(raw: unknown): number | null;
+export function isValidTimeZone(raw: unknown): raw is AppTimeZone;
+export function parseAppTimeZone(raw: unknown, fallback?: AppTimeZone): AppTimeZone;
 export function validateAppSettingsInput(input: {
   appName: unknown;
   appDescription: unknown;
@@ -32,7 +40,7 @@ export function validateAppSettingsInput(input: {
   participantInfo: unknown;
   colorPalette: unknown;
   appMode?: unknown;
-  timelineDefaultDays?: unknown;
+  defaultTimeZone?: unknown;
   revision: unknown;
 }):
   | {
@@ -44,10 +52,10 @@ export function validateAppSettingsInput(input: {
         participantInfo: string;
         colorPalette: ColorPaletteId;
         appMode: AppModeId;
-        timelineDefaultDays: number;
+        defaultTimeZone: AppTimeZone;
         revision: string;
         appModeProvided: boolean;
-        timelineDaysProvided: boolean;
+        defaultTimeZoneProvided: boolean;
       };
     }
   | { ok: false; error: string };

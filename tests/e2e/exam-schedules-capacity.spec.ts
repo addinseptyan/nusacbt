@@ -24,6 +24,7 @@ test("batas 5.000 siswa dapat dibagi, disimpan, dan dirilis tanpa daftar parsial
     await page.getByLabel("Kapasitas sesi 1").fill("5000"); await page.getByLabel(`Pilih kelas X ${f.majorName}`).check();
     await expect(page.getByText("5000 siswa dipilih")).toBeVisible();
     await page.getByRole("button",{name:"Acak pembagian"}).click();
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas X ${f.majorName}`}).click();
     await expect(page.getByRole("list",{name:`Daftar siswa kelas X ${f.majorName}`}).getByRole("listitem")).toHaveCount(25);
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click(); let dialog=page.getByRole("dialog",{name:"Simpan pembagian sesi?"});
     await expect(dialog).toContainText("5000 siswa"); await dialog.getByRole("button",{name:"Ya, simpan pembagian"}).click(); await expect(dialog).toBeHidden({timeout:60_000});

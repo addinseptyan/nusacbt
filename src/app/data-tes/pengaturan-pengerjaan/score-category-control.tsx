@@ -7,6 +7,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { saveScoreCategoryVisibility } from "@/app/data-tes/pengaturan-pengerjaan/score-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import type { ExamRunKind } from "@/lib/exam-session-types";
 
 const labels: Record<ExamRunKind, string> = { regular: "Reguler", makeup: "Susulan", remedial: "Remidi" };
@@ -42,7 +43,7 @@ export function ScoreCategoryControl({ kind, visible, revision }: ScoreCategory)
           <DialogFooter>
             <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>Batal</Button>
             {reload ? <Button type="button" onClick={() => { setOpen(false); router.refresh(); }}>Muat ulang</Button>
-              : <Button type="button" disabled={pending} onClick={change}>{pending ? "Menyimpan…" : visible ? "Ya, sembunyikan" : "Ya, tampilkan"}</Button>}
+              : <Button type="button" disabled={pending} onClick={change}>{pending && <Spinner aria-hidden="true" />}{pending ? "Menyimpan…" : visible ? "Ya, sembunyikan" : "Ya, tampilkan"}</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

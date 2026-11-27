@@ -105,9 +105,9 @@ test.describe("Mode Dev dan penghapusan berdependensi", () => {
       await client.query("UPDATE app_settings SET app_mode = 'production', revision = revision + 1 WHERE id = 1");
       await loginAsAdmin(page);
       await page.goto("/data-modul/topik");
-      await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(extraTopicName);
-      await page.getByRole("button", { name: `Hapus topik ${extraTopicName}`, exact: true }).click();
-      let delDialog = page.getByRole("dialog", { name: "Hapus topik?" });
+      await page.getByLabel("Cari mata pelajaran atau tag").fill(extraTopicName);
+      await page.getByRole("button", { name: `Hapus mata pelajaran ${extraTopicName}`, exact: true }).click();
+      let delDialog = page.getByRole("dialog", { name: "Hapus mata pelajaran?" });
       await expect(delDialog).toBeVisible();
       await expect(delDialog.getByRole("button", { name: "Hapus beserta dependensi (Mode Dev)" })).toHaveCount(0);
       await delDialog.getByRole("button", { name: "Batal" }).click();
@@ -123,9 +123,9 @@ test.describe("Mode Dev dan penghapusan berdependensi", () => {
         await opPage.getByRole("button", { name: "Masuk ke panel admin" }).click();
         await expect(opPage).toHaveURL(/\/$/);
         await opPage.goto("/data-modul/topik");
-        await opPage.getByLabel("Cari topik, mata pelajaran, atau tag").fill(extraTopicName);
-        await opPage.getByRole("button", { name: `Hapus topik ${extraTopicName}`, exact: true }).click();
-        const opDelDialog = opPage.getByRole("dialog", { name: "Hapus topik?" });
+        await opPage.getByLabel("Cari mata pelajaran atau tag").fill(extraTopicName);
+        await opPage.getByRole("button", { name: `Hapus mata pelajaran ${extraTopicName}`, exact: true }).click();
+        const opDelDialog = opPage.getByRole("dialog", { name: "Hapus mata pelajaran?" });
         await expect(opDelDialog).toBeVisible();
         await expect(opDelDialog.getByRole("button", { name: "Hapus beserta dependensi (Mode Dev)" })).toHaveCount(0);
       } finally {
@@ -146,9 +146,9 @@ test.describe("Mode Dev dan penghapusan berdependensi", () => {
 
       // 4. Superadmin di Mode Dev: cascade delete topik berdependensi (tanpa ujian aktif) berhasil dengan konfirmasi 2 tahap
       await page.goto("/data-modul/topik");
-      await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(extraTopicName);
-      await page.getByRole("button", { name: `Hapus topik ${extraTopicName}`, exact: true }).click();
-      delDialog = page.getByRole("dialog", { name: "Hapus topik?" });
+      await page.getByLabel("Cari mata pelajaran atau tag").fill(extraTopicName);
+      await page.getByRole("button", { name: `Hapus mata pelajaran ${extraTopicName}`, exact: true }).click();
+      delDialog = page.getByRole("dialog", { name: "Hapus mata pelajaran?" });
       await delDialog.getByRole("button", { name: "Hapus beserta dependensi (Mode Dev)" }).click();
 
       const cascadeDialog = page.getByRole("dialog", { name: "Hapus beserta dependensi (Mode Dev)" });

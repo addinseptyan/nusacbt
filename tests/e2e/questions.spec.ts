@@ -13,7 +13,7 @@ test("kategori kosong meminta admin menyiapkan topik sebelum menambah soal", asy
     await loginAsAdmin(page); await page.goto("/data-modul/soal");
     await expect(page.getByText("Siapkan kategori terlebih dahulu")).toBeVisible();
     await expect(page.getByRole("button", { name: "Tambah soal" })).toBeDisabled();
-    await page.getByRole("alert").filter({ hasText: "Siapkan kategori terlebih dahulu" }).getByRole("link", { name: "Topik / Mata Pelajaran" }).click();
+    await page.getByRole("alert").filter({ hasText: "Siapkan kategori terlebih dahulu" }).getByRole("link", { name: "Mata Pelajaran" }).click();
     await expect(page).toHaveURL(/\/data-modul\/topik$/);
   } finally { await client.end(); }
 });
@@ -32,9 +32,12 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
     topics.push(await createTopic(client, secondTopic));
     await loginAsAdmin(page);
     await page.getByRole("button", { name: "Data Modul", exact: true }).click();
-    await page.getByRole("link", { name: "Manajemen Soal", exact: true }).click();
+    await page.getByRole("link", { name: "Mata Pelajaran", exact: true }).click();
+    await expect(page).toHaveURL(/\/data-modul\/topik$/);
+    await page.getByRole("link", { name: "Semua Bank Soal", exact: true }).click();
     await expect(page).toHaveURL(/\/data-modul\/soal$/);
-    await expect(page.getByRole("heading", { name: "Manajemen Soal", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Bank Soal", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Kembali ke Mata Pelajaran" })).toBeVisible();
     await expect(page.getByRole("main").getByRole("link", { name: "Export Soal Word" })).toBeVisible();
 
     let form = await editor(page);
@@ -66,10 +69,10 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
     await page.getByLabel("Cari soal").fill(`JAWABAN KHUSUS ${tag.toUpperCase()}`);
     await expect(questionRow(page, id)).toBeVisible();
     await expect(page.getByText("1 soal ditemukan")).toBeVisible();
-    await selectComboboxOption(page, "Filter kategori", secondTopic);
+    await selectComboboxOption(page, "Filter mata pelajaran", secondTopic);
     await expect(questionRow(page, id)).toHaveCount(0);
     await expect(page.getByText("Soal tidak ditemukan")).toBeVisible();
-    await selectComboboxOption(page, "Filter kategori", firstTopic);
+    await selectComboboxOption(page, "Filter mata pelajaran", firstTopic);
     await expect(questionRow(page, id)).toBeVisible();
 
     await questionRow(page, id).getByRole("button", { name: `Lihat soal ${id}` }).click();
@@ -88,7 +91,7 @@ test("admin membuat, mencari, melihat, mengubah, memfilter, dan menghapus soal m
     await expect(form).toBeHidden();
     await expect(questionRow(page, id)).toHaveCount(0);
     await page.getByLabel("Cari soal").fill(tag);
-    await selectComboboxOption(page, "Filter kategori", secondTopic);
+    await selectComboboxOption(page, "Filter mata pelajaran", secondTopic);
     await expect(questionRow(page, id)).toContainText(changed);
     expect((await client.query("SELECT topic_id::text,prompt_text,correct_option FROM question_bank WHERE id=$1", [id])).rows).toEqual([
       { topic_id: topics[1], prompt_text: changed, correct_option: "B" },
@@ -293,21 +296,23 @@ test("kategori yang dipakai tidak dapat dihapus dan penggantian nama mempertahan
     const question = await createQuestion(client, topics[0], `Soal referensi ${tag}`);
     await expect(client.query("DELETE FROM question_topics WHERE id=$1", [topics[0]])).rejects.toMatchObject({ code: expect.stringMatching(/^(23503|23001)$/) });
     await loginAsAdmin(page); await page.goto("/data-modul/topik");
-    await page.getByLabel("Cari topik, mata pelajaran, atau tag").fill(tag);
+    await page.getByLabel("Cari mata pelajaran atau tag").fill(tag);
     const row = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: topic, exact: true }) });
-    await row.getByRole("button", { name: `Hapus topik ${topic}` }).click();
-    const confirm = page.getByRole("dialog", { name: "Hapus topik?" });
-    await confirm.getByRole("button", { name: "Ya, hapus topik" }).click();
+    await row.getByRole("button", { name: `Hapus mata pelajaran ${topic}` }).click();
+    const confirm = page.getByRole("dialog", { name: "Hapus mata pelajaran?" });
+    await confirm.getByRole("button", { name: "Ya, hapus mata pelajaran" }).click();
     await expect(confirm.getByRole("alert")).toContainText("masih digunakan oleh data lain");
     await confirm.getByRole("button", { name: "Batal" }).click();
-    await row.getByRole("button", { name: `Ubah topik ${topic}` }).click();
-    const form = page.getByRole("dialog", { name: "Ubah topik / mata pelajaran" });
-    await form.getByLabel("Nama topik / mata pelajaran").fill(renamed);
-    await form.getByRole("button", { name: "Simpan topik" }).click();
+    await row.getByRole("button", { name: `Ubah mata pelajaran ${topic}` }).click();
+    const form = page.getByRole("dialog", { name: "Ubah mata pelajaran" });
+    await form.getByLabel("Nama mata pelajaran").fill(renamed);
+    await form.getByRole("button", { name: "Simpan mata pelajaran" }).click();
     await expect(form).toBeHidden();
-    await page.goto("/data-modul/soal");
-    await page.getByLabel("Cari soal").fill(tag);
+    const renamedRow = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: renamed, exact: true }) });
+    await renamedRow.getByRole("link", { name: `Kelola soal ${renamed}` }).click();
+    await expect(page).toHaveURL(new RegExp(`/data-modul/soal\\?topik=${topics[0]}$`));
     await expect(questionRow(page, question.id)).toContainText(renamed);
+    await expect(questionRow(page, question.id).getByLabel("Nomor 1")).toBeVisible();
     expect((await client.query("SELECT topic_id::text AS topic FROM question_bank WHERE id=$1", [question.id])).rows).toEqual([{ topic: topics[0] }]);
   } finally { await cleanupTopics(client, topics); await client.end(); }
 });
@@ -331,12 +336,12 @@ test("pencarian dan paginasi menangani lebih dari dua halaman serta filter kateg
     await page.getByRole("button", { name: "Halaman berikutnya" }).click();
     await expect(page.getByText("Halaman 3 dari 3 · 25 soal")).toBeVisible();
     await expect(page.getByRole("listitem").filter({ hasText: `Pertanyaan ${tag} 01` })).toBeVisible();
-    await selectComboboxOption(page, "Filter kategori", topic);
+    await selectComboboxOption(page, "Filter mata pelajaran", topic);
     await expect(page.getByText("13 soal ditemukan")).toBeVisible();
     await expect(page.getByText("Halaman 1 dari 2 · 13 soal")).toBeVisible();
     await page.getByRole("button", { name: "Halaman berikutnya" }).click();
     await expect(page.getByText("Halaman 2 dari 2 · 13 soal")).toBeVisible();
-    await selectComboboxOption(page, "Filter kategori", second);
+    await selectComboboxOption(page, "Filter mata pelajaran", second);
     await expect(page.getByText("12 soal ditemukan")).toBeVisible();
     await expect(page.getByText("Halaman 1 dari 2 · 12 soal")).toBeVisible();
   } finally { await cleanupTopics(client, topics); await client.end(); }
@@ -356,8 +361,10 @@ test.describe("soal pada layar kecil", () => {
       await page.getByRole("button", { name: "Buka atau tutup sidebar" }).click();
       const sidebar = page.getByRole("dialog");
       await sidebar.getByRole("button", { name: "Data Modul", exact: true }).click();
-      await sidebar.getByRole("link", { name: "Manajemen Soal", exact: true }).click();
+      await sidebar.getByRole("link", { name: "Mata Pelajaran", exact: true }).click();
       await expect(sidebar).toBeHidden();
+      await page.getByLabel("Cari mata pelajaran atau tag").fill(tag);
+      await page.getByRole("link", { name: `Kelola soal ${topic}` }).click();
       await page.getByLabel("Cari soal").fill(tag);
       await expect(questionRow(page, question.id)).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);

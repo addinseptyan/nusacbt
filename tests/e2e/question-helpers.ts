@@ -33,7 +33,7 @@ export async function cleanupTopics(client: pg.Client, topicIds: string[]) {
 }
 
 export function questionRow(page: Page, id: string) {
-  return page.getByRole("list", { name: "Daftar soal" }).getByRole("listitem").filter({ has: page.getByText(`Soal #${id}`, { exact: true }) });
+  return page.getByRole("list", { name: "Daftar soal" }).locator(`li[data-question-id="${id}"]`);
 }
 
 export async function editor(page: Page, id?: string): Promise<Locator> {

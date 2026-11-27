@@ -18,8 +18,6 @@
   border: 1px solid #8ca99a; border-radius: 9px; background: #fff; color: #172c23;
   box-shadow: 0 2px 8px rgb(23 44 35 / 5%); font-family: Arial, "Noto Naskh Arabic", sans-serif;
 }
-.participant-card-paper-letterhead { margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px solid #cadbd1; text-align: center; }
-.participant-card-paper-letterhead img { display: block; width: 100%; max-height: 44px; object-fit: contain; margin: 0 auto; }
 .participant-card-paper-head { display: flex; justify-content: space-between; align-items: start; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid #cadbd1; }
 .participant-card-paper-brand-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .participant-card-paper-logo { width: 28px; height: 28px; flex-shrink: 0; object-fit: contain; }
@@ -58,8 +56,6 @@
   .participant-card-sheet-scroll { overflow: visible !important; padding: 0 !important; background: white !important; }
   .participant-card-print-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 4mm !important; }
   .participant-card-paper { min-height: 61mm; padding: 3mm 3.5mm 2.5mm; border: .25mm solid #4f665a; border-radius: 1.5mm; box-shadow: none; color: #111; background: #fff; }
-  .participant-card-paper-letterhead { margin-bottom: 1.2mm; padding-bottom: 1mm; border-color: #aaa; }
-  .participant-card-paper-letterhead img { max-height: 11mm; }
   .participant-card-paper-head { gap: 2mm; padding-bottom: 1.5mm; border-color: #aaa; }
   .participant-card-paper-logo { width: 7mm; height: 7mm; }
   .participant-card-paper-brand { color: #163c2b; font-size: 11pt; }

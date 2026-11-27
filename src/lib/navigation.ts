@@ -33,16 +33,10 @@ export const navigation: NavigationSection[] = [
     icon: BookOpenText,
     pages: [
       {
-        title: "Topik / Mata Pelajaran",
+        title: "Mata Pelajaran",
         href: "/data-modul/topik",
-        description: "Kelola topik dan mata pelajaran untuk mengelompokkan bank soal.",
-        permissions: ["topics.manage"],
-      },
-      {
-        title: "Manajemen Soal",
-        href: "/data-modul/soal",
-        description: "Susun dan kelola soal pilihan ganda beserta kunci jawabannya.",
-        permissions: ["questions.manage"],
+        description: "Kelola mata pelajaran, tag pengelompokan, dan bank soal.",
+        permissions: ["topics.manage", "questions.manage"],
       },
       {
         title: "Import Soal Word",
@@ -183,7 +177,7 @@ export const navigation: NavigationSection[] = [
       {
         title: "Pengaturan Aplikasi",
         href: "/pengaturan/aplikasi",
-        description: "Atur identitas sekolah, informasi peserta, logo, kop surat, dan palet warna.",
+        description: "Atur identitas sekolah, zona waktu, mode aplikasi, informasi peserta, logo, dan palet warna.",
         permissions: ["app_settings.manage"],
       },
       {
@@ -213,12 +207,23 @@ const examListChild = /^\/data-tes\/daftar\/[^/]+$/;
 /** Halaman anak tetap menandai item induknya di sidebar. */
 export function navigationPageContains(href: string, pathname: string): boolean {
   return pathname === href ||
+    (href === "/data-modul/topik" && pathname === "/data-modul/soal") ||
     (href === examListParent.href && examListChild.test(pathname)) ||
     (href === "/data-tes/token" && pathname === "/data-tes/token/riwayat") ||
     (href === "/data-peserta/akun" && ["/data-peserta/identitas", "/data-peserta/sandi"].includes(pathname));
 }
 
 export function findNavigationPage(href: string): NavigationMatch | undefined {
+  if (href === "/data-modul/soal") {
+    return {
+      title: "Bank Soal",
+      href,
+      description: "Susun dan kelola soal pilihan ganda beserta kunci jawabannya.",
+      section: "Data Modul",
+      parent: { title: "Mata Pelajaran", href: "/data-modul/topik" },
+      permissions: ["questions.manage"],
+    };
+  }
   if (href === "/data-tes/daftar/sesi") {
     return {
       title: "Kelompok Sesi",

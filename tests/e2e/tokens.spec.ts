@@ -28,7 +28,7 @@ test("token global dan khusus enam digit tetap terlihat, ada timer, dropdown, pe
     await expect(globalPanel(page).getByRole("button", { name: "Salin kode token global" })).toBeVisible();
     const timer = page.getByLabel("Sisa waktu token global"); const initial = await timer.textContent(); expect(initial).toMatch(/^00:0[0-5]:[0-5][0-9]$/); await expect.poll(async () => timer.textContent(), { timeout: 4000 }).not.toBe(initial);
     await page.reload(); expect(await visibleCode(page)).toBe(firstCode); await expect(testPanel(page, future.testId)).toContainText("Menggunakan token global");
-    await page.getByLabel("Zona waktu").selectOption("WITA"); await expect(globalPanel(page)).toContainText("WITA");
+    await expect(globalPanel(page)).toContainText("WIB");
     form = await issueForm(page, "global", "1440"); await expect(form).toContainText("akan langsung tidak berlaku");
     await form.getByRole("button", { name: "Ya, ganti token" }).click(); expect((await client.query("SELECT id FROM exam_access_tokens WHERE scope='global'")).rowCount).toBe(1);
     await confirmIssue(form); await expect(page.getByLabel("Kode token global", { exact: true })).not.toHaveText(firstCode); code = await visibleCode(page); expect(code).not.toBe(firstCode);

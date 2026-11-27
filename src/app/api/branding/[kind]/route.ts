@@ -8,7 +8,7 @@ export async function GET(
   context: { params: Promise<{ kind: string }> },
 ) {
   const { kind } = await context.params;
-  if (kind !== "logo" && kind !== "letterhead") {
+  if (kind !== "logo") {
     return new Response("Tidak ditemukan.", { status: 404 });
   }
   try {

@@ -73,10 +73,17 @@ test("badge draf dan dirilis berbeda, menghormati reduced motion, dan mengikuti 
       [f.activeTest, f.periodA, label, admin],
     )).rows[0].id;
     await client.query("INSERT INTO exam_schedule_participants(run_id,exam_test_id,period_id,kind,student_id,placement_id) VALUES($1,$2,$3,'makeup',$4,$5)", [run, f.activeTest, f.periodA, f.studentA, f.placementA]);
-    await loginAsAdmin(page); await page.goto(`/data-tes/daftar/${f.activeTest}`);
-    const list = page.getByRole("list", { name: "Daftar pelaksanaan tes" });
-    const draftRow = list.getByRole("listitem").filter({ has: page.getByRole("heading", { name: `Susulan · ${label}` }) });
-    const publishedRow = list.getByRole("listitem").filter({ has: page.getByRole("heading", { name: "Susulan · Jadwal fiktif" }) });
+    await loginAsAdmin(page); await page.setViewportSize({ width: 1366, height: 800 }); await page.goto(`/data-tes/daftar/${f.activeTest}`);
+    const list = page.getByLabel("Daftar pelaksanaan tes", { exact: true });
+    const regSection = list.getByRole("region", { name: "Kategori Reguler" });
+    const susSection = list.getByRole("region", { name: "Kategori Susulan" });
+    const remSection = list.getByRole("region", { name: "Kategori Remidi" });
+    const [b1, b2, b3] = await Promise.all([regSection.boundingBox(), susSection.boundingBox(), remSection.boundingBox()]);
+    expect(b1 && b2 && b3).toBeTruthy();
+    expect(b2!.x).toBeGreaterThan(b1!.x + b1!.width - 2);
+    expect(b3!.x).toBeGreaterThan(b2!.x + b2!.width - 2);
+    const draftRow = list.locator("tr").filter({ has: page.getByRole("heading", { name: `Susulan · ${label}` }) });
+    const publishedRow = list.locator("tr").filter({ has: page.getByRole("heading", { name: "Susulan · Jadwal fiktif" }) });
     const draft = draftRow.locator('[data-status="draft"]');
     const published = publishedRow.locator('[data-status="published"]');
     await expect(draft).toHaveText("Draf"); await expect(published).toHaveText("Dirilis");
@@ -145,6 +152,16 @@ test("kelompok sesi menggabungkan langkah 2, pengelompokan kelas, multiselect ke
     await page.getByRole("button", { name: "Tambah sesi" }).click();
     await page.getByLabel("Kapasitas sesi 2").fill("5");
 
+    // Default setiap kelas terlipat (collapsed), lalu buka saat diperlukan
+    const ipaToggle = page.getByRole("button", { name: `Tampilkan atau sembunyikan siswa kelas ${labelIpa}` });
+    const ipsToggle = page.getByRole("button", { name: `Tampilkan atau sembunyikan siswa kelas ${labelIps}` });
+    await expect(ipaToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(ipsToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("list", { name: `Daftar siswa kelas ${labelIpa}` })).toHaveCount(0);
+
+    await ipaToggle.click();
+    await expect(ipaToggle).toHaveAttribute("aria-expanded", "true");
+
     // Siswa dikelompokkan per kelas: centang kelas XI IPA -> seluruh siswa di bawahnya auto tercentang
     const ipaGroupList = page.getByRole("list", { name: `Daftar siswa kelas ${labelIpa}` });
     await expect(ipaGroupList.getByLabel(`Pilih ${ipa1.name} ${ipa1.nisn}`)).not.toBeChecked();
@@ -163,6 +180,7 @@ test("kelompok sesi menggabungkan langkah 2, pengelompokan kelas, multiselect ke
     await expect(page.getByLabel(`Sesi kelas ${labelIpa}`)).toHaveValue("mixed");
 
     // Pilih sesi langsung di dropdown kelas XI IPS tanpa centang manual dulu -> auto-centang seluruh siswa XI IPS ke Sesi 2
+    await ipsToggle.click();
     const ipsGroupList = page.getByRole("list", { name: `Daftar siswa kelas ${labelIps}` });
     await page.getByLabel(`Sesi kelas ${labelIps}`).selectOption("2");
     await expect(page.getByLabel(`Pilih kelas ${labelIps}`)).toBeChecked();

@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { ChevronsUpDown } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { matchesMultiKeyword } from "@/lib/topic-validation.mjs";
 import type { MonitoringOption } from "./monitoring-data";
 
-/** Combobox standar shadcn UI (Popover + Command) dengan nilai kosong "Semua tes". */
+/** Combobox standar shadcn UI (Popover + Command) dengan pencarian multi-keyword dan tag tes. */
 export function SearchableTest({ options, selectedId }: { options: MonitoringOption[]; selectedId: string | null }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(selectedId ?? "");
@@ -44,9 +46,11 @@ export function SearchableTest({ options, selectedId }: { options: MonitoringOpt
             <ChevronsUpDown className="ml-2 size-4 shrink-0 text-muted-foreground opacity-70" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-[260px] p-0">
-          <Command>
-            <CommandInput placeholder="Cari nama tes atau periode..." />
+        <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-[280px] p-0">
+          <Command
+            filter={(itemValue, search) => (matchesMultiKeyword(search, [itemValue]) ? 1 : 0)}
+          >
+            <CommandInput placeholder="Cari nama, tag, atau periode (multi kata)..." />
             <CommandList>
               <CommandEmpty>Tes tidak ditemukan.</CommandEmpty>
               <CommandGroup>
@@ -63,7 +67,7 @@ export function SearchableTest({ options, selectedId }: { options: MonitoringOpt
                 {options.map((t) => (
                   <CommandItem
                     key={t.id}
-                    value={`${t.name} ${t.period} ${t.year ?? ""} ${t.id}`}
+                    value={`${t.name} ${(t.tags ?? []).join(" ")} ${t.period} ${t.year ?? ""} ${t.id}`}
                     data-checked={value === t.id}
                     onSelect={() => {
                       setValue(t.id);
@@ -76,6 +80,15 @@ export function SearchableTest({ options, selectedId }: { options: MonitoringOpt
                         {t.period}
                         {t.year ? ` · ${t.year}` : ""}
                       </span>
+                      {(t.tags ?? []).length > 0 && (
+                        <span className="mt-1 flex flex-wrap gap-1">
+                          {(t.tags ?? []).map((tag) => (
+                            <Badge key={tag} variant="secondary" className="px-1.5 py-0 text-[10px]">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </span>
+                      )}
                     </div>
                   </CommandItem>
                 ))}

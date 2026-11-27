@@ -60,9 +60,8 @@ test("admin menyusun, melihat, mengubah, dan menghapus rancangan dengan soal dan
     await expect(page.getByText("Pengelolaan jadwal & pelaksanaan tes")).toBeVisible();
     const form = await openForm(page);
     await fillForm(form, periodId, `Ujian ${tag}`);
-    await form.getByLabel("Zona waktu").selectOption("WITA");
-    await expect(form.getByText(/Perkiraan akhir:.*18\/11\/2026 01:00 WITA/)).toBeVisible();
-    await selectComboboxOption(form, "Filter topik / mata pelajaran", `Matematika Tes ${tag}`);
+    await expect(form.getByText(/Perkiraan akhir:.*18\/11\/2026 01:00 WIB/)).toBeVisible();
+    await selectComboboxOption(form, "Filter mata pelajaran", `Matematika Tes ${tag}`);
     await form.getByRole("button", { name: `Lihat isi soal ${q1.id}` }).click();
     await expect(form.locator('p[dir="rtl"]')).toContainText("سُؤَالٌ");
     await expect(form.locator("table")).toHaveCount(1); await expect(form.locator("math mfrac")).toHaveCount(1);
@@ -72,7 +71,7 @@ test("admin menyusun, melihat, mengubah, dan menghapus rancangan dengan soal dan
     await expect(imageElement).toBeVisible();
     await expect.poll(() => imageElement.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(4);
     await form.getByRole("button", { name: "Pilih semua hasil" }).click();
-    await selectComboboxOption(form, "Filter topik / mata pelajaran", `Arab Tes ${tag}`);
+    await selectComboboxOption(form, "Filter mata pelajaran", `Arab Tes ${tag}`);
     await form.getByLabel(`Pilih soal ${q3.id}`).check();
     await form.getByRole("button", { name: `Naikkan soal ${q3.id}` }).click();
     await form.getByRole("button", { name: `Naikkan soal ${q3.id}` }).click();
@@ -83,9 +82,9 @@ test("admin menyusun, melihat, mengubah, dan menghapus rancangan dengan soal dan
     let dbRows: { id: string; utc: string; time_zone: string; duration_minutes: number; shuffle_questions: boolean; shuffle_options: boolean }[] = [];
     await expect.poll(async () => { dbRows = (await client.query(`SELECT id::text AS id, to_char(starts_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI') AS utc, time_zone, duration_minutes, shuffle_questions, shuffle_options FROM exam_tests WHERE period_id=$1`, [periodId])).rows; return dbRows.length; }).toBe(1);
     const id = dbRows[0].id;
-    expect(dbRows[0]).toEqual({ id, utc: "2026-11-17T15:30", time_zone: "WITA", duration_minutes: 90, shuffle_questions: true, shuffle_options: true });
+    expect(dbRows[0]).toEqual({ id, utc: "2026-11-17T16:30", time_zone: "WIB", duration_minutes: 90, shuffle_questions: true, shuffle_options: true });
     expect((await client.query("SELECT question_id::text AS id FROM exam_test_questions WHERE exam_test_id=$1 ORDER BY position", [id])).rows.map((r) => r.id)).toEqual([q3.id, q1.id, q2.id]);
-    await expect(row(page, id)).toContainText("18/11/2026 01:00 WITA");
+    await expect(row(page, id)).toContainText("18/11/2026 01:00 WIB");
     await expect(row(page, id)).toContainText("3 soal");
     await expect(client.query("DELETE FROM exam_periods WHERE id=$1", [periodId])).rejects.toMatchObject({ code: expect.stringMatching(/^(23503|23001)$/) });
     await expect(client.query("DELETE FROM question_bank WHERE id=$1", [q1.id])).rejects.toMatchObject({ code: expect.stringMatching(/^(23503|23001)$/) });
@@ -93,14 +92,14 @@ test("admin menyusun, melihat, mengubah, dan menghapus rancangan dengan soal dan
     const deleteQuestion = await deletion(page, q1.id); await deleteQuestion.getByRole("button", { name: "Ya, hapus soal" }).click();
     await expect(deleteQuestion.getByRole("alert")).toContainText("masih digunakan oleh data lain"); await deleteQuestion.getByRole("button", { name: "Batal" }).click();
     await page.goto("/data-tes/daftar"); const edit = await openForm(page, id);
-    await edit.getByLabel("Nama tes").fill(`Diubah ${tag}`); await edit.getByLabel("Zona waktu").selectOption("WIT");
+    await edit.getByLabel("Nama tes").fill(`Diubah ${tag}`);
     await edit.getByLabel("Durasi (menit)").fill("45"); await edit.getByLabel("Acak urutan soal").uncheck(); await edit.getByLabel("Acak urutan pilihan jawaban").uncheck();
     await edit.getByRole("button", { name: `Lepas soal ${q2.id}` }).click();
     await edit.getByRole("button", { name: "Simpan rancangan" }).click(); await expect(edit).toBeHidden();
     await expect(row(page, id)).toContainText(`Diubah ${tag}`);
     expect((await client.query("SELECT question_id::text AS id FROM exam_test_questions WHERE exam_test_id=$1 ORDER BY position", [id])).rows.map((r) => r.id)).toEqual([q3.id, q1.id]);
-    expect((await client.query("SELECT to_char(starts_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI') AS utc, time_zone, duration_minutes, shuffle_questions, shuffle_options FROM exam_tests WHERE id=$1", [id])).rows[0]).toEqual({ utc: "2026-11-17T14:30", time_zone: "WIT", duration_minutes: 45, shuffle_questions: false, shuffle_options: false });
-    await page.reload(); await page.getByLabel("Cari tes").fill(tag); await expect(row(page, id)).toContainText("18/11/2026 00:15 WIT");
+    expect((await client.query("SELECT to_char(starts_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI') AS utc, time_zone, duration_minutes, shuffle_questions, shuffle_options FROM exam_tests WHERE id=$1", [id])).rows[0]).toEqual({ utc: "2026-11-17T16:30", time_zone: "WIB", duration_minutes: 45, shuffle_questions: false, shuffle_options: false });
+    await page.reload(); await page.getByLabel("Cari tes").fill(tag); await expect(row(page, id)).toContainText("18/11/2026 00:15 WIB");
     await row(page, id).getByRole("button", { name: `Hapus tes ${id}` }).click();
     const confirm = page.getByRole("dialog", { name: "Hapus rancangan tes?" });
     await expect(confirm).toContainText("Soal pada bank tidak dihapus");
@@ -145,7 +144,6 @@ test("rancangan kosong dapat disimpan; filter, pencarian, dan tampilan ponsel te
   try {
     period = await createPeriod(client, tag); await page.setViewportSize({ width: 390, height: 844 }); await loginAsAdmin(page); await page.goto("/data-tes/daftar");
     const form = await openForm(page); await fillForm(form, period, `Kosong ${tag}`);
-    await form.getByLabel("Zona waktu").selectOption("WIB");
     await expect(form.getByText("Belum ada soal terpilih.")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     await form.getByRole("button", { name: "Simpan rancangan" }).click(); await expect(form).toBeHidden();
@@ -212,3 +210,35 @@ test("halaman privat dan sesi yang dicabut tidak mengubah rancangan", async ({ p
     await page.goto("/data-tes/daftar"); await expect(page).toHaveURL(/\/login$/);
   } finally { await cleanup(client, period, []); await client.end(); }
 });
+
+test("tag tes, filter tag, pencarian multi-kata, dan peringatan tanggal di luar periode berfungsi tanpa memblokir simpan", async ({ page }) => {
+  const client = testDatabase(); await client.connect(); const tag = suffix(); let periodId: string | undefined;
+  try {
+    periodId = (await client.query<{ id: string }>(
+      "INSERT INTO exam_periods(name,start_date,end_date) VALUES($1,'2026-06-01','2026-06-30') RETURNING id::text AS id",
+      [`Periode Tag ${tag}`],
+    )).rows[0].id;
+    await loginAsAdmin(page); await page.goto("/data-tes/daftar");
+    const form = await openForm(page);
+    await form.getByLabel("Nama tes").fill(`Fisika Lanjut ${tag}`);
+    await form.getByLabel("Periode ujian").selectOption(periodId);
+    // Tanggal di luar rentang 2026-06-01..2026-06-30 -> tampilkan peringatan lunak tetapi tetap boleh disimpan
+    await form.getByLabel("Tanggal dan waktu mulai").fill("2026-07-05T08:00");
+    await expect(form.getByText("Tanggal di luar rentang periode (peringatan)")).toBeVisible();
+    await form.getByLabel("Tag tes (opsional)").fill(`UTS-${tag}, Kelas-XI`);
+    await form.getByRole("button", { name: "Tambah tag" }).click();
+    await form.getByRole("button", { name: "Simpan rancangan" }).click();
+    await expect(form).toBeHidden();
+
+    const stored = (await client.query<{ id: string; tags: string[] }>("SELECT id::text AS id, tags FROM exam_tests WHERE period_id=$1", [periodId])).rows;
+    expect(stored).toHaveLength(1);
+    expect(stored[0].tags).toEqual(["Kelas-XI", `UTS-${tag}`]);
+
+    await page.getByLabel("Cari tes").fill(`Kelas-XI Fisika ${tag}`);
+    await expect(row(page, stored[0].id)).toBeVisible();
+    await page.getByLabel("Cari tes").fill("");
+    await page.getByLabel("Filter tag tes").getByRole("button", { name: `UTS-${tag}`, exact: true }).click();
+    await expect(row(page, stored[0].id)).toBeVisible();
+  } finally { await cleanup(client, periodId, []); await client.end(); }
+});
+

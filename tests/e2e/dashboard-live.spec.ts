@@ -47,7 +47,7 @@ test("dashboard membaca ringkasan langsung dari PostgreSQL dan menampilkan kesia
     // Jumlah bank soal dan siswa minimal 1 dari fixture nyata
     await expect(page.getByText("Bank soal", { exact: true })).toBeVisible();
     await expect(page.getByText("Peserta terdaftar", { exact: true })).toBeVisible();
-    await expect(page.getByText("1 soal pada 1 topik tersedia; mendukung impor dan ekspor Word (.docx).")).toBeVisible();
+    await expect(page.getByText("1 soal pada 1 mata pelajaran tersedia; mendukung impor dan ekspor Word (.docx).")).toBeVisible();
   } finally {
     if (topicId) {
       await client.query("DELETE FROM question_bank WHERE topic_id = $1", [topicId]);

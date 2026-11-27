@@ -4,15 +4,19 @@ import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE, requireAdminAccess } from "@/lib/admin-auth";
-import { adminHasAnyPermission, adminHasPermission } from "@/lib/admin-permissions.mjs";
-import { parseTimelineDefaultDays } from "@/lib/app-settings-validation.mjs";
+import { adminHasPermission } from "@/lib/admin-permissions.mjs";
+import { loadDefaultTimeZoneWithClient } from "@/lib/app-settings-service";
 import { validDataId } from "@/lib/class-validation.mjs";
-import { EXAM_TEST_FORM_VERSION, validateExamTestDraft } from "@/lib/exam-test-validation.mjs";
+import { EXAM_TEST_FORM_VERSION, validateExamStart, validateExamTestDraft, validateExamTestTags } from "@/lib/exam-test-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
 import { validTopicRevision } from "@/lib/topic-validation.mjs";
 
 type ActionResult = { ok: true; message: string } | { ok: false; error: string; reload?: boolean };
-type Draft = Extract<ReturnType<typeof validateExamTestDraft>, { ok: true }>["value"];
+type Draft = Extract<ReturnType<typeof validateExamTestDraft>, { ok: true }>["value"] & {
+  startLocal: string;
+  tags: string[];
+  tagsSignature: string;
+};
 type Mutation = { kind: "save"; id: string | null; revision: string | null; draft: Draft } | { kind: "delete"; id: string; revision: string };
 
 class TestProblem extends Error {
@@ -37,6 +41,13 @@ async function mutate(mutation: Mutation): Promise<ActionResult> {
       if (!result.rowCount) throw new TestProblem("Tes sudah berubah atau dihapus. Muat ulang daftar sebelum mencoba lagi.", true);
     } else {
       const { draft } = mutation;
+      const appZone = await loadDefaultTimeZoneWithClient(client);
+      if (draft.timeZone !== appZone) {
+        throw new TestProblem("Zona waktu aplikasi berubah. Muat ulang halaman sebelum menyimpan.", true);
+      }
+      const zonedSchedule = validateExamStart(draft.startLocal, appZone);
+      if (!zonedSchedule.ok) throw new TestProblem(zonedSchedule.error);
+
       if (mutation.id) {
         // Baris induk dikunci untuk semua perubahan soal dan pelaksanaan.
         const result = await client.query<{ revision: string; periodId: string }>("SELECT xmin::text AS revision,period_id::text AS \"periodId\" FROM exam_tests WHERE id=$1::bigint FOR UPDATE", [mutation.id]);
@@ -65,14 +76,14 @@ async function mutate(mutation: Mutation): Promise<ActionResult> {
           throw new TestProblem("Ada soal yang berubah atau dihapus sejak daftar dimuat. Muat ulang daftar dan periksa pilihan soal.", true);
         }
       }
-      const values = [draft.periodId, draft.name, draft.startsAt, draft.timeZone, draft.durationMinutes, draft.shuffleQuestions, draft.shuffleOptions];
+      const values = [draft.periodId, draft.name, draft.tags, draft.tagsSignature, zonedSchedule.value.startsAt, appZone, draft.durationMinutes, draft.shuffleQuestions, draft.shuffleOptions];
       let id: string;
       if (mutation.id) {
         const result = await client.query<{ id: string }>(
-          `UPDATE exam_tests SET period_id=$1::bigint, name=$2, starts_at=$3::timestamptz, time_zone=$4,
-             duration_minutes=$5, shuffle_questions=$6, shuffle_options=$7,
+          `UPDATE exam_tests SET period_id=$1::bigint, name=$2, tags=$3::text[], tags_signature=$4, starts_at=$5::timestamptz, time_zone=$6,
+             duration_minutes=$7, shuffle_questions=$8, shuffle_options=$9,
              updated_at=GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
-           WHERE id=$8::bigint AND xmin::text=$9 RETURNING id::text AS id`,
+           WHERE id=$10::bigint AND xmin::text=$11 RETURNING id::text AS id`,
           [...values, mutation.id, mutation.revision],
         );
         if (!result.rowCount) throw new TestProblem("Tes sudah berubah atau dihapus. Muat ulang daftar sebelum mencoba lagi.", true);
@@ -85,8 +96,8 @@ async function mutate(mutation: Mutation): Promise<ActionResult> {
           WHERE exam_test_id=$1::bigint AND kind IN ('regular','makeup') AND duration_minutes<>$2`, [id, draft.durationMinutes]);
       } else {
         const result = await client.query<{ id: string }>(
-          `INSERT INTO exam_tests(period_id,name,starts_at,time_zone,duration_minutes,shuffle_questions,shuffle_options)
-           VALUES($1::bigint,$2,$3::timestamptz,$4,$5,$6,$7) RETURNING id::text AS id`, values,
+          `INSERT INTO exam_tests(period_id,name,tags,tags_signature,starts_at,time_zone,duration_minutes,shuffle_questions,shuffle_options)
+           VALUES($1::bigint,$2,$3::text[],$4,$5::timestamptz,$6,$7,$8,$9) RETURNING id::text AS id`, values,
         );
         id = result.rows[0].id;
       }
@@ -107,12 +118,17 @@ async function mutate(mutation: Mutation): Promise<ActionResult> {
     if (hasSqlState(error, "23503", "23001")) {
       return { ok: false, error: mutation.kind === "delete" ? "Tes masih digunakan oleh data lain dan tidak dapat dihapus." : "Periode atau soal sudah berubah. Muat ulang daftar dan periksa kembali.", reload: mutation.kind === "save" };
     }
+    if (hasSqlState(error, "23514")) {
+      return { ok: false, error: "Tag rancangan tes tidak valid atau melebihi batas maksimal 10 tag." };
+    }
     return { ok: false, error: "Hasil perubahan belum dapat dipastikan. Periksa koneksi dan migrasi, lalu muat ulang daftar sebelum mencoba lagi.", reload: true };
   } finally { client?.release(); }
 
   revalidatePath("/data-tes/daftar");
   revalidatePath("/data-tes/token");
   revalidatePath("/data-tes/token/riwayat");
+  revalidatePath("/data-tes/monitoring");
+  revalidatePath("/laporan/rekap");
   revalidatePath("/data-modul/soal");
   revalidatePath("/data-peserta/periode");
   return { ok: true, message: mutation.kind === "delete" ? "Rancangan tes berhasil dihapus." : mutation.id ? "Rancangan tes berhasil diubah." : "Rancangan tes berhasil ditambahkan." };
@@ -123,7 +139,7 @@ export async function saveExamTest(formData: FormData): Promise<ActionResult> {
   if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
   // Identitas, versi dan pengaturan tunggal tidak boleh dipilih diam-diam jika
   // pengirim menyertakan beberapa nilai berbeda. Soal adalah daftar berurutan.
-  const fields = ["formVersion", "id", "revision", "name", "periodId", "startLocal", "timeZone", "durationMinutes", "shuffleQuestions", "shuffleOptions"];
+  const fields = ["formVersion", "id", "revision", "name", "tags", "periodId", "startLocal", "timeZone", "durationMinutes", "shuffleQuestions", "shuffleOptions"];
   if (fields.some((field) => formData.getAll(field).length > 1)) return { ok: false, error: "Data tes mengandung nilai ganda. Periksa formulir dan coba lagi." };
   if (formData.get("formVersion") !== EXAM_TEST_FORM_VERSION) return { ok: false, error: "Versi formulir tidak sesuai. Muat ulang halaman sebelum menyimpan.", reload: true };
   const rawId = formData.get("id");
@@ -132,13 +148,21 @@ export async function saveExamTest(formData: FormData): Promise<ActionResult> {
   const revision = id ? validTopicRevision(formData.get("revision")) : null;
   if (id && !revision) return { ok: false, error: "Versi tes tidak valid. Muat ulang daftar.", reload: true };
   if (!id && formData.get("revision") !== null) return { ok: false, error: "Versi tes tidak valid. Muat ulang daftar.", reload: true };
+  const startLocal = String(formData.get("startLocal") ?? "");
   const parsed = validateExamTestDraft({
-    name: formData.get("name"), periodId: formData.get("periodId"), startLocal: formData.get("startLocal"), timeZone: formData.get("timeZone"),
+    name: formData.get("name"), periodId: formData.get("periodId"), startLocal, timeZone: formData.get("timeZone"),
     durationMinutes: formData.get("durationMinutes"), shuffleQuestions: formData.get("shuffleQuestions"), shuffleOptions: formData.get("shuffleOptions"),
     questionIds: formData.getAll("questionIds"), questionRevisions: formData.getAll("questionRevisions"),
   });
   if (!parsed.ok) return parsed;
-  return mutate({ kind: "save", id, revision, draft: parsed.value });
+  const parsedTags = validateExamTestTags(formData.get("tags"));
+  if (!parsedTags.ok) return parsedTags;
+  return mutate({
+    kind: "save",
+    id,
+    revision,
+    draft: { ...parsed.value, startLocal, tags: parsedTags.value, tagsSignature: parsedTags.signature },
+  });
 }
 
 export async function deleteExamTest(formData: FormData): Promise<ActionResult> {
@@ -149,52 +173,4 @@ export async function deleteExamTest(formData: FormData): Promise<ActionResult> 
   const revision = validTopicRevision(formData.get("revision"));
   if (!id || !revision) return { ok: false, error: "Identitas atau versi tes tidak valid. Muat ulang daftar.", reload: true };
   return mutate({ kind: "delete", id, revision });
-}
-
-export async function saveTimelineDefaultDays(
-  daysRaw: number | string,
-): Promise<{ ok: true; days: number; message: string } | { ok: false; error: string }> {
-  const { allowed } = await requireAdminAccess("exams.manage", "app_settings.manage");
-  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
-  const days = parseTimelineDefaultDays(daysRaw);
-  if (days === null) return { ok: false, error: "Maksimal rentang tanggal timeline harus 1 sampai 7 hari." };
-
-  let client: PoolClient | undefined;
-  try {
-    client = await getPostgresPool().connect();
-    await client.query("BEGIN");
-    const admin = await lockActiveAdminSession(client);
-    if (!admin) {
-      await client.query("ROLLBACK").catch(() => {});
-      return { ok: false, error: "Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan." };
-    }
-    if (!adminHasAnyPermission(admin, ["exams.manage", "app_settings.manage"])) {
-      await client.query("ROLLBACK").catch(() => {});
-      return { ok: false, error: PERMISSION_DENIED_MESSAGE };
-    }
-    await client.query(
-      `UPDATE app_settings
-       SET timeline_default_days = $1,
-           updated_at = clock_timestamp(),
-           updated_by = $2::bigint,
-           revision = revision + 1
-       WHERE id = 1`,
-      [days, admin.id],
-    );
-    const active = await lockActiveAdminSession(client);
-    if (!active || active.id !== admin.id) {
-      await client.query("ROLLBACK").catch(() => {});
-      return { ok: false, error: "Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan." };
-    }
-    await client.query("COMMIT");
-  } catch {
-    if (client) await client.query("ROLLBACK").catch(() => {});
-    return { ok: false, error: "Pengaturan maksimal hari timeline belum dapat disimpan." };
-  } finally {
-    client?.release();
-  }
-
-  revalidatePath("/data-tes/daftar");
-  revalidatePath("/pengaturan/aplikasi");
-  return { ok: true, days, message: `Maksimal rentang timeline disimpan menjadi ${days} hari.` };
 }

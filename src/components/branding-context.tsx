@@ -21,8 +21,8 @@ export function BrandingProvider({
       schoolName: value.schoolName,
       participantInfo: value.participantInfo,
       colorPalette: value.colorPalette,
+      defaultTimeZone: value.defaultTimeZone,
       hasLogo: value.hasLogo,
-      hasLetterhead: value.hasLetterhead,
       revision: value.revision,
     }),
     [
@@ -31,8 +31,8 @@ export function BrandingProvider({
       value.schoolName,
       value.participantInfo,
       value.colorPalette,
+      value.defaultTimeZone,
       value.hasLogo,
-      value.hasLetterhead,
       value.revision,
     ],
   );

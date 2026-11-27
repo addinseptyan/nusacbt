@@ -85,6 +85,9 @@ test("kelompok campuran tetap, rilis selektif, susulan/remidi, perubahan kelas, 
     await page.getByLabel("Kapasitas sesi 1").fill("2"); await page.getByRole("button",{name:"Tambah sesi"}).click(); await page.getByLabel("Kapasitas sesi 2").fill("2");
     await page.getByLabel(`Pilih kelas ${tkr.label}`).check();
     await page.getByLabel(`Pilih kelas ${rpl.label}`).check();
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas X ${f.majorName}`}).click();
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas ${tkr.label}`}).click();
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas ${rpl.label}`}).click();
     await page.getByLabel(`Pilih ${f.studentAName} ${(await client.query<{nisn:string}>("SELECT nisn FROM school_students WHERE id=$1",[f.studentA])).rows[0].nisn}`).check();
     await page.getByLabel(`Pilih ${removed.name} ${removed.nisn}`).uncheck();
     await expect(page.getByText("5 siswa dipilih")).toBeVisible();
@@ -110,6 +113,7 @@ test("kelompok campuran tetap, rilis selektif, susulan/remidi, perubahan kelas, 
     await client.query("UPDATE student_class_placements SET ended_at=GREATEST(clock_timestamp(),started_at) WHERE id=$1",[f.placementA]);
     await client.query("INSERT INTO student_class_placements(student_id,period_id,class_id,class_name_snapshot) VALUES($1,$2,$3,$4)",[f.studentA,f.periodA,rpl.klass,rpl.label]);
     await page.reload(); await expect(page.getByText("5 siswa dipilih")).toBeVisible();
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas ${rpl.label}`}).click();
     await expect(page.getByLabel(`Pilih ${newcomer.name} ${newcomer.nisn}`)).not.toBeChecked();
     await expect(page.getByLabel(`Pilih ${f.studentAName} ${fNisn}`)).toBeChecked();
     await a.goto("/peserta"); await expect(a).toHaveURL(/\/peserta\/login/); await loginParticipant(a,f.username,f.passwordA);
@@ -183,6 +187,7 @@ test("kelompok campuran tetap, rilis selektif, susulan/remidi, perubahan kelas, 
 
     // Kelompok yang sudah dirilis tidak dapat dipindah diam-diam.
     await page.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`);
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas ${rpl.label}`}).click();
     await page.getByLabel(`Sesi ${f.studentAName} ${fNisn}`).selectOption("2");
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click();
     await page.getByRole("dialog",{name:"Simpan pembagian sesi?"}).getByRole("button",{name:"Ya, simpan pembagian"}).click();

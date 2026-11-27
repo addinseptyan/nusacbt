@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { PARTICIPANT_CARD_BATCH_SIZE } from "@/lib/participant-card-constants.mjs";
 import { cardSearchParams } from "@/lib/participant-card-filter.mjs";
 import type { CardPageData, PreparedCards } from "@/lib/participant-card-types";
@@ -215,7 +216,7 @@ export function CardManager({ data, canIncludePassword }: { data: CardPageData; 
           <div className="flex gap-2">{data.page > 1 ? <Button asChild variant="outline" size="sm"><Link href={pageUrl(data, data.page - 1)} prefetch={false}><ChevronLeft className="size-4" /> Sebelumnya</Link></Button> : <Button disabled variant="outline" size="sm"><ChevronLeft className="size-4" /> Sebelumnya</Button>}
             {data.page < data.pages ? <Button asChild variant="outline" size="sm"><Link href={pageUrl(data, data.page + 1)} prefetch={false}>Berikutnya <ChevronRight className="size-4" /></Link></Button> : <Button disabled variant="outline" size="sm">Berikutnya <ChevronRight className="size-4" /></Button>}</div></div>}
       </Card>
-      <Card className="gap-0 rounded-[20px] p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="font-bold">Siapkan kartu</h2><p className="mt-1 text-xs leading-5 text-muted-foreground"><strong>{selectedRows.length}</strong> peserta dipilih pada halaman ini. Maksimal {PARTICIPANT_CARD_BATCH_SIZE} kartu per batch; untuk lebih banyak, cetak halaman berikutnya.</p></div><Button type="button" disabled={dirty || pending || !selectedRows.length || (canIncludePassword && includePassword && missingPassword > 0)} onClick={() => (canIncludePassword && includePassword) ? setConfirmOpen(true) : void prepare(false)} className="rounded-xl"><Printer className="size-4" /> {pending ? "Menyiapkan..." : "Pratinjau kartu"}</Button></div>
+      <Card className="gap-0 rounded-[20px] p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="font-bold">Siapkan kartu</h2><p className="mt-1 text-xs leading-5 text-muted-foreground"><strong>{selectedRows.length}</strong> peserta dipilih pada halaman ini. Maksimal {PARTICIPANT_CARD_BATCH_SIZE} kartu per batch; untuk lebih banyak, cetak halaman berikutnya.</p></div><Button type="button" disabled={dirty || pending || !selectedRows.length || (canIncludePassword && includePassword && missingPassword > 0)} onClick={() => (canIncludePassword && includePassword) ? setConfirmOpen(true) : void prepare(false)} className="rounded-xl">{pending ? <Spinner aria-hidden="true" /> : <Printer className="size-4" />} {pending ? "Menyiapkan..." : "Pratinjau kartu"}</Button></div>
         {canIncludePassword ? (
           <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/25"><input type="checkbox" className="mt-1 size-4 accent-primary" checked={includePassword} disabled={dirty || pending || !selectedRows.length} onChange={(event) => setIncludePassword(event.target.checked)} /><span><strong>Sertakan sandi pada kartu</strong><span className="mt-1 block text-xs leading-5 text-muted-foreground">Opsional dan awalnya tidak dicentang. Sandi hanya diminta setelah konfirmasi; setiap sandi yang berhasil disiapkan dicatat. Kartu dan PDF yang memuatnya harus dijaga rahasia.</span></span></label>
         ) : (
@@ -231,7 +232,7 @@ export function CardManager({ data, canIncludePassword }: { data: CardPageData; 
       <DialogContent className="rounded-2xl sm:max-w-lg" showCloseButton={!pending} onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}>
         <DialogHeader><DialogTitle>Tampilkan sandi pada kartu?</DialogTitle><DialogDescription>Anda akan menyiapkan sandi untuk <strong className="text-foreground">{selectedRows.length} peserta</strong> pada periode <strong className="text-foreground">{selected?.name}</strong>.</DialogDescription></DialogHeader>
         <Alert className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"><ShieldAlert className="size-4" /><AlertTitle>Informasi rahasia</AlertTitle><AlertDescription>Setiap pengungkapan berhasil disiapkan dicatat, termasuk bila dialog cetak dibatalkan. Pastikan layar, printer, antrean cetak, dan PDF hanya diakses pihak berwenang.</AlertDescription></Alert>
-        <DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={() => setConfirmOpen(false)}>Batal</Button><Button type="button" disabled={pending || missingPassword > 0} onClick={() => void prepare(true)}>{pending ? "Menyiapkan..." : "Ya, tampilkan sandi"}</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={() => setConfirmOpen(false)}>Batal</Button><Button type="button" disabled={pending || missingPassword > 0} onClick={() => void prepare(true)}>{pending && <Spinner aria-hidden="true" />}{pending ? "Menyiapkan..." : "Ya, tampilkan sandi"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
     {preview && <DialogPrimitive.Root open onOpenChange={(open) => { if (!open && !pending) invalidatePreview("Pratinjau ditutup dan dihapus dari halaman."); }}>
@@ -241,12 +242,6 @@ export function CardManager({ data, canIncludePassword }: { data: CardPageData; 
           <div className="participant-card-preview-toolbar"><div><DialogPrimitive.Title>Pratinjau {preview.result.cards.length} kartu peserta</DialogPrimitive.Title><DialogPrimitive.Description>Disiapkan {preview.result.preparedAt.replace("T", " ").replace(/\.\d{3}Z$/, " UTC")}. {preview.includePassword ? "Sandi terlihat dan bersifat rahasia. " : "Sandi tidak disertakan. "}Pilih A4; gunakan Simpan sebagai PDF bila diperlukan. Pratinjau ditutup setelah dialog cetak atau lima menit.</DialogPrimitive.Description></div>
             <div className="participant-card-preview-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => invalidatePreview("Pratinjau ditutup dan dihapus dari halaman.")}>Tutup</Button><Button type="button" disabled={pending} onClick={() => void printCards()}><Printer className="size-4" /> {pending ? "Memeriksa..." : "Cetak / Simpan PDF"}</Button></div></div>
           <div className="participant-card-sheet-scroll"><p className="participant-card-print-blocked">Gunakan tombol Cetak / Simpan PDF pada pratinjau agar data peserta diperiksa kembali sebelum dicetak.</p><div className="participant-card-print-grid">{preview.result.cards.map((card, index) => <article className="participant-card-paper" data-testid="participant-card" key={`${card.nisn}-${index}`}>
-            {branding.hasLetterhead && (
-              <div className="participant-card-paper-letterhead">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/branding/letterhead?v=${branding.revision}`} alt="Kop surat sekolah" />
-              </div>
-            )}
             <header className="participant-card-paper-head">
               <div className="participant-card-paper-brand-wrap">
                 {branding.hasLogo && (

@@ -124,26 +124,35 @@ test("timeline harian membedakan pelaksanaan, bentrok, zona, dan jadwal lintas t
     await expect(remedialDay1).toHaveAttribute("data-dimmed", "false"); await expect(regularDay1).toHaveAttribute("data-dimmed", "true");
     await expect(makeupDay1).toHaveAttribute("data-dimmed", "true"); await expect(baseDay1).toHaveAttribute("data-dimmed", "true");
     await expect(days.nth(0).getByTestId("timeline-event")).toHaveCount(4);
-    await timeline.getByLabel("Zona tampilan").selectOption("WIT");
-    await expect(days.nth(0).getByTestId("timeline-event")).toHaveCount(0);
-    const makeupDay2 = overnight(1, "Jadwal fiktif");
+    await client.query("UPDATE app_settings SET default_time_zone = 'WIT', revision = revision + 1 WHERE id = 1");
+    await page.reload();
+    const timelineWit = page.getByLabel("Timeline tes", { exact: true });
+    await applyRange(timelineWit, "2030-01-01", "2030-01-07");
+    const daysWit = timelineWit.getByTestId("timeline-day");
+    await expect(daysWit.nth(0).getByTestId("timeline-event")).toHaveCount(0);
+    const makeupDay2 = daysWit.nth(1).getByTestId("timeline-event").filter({ hasText: "Jadwal fiktif" });
     await expect(makeupDay2).toHaveAttribute("data-clipped-start", "false");
     await expect(makeupDay2.getByTestId("timeline-duration")).toHaveAttribute("style", /left: 2\.0833/);
     const makeupLink = makeupDay2.getByRole("link", { name: /Jadwal fiktif/ });
     await expect(makeupLink).toHaveAttribute("aria-label", /2030-01-02 00:30–2030-01-02 03:30 WIT · asli 2030-01-01 22:30–2030-01-02 01:30 WIB/);
     await makeupLink.scrollIntoViewIfNeeded(); await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     await makeupLink.focus(); await expect(page.getByRole("tooltip").filter({ hasText: "Jadwal fiktif" })).toBeVisible();
-    await timeline.getByText("Lihat daftar lengkap jadwal").click();
-    await expect(timeline.getByLabel("Daftar lengkap jadwal per hari")).toContainText("Jadwal fiktif");
-    await expect(timeline.getByLabel("Daftar lengkap jadwal per hari")).toContainText("asli 2030-01-01 22:30");
+    await timelineWit.getByText("Lihat daftar lengkap jadwal").click();
+    await expect(timelineWit.getByLabel("Daftar lengkap jadwal per hari")).toContainText("Jadwal fiktif");
+    await expect(timelineWit.getByLabel("Daftar lengkap jadwal per hari")).toContainText("asli 2030-01-01 22:30");
     await page.screenshot({ path: testInfo.outputPath("timeline-desktop.png") });
+    await client.query("UPDATE app_settings SET default_time_zone = 'WIB', revision = revision + 1 WHERE id = 1");
+    await page.reload();
+    const timelineWib = page.getByLabel("Timeline tes", { exact: true });
+    await applyRange(timelineWib, "2030-01-01", "2030-01-07");
+    const daysWib = timelineWib.getByTestId("timeline-day");
 
     // Rancangan tanpa pelaksanaan membuka editor, draf membuka editor yang
     // tepat dan pelaksanaan dirilis hanya membuka kartu pengelolaan.
-    await overnight(1, baseName).getByRole("button", { name: new RegExp(baseName) }).click();
+    await daysWib.nth(1).getByTestId("timeline-event").filter({ hasText: baseName }).getByRole("button", { name: new RegExp(baseName) }).click();
     let dialog = page.getByRole("dialog", { name: "Ubah rancangan tes" }); await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Batal" }).click();
-    await overnight(1, "Remidi bentrok").getByRole("link", { name: /Remidi bentrok/ }).click();
+    await daysWib.nth(1).getByTestId("timeline-event").filter({ hasText: "Remidi bentrok" }).getByRole("link", { name: /Remidi bentrok/ }).click();
     await expect(page).toHaveURL(new RegExp(`/data-tes/daftar/${f.activeTest}\\?atur=${remedial}#pelaksanaan-${remedial}$`));
     dialog = page.getByRole("dialog", { name: "Ubah draf pelaksanaan" }); await expect(dialog.getByLabel("Nama pelaksanaan")).toHaveValue("Remidi bentrok");
     await dialog.getByRole("button", { name: "Batal" }).click(); await expect(page.locator(`#pelaksanaan-${remedial}`)).toBeAttached();
@@ -153,7 +162,7 @@ test("timeline harian membedakan pelaksanaan, bentrok, zona, dan jadwal lintas t
     await expect(page.locator(`#pelaksanaan-${published}`)).toBeVisible();
     await expect(page.getByRole("dialog", { name: "Ubah draf pelaksanaan" })).toHaveCount(0);
     expect(regular).not.toBe(remedial);
-  } finally { await cleanupLoginFixture(client, f); await client.end(); }
+  } finally { await client.query("UPDATE app_settings SET default_time_zone = 'WIB', revision = revision + 1 WHERE id = 1").catch(() => {}); await cleanupLoginFixture(client, f); await client.end(); }
 });
 
 test("rentang 1–7 hari inklusif, validasi, navigasi, batas tahun dan fallback daftar", async ({ page, browser }) => {
@@ -187,10 +196,15 @@ test("rentang 1–7 hari inklusif, validasi, navigasi, batas tahun dan fallback 
     await timeline.getByRole("button", { name: "Rentang sebelumnya" }).click(); await expect(days.first()).toHaveAttribute("data-date", "2028-02-29");
     await applyRange(timeline, "2000-01-01", "2000-01-01"); await expect(timeline.getByRole("button", { name: "Rentang sebelumnya" })).toBeDisabled();
     await applyRange(timeline, "2100-12-31", "2100-12-31"); await expect(timeline.getByRole("button", { name: "Rentang berikutnya" })).toBeDisabled();
-    await timeline.getByLabel("Zona tampilan").selectOption("WITA"); await timeline.getByRole("button", { name: "Hari ini" }).click();
+    await client.query("UPDATE app_settings SET default_time_zone = 'WITA', revision = revision + 1 WHERE id = 1");
+    await page.reload();
+    const timelineWita = page.getByLabel("Timeline tes", { exact: true });
+    await applyRange(timelineWita, "2100-12-31", "2100-12-31");
+    await expect(timelineWita.getByRole("button", { name: "Rentang berikutnya" })).toBeDisabled();
+    await timelineWita.getByRole("button", { name: "Hari ini" }).click();
     const current = (await client.query<{ date: string }>("SELECT to_char(clock_timestamp() AT TIME ZONE 'Asia/Makassar','YYYY-MM-DD') AS date")).rows[0].date;
-    await expect(days.first()).toHaveAttribute("data-date", current); await expect(days).toHaveCount(1);
-  } finally { await noJs.close(); await cleanupLoginFixture(client, f); await client.end(); }
+    await expect(timelineWita.getByTestId("timeline-day").first()).toHaveAttribute("data-date", current); await expect(timelineWita.getByTestId("timeline-day")).toHaveCount(1);
+  } finally { await client.query("UPDATE app_settings SET default_time_zone = 'WIB', revision = revision + 1 WHERE id = 1").catch(() => {}); await noJs.close(); await cleanupLoginFixture(client, f); await client.end(); }
 });
 
 test("banyak pelaksanaan bertumpuk tetap dapat dijangkau tanpa membuat viewport tak terbatas", async ({ page }) => {

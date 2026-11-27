@@ -90,8 +90,8 @@ export function SummaryMetricsGrid({ summary }: { summary: DatabaseSummaryMetric
     { label: "Tes & pelaksanaan", value: `${summary.examTests} tes` },
     { label: "Pengerjaan ujian", value: `${summary.attempts} pengerjaan (${summary.snapshotImages} gambar snapshot)` },
     {
-      label: "Logo & kop sekolah",
-      value: `${summary.hasBrandingLogo ? "Logo ada" : "Tanpa logo"} · ${summary.hasBrandingLetterhead ? "Kop ada" : "Tanpa kop"}`,
+      label: "Logo sekolah",
+      value: summary.hasBrandingLogo ? "Logo terpasang" : "Tanpa logo",
     },
   ];
   return (

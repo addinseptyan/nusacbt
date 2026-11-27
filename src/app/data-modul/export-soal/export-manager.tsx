@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import type { QuestionLetter, QuestionTopicOption } from "@/lib/question-types";
 import { formatTopicLabel } from "@/lib/topic-validation.mjs";
 
@@ -234,7 +235,7 @@ export function ExportWordManager({
             <div className="p-10 text-center text-sm text-muted-foreground">
               Tidak ada soal yang cocok dengan filter. Tambah soal di{" "}
               <Link href="/data-modul/soal" className="font-semibold text-primary underline">
-                Manajemen Soal
+                Bank Soal
               </Link>
               .
             </div>
@@ -335,7 +336,7 @@ export function ExportWordManager({
               disabled={pending || selectedIds.length === 0}
               className="h-11 w-full rounded-xl font-semibold"
             >
-              <Download className="size-4" />{" "}
+              {pending ? <Spinner aria-hidden="true" /> : <Download className="size-4" />}{" "}
               {pending ? "Menyiapkan Word..." : `Ekspor ${selectedIds.length} soal ke Word (.docx)`}
             </Button>
           </div>

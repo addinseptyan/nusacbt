@@ -137,24 +137,17 @@ test("admin dapat menambah, mencari, memfilter, dan mengubah siswa serta kelas/s
     await expect(page.getByText("Tidak ada siswa pada pilihan ini.")).toBeVisible();
     await page.getByLabel("Kelas / rombel").selectOption("");
 
-    // Ubah identitas nama dan NISN.
-    await studentRow(page, nisn).getByRole("button", { name: "Nama / NISN" }).click();
-    dialog = page.getByRole("dialog", { name: "Ubah identitas siswa" });
+    // Ubah identitas (nama + NISN) dan kelas sekaligus melalui dialog terpadu Kelola (tanpa window.confirm).
+    await studentRow(page, nisn).getByRole("button", { name: "Kelola" }).click();
+    dialog = page.getByRole("dialog", { name: new RegExp(`^Kelola siswa ·`) });
     await dialog.getByLabel("Nama siswa").fill(renamed);
     await dialog.getByLabel("NISN").fill(newNumber);
-    await dialog.getByRole("button", { name: "Simpan identitas" }).click();
+    await dialog.getByLabel("Kelas / rombel").selectOption(fixture.classId("XI"));
+    await dialog.getByRole("button", { name: "Simpan perubahan", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(studentRow(page, newNumber)).toContainText(renamed.toUpperCase());
-    expect((await client.query("SELECT name, nisn FROM school_students WHERE nisn = $1", [newNumber])).rows).toEqual([{ name: renamed.toUpperCase(), nisn: newNumber }]);
-
-    // Ubah kelas menjaga snapshot riwayat di student_class_placements; mengganti nama jurusan tidak menulis ulang riwayat lama.
-    await studentRow(page, newNumber).getByRole("button", { name: "Kelas / status" }).click();
-    dialog = page.getByRole("dialog", { name: `Kelas / status ${renamed.toUpperCase()}` });
-    await dialog.getByLabel("Kelas / rombel").selectOption(fixture.classId("XI"));
-    page.once("dialog", (confirmation) => confirmation.accept());
-    await dialog.getByRole("button", { name: "Simpan", exact: true }).click();
-    await expect(dialog).toBeHidden();
     await expect(studentRow(page, newNumber)).toContainText(`XI ${fixture.major}`);
+    expect((await client.query("SELECT name, nisn FROM school_students WHERE nisn = $1", [newNumber])).rows).toEqual([{ name: renamed.toUpperCase(), nisn: newNumber }]);
 
     const studentId = (await client.query<{ id: string }>("SELECT id::text AS id FROM school_students WHERE nisn = $1", [newNumber])).rows[0].id;
     let placements = await client.query(
@@ -176,11 +169,10 @@ test("admin dapat menambah, mencari, memfilter, dan mengubah siswa serta kelas/s
 
     // Ubah status menjadi Lulus mengakhiri penempatan periode aktif sambil menyimpan kelas terakhir.
     await openStudents(page, fixture.yearId(fixture.yearA));
-    await studentRow(page, newNumber).getByRole("button", { name: "Kelas / status" }).click();
-    dialog = page.getByRole("dialog", { name: `Kelas / status ${renamed.toUpperCase()}` });
+    await studentRow(page, newNumber).getByRole("button", { name: "Kelola" }).click();
+    dialog = page.getByRole("dialog", { name: `Kelola siswa · ${renamed.toUpperCase()}` });
     await dialog.getByLabel("Status siswa").selectOption("graduated");
-    page.once("dialog", (confirmation) => confirmation.accept());
-    await dialog.getByRole("button", { name: "Simpan", exact: true }).click();
+    await dialog.getByRole("button", { name: "Simpan perubahan", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(studentRow(page, newNumber)).toContainText("Lulus");
     placements = await client.query(
@@ -246,10 +238,10 @@ test("nama lama tidak berubah otomatis, tetapi disimpan kapital ketika diedit", 
     await page.getByLabel("Nama / NISN").fill(nisn);
     await expect(studentRow(page, nisn)).toContainText(legacy);
     expect((await client.query("SELECT name FROM school_students WHERE nisn=$1", [nisn])).rows).toEqual([{ name: legacy }]);
-    await studentRow(page, nisn).getByRole("button", { name: "Nama / NISN" }).click();
-    const editor = page.getByRole("dialog", { name: "Ubah identitas siswa" });
+    await studentRow(page, nisn).getByRole("button", { name: "Kelola" }).click();
+    const editor = page.getByRole("dialog", { name: `Kelola siswa · ${legacy}` });
     await expect(editor.getByLabel("Nama siswa")).toHaveValue(legacy);
-    await editor.getByRole("button", { name: "Simpan identitas" }).click();
+    await editor.getByRole("button", { name: "Simpan perubahan" }).click();
     await expect(editor).toBeHidden();
     await expect(studentRow(page, nisn)).toContainText(legacy.toUpperCase());
     expect((await client.query("SELECT name FROM school_students WHERE nisn=$1", [nisn])).rows).toEqual([{ name: legacy.toUpperCase() }]);
@@ -293,27 +285,16 @@ test("aksi roster dan identitas menolak sesi admin yang dicabut", async ({ page 
 
     await loginAsAdmin(page);
     await openStudents(page, fixture.yearId(fixture.yearA));
-    await studentRow(page, nisn).getByRole("button", { name: "Kelas / status" }).click();
-    editor = page.getByRole("dialog", { name: `Kelas / status ${name}` });
+    await studentRow(page, nisn).getByRole("button", { name: "Kelola" }).click();
+    editor = page.getByRole("dialog", { name: `Kelola siswa · ${name}` });
     await editor.getByLabel("Kelas / rombel").selectOption(fixture.classId("XI"));
-    await revokeCurrentSession(page, client);
-    response = page.waitForResponse((item) => item.request().method() === "POST" && new URL(item.url()).pathname.startsWith("/data-peserta/siswa"));
-    page.once("dialog", (confirmation) => confirmation.accept());
-    await editor.getByRole("button", { name: "Simpan", exact: true }).click();
-    await response;
-    await expect(page).toHaveURL(/\/login$/);
-    expect((await client.query("SELECT class_id::text AS id FROM academic_year_enrollments WHERE student_id = $1", [studentId])).rows).toEqual([{ id: fixture.classId("X") }]);
-
-    await loginAsAdmin(page);
-    await openStudents(page, fixture.yearId(fixture.yearA));
-    await studentRow(page, nisn).getByRole("button", { name: "Nama / NISN" }).click();
-    editor = page.getByRole("dialog", { name: "Ubah identitas siswa" });
     await editor.getByLabel("Nama siswa").fill(`Identitas Tertolak ${suffix}`);
     await revokeCurrentSession(page, client);
     response = page.waitForResponse((item) => item.request().method() === "POST" && new URL(item.url()).pathname.startsWith("/data-peserta/siswa"));
-    await editor.getByRole("button", { name: "Simpan identitas" }).click();
+    await editor.getByRole("button", { name: "Simpan perubahan", exact: true }).click();
     await response;
     await expect(page).toHaveURL(/\/login$/);
+    expect((await client.query("SELECT class_id::text AS id FROM academic_year_enrollments WHERE student_id = $1", [studentId])).rows).toEqual([{ id: fixture.classId("X") }]);
     expect((await client.query("SELECT name FROM school_students WHERE id = $1", [studentId])).rows).toEqual([{ name }]);
   } finally {
     await cleanData(client, [nisn, attemptedNisn], [fixture.major], [fixture.periodA, fixture.periodB], [fixture.yearA, fixture.yearB]);
@@ -344,23 +325,22 @@ test("perubahan roster dan identitas yang lebih baru tidak ditimpa atau bertabra
 
     await loginAsAdmin(page);
     await openStudents(page, fixture.yearId(fixture.yearA));
-    await studentRow(page, nisn).getByRole("button", { name: "Kelas / status" }).click();
-    const rosterDialog = page.getByRole("dialog", { name: `Kelas / status ${name}` });
+    await studentRow(page, nisn).getByRole("button", { name: "Kelola" }).click();
+    const rosterDialog = page.getByRole("dialog", { name: `Kelola siswa · ${name}` });
     await rosterDialog.getByLabel("Kelas / rombel").selectOption(fixture.classId("XII"));
     await client.query("UPDATE academic_year_enrollments SET class_id=$1, class_name_snapshot=$2 WHERE academic_year_id=$3 AND student_id=$4", [fixture.classId("XI"), `XI ${fixture.major}`, fixture.yearId(fixture.yearA), studentId]);
-    page.once("dialog", (confirmation) => confirmation.accept());
-    await rosterDialog.getByRole("button", { name: "Simpan", exact: true }).click();
+    await rosterDialog.getByRole("button", { name: "Simpan perubahan", exact: true }).click();
     await expect(rosterDialog.getByRole("alert")).toContainText("Data siswa pada tahun ini berubah");
     expect((await client.query("SELECT class_name_snapshot FROM academic_year_enrollments WHERE student_id=$1", [studentId])).rows).toEqual([{ class_name_snapshot: `XI ${fixture.major}` }]);
     await rosterDialog.getByRole("button", { name: "Batal" }).click();
 
     await page.reload();
-    await studentRow(page, nisn).getByRole("button", { name: "Nama / NISN" }).click();
-    const identityDialog = page.getByRole("dialog", { name: "Ubah identitas siswa" });
+    await studentRow(page, nisn).getByRole("button", { name: "Kelola" }).click();
+    const identityDialog = page.getByRole("dialog", { name: `Kelola siswa · ${name}` });
     await client.query("UPDATE school_students SET name=$1, updated_at=clock_timestamp() WHERE nisn=$2", [updated, nisn]);
     await identityDialog.getByLabel("Nama siswa").fill(`Edit Lama ${suffix}`);
-    await identityDialog.getByRole("button", { name: "Simpan identitas" }).click();
-    await expect(identityDialog.getByRole("alert")).toContainText("Data siswa sudah berubah atau sudah dihapus");
+    await identityDialog.getByRole("button", { name: "Simpan perubahan" }).click();
+    await expect(identityDialog.getByRole("alert")).toContainText("Data identitas siswa berubah atau sudah dihapus");
     expect((await client.query("SELECT name FROM school_students WHERE nisn=$1", [nisn])).rows).toEqual([{ name: updated }]);
     await identityDialog.getByRole("button", { name: "Batal" }).click();
 
@@ -446,8 +426,8 @@ test.describe("data siswa pada layar kecil", () => {
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
       await page.setViewportSize({ width: 360, height: 320 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
-      await studentRow(page, nisn).getByRole("button", { name: "Kelas / status" }).click();
-      const dialog = page.getByRole("dialog", { name: `Kelas / status ${name}` });
+      await studentRow(page, nisn).getByRole("button", { name: "Kelola" }).click();
+      const dialog = page.getByRole("dialog", { name: `Kelola siswa · ${name}` });
       const box = await dialog.boundingBox();
       expect(box).not.toBeNull();
       if (!box) throw new Error("Dialog tidak terlihat.");
