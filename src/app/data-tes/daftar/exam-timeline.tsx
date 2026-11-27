@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
 import { toast } from "sonner";
 
-import { saveTimelineDefaultDays } from "@/app/data-tes/daftar/actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ExamRunKind } from "@/lib/exam-session-types";
 import { layoutTimelineDay, shiftTimelineDate, timelineLocal, timelineRangeLength, validTimelineDate } from "@/lib/exam-timeline.mjs";
 import type { ExamTimeZone } from "@/lib/exam-test-types";
+
+const TIMELINE_MAX_DAYS_STORAGE_KEY = "nusacbt.timeline.maxDays.v1";
 
 export type TimelineItem = {
   testId: string; runId: string | null; testName: string; periodName: string;
@@ -68,15 +68,12 @@ function ItemTarget({ item, onEditBase, ready, className, style, label, tooltip 
   return tooltip ? <Tooltip><TooltipTrigger asChild>{target}</TooltipTrigger><TooltipContent sideOffset={6} className="max-w-[min(22rem,calc(100vw-2rem))] break-words">{label}</TooltipContent></Tooltip> : target;
 }
 
-export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { items: TimelineItem[]; clock: TimelineClock; defaultDays?: number; onEditBase: (id: string) => void }) {
-  const router = useRouter();
+export function ExamTimeline({ items, clock, defaultTimeZone = "WIB", onEditBase }: { items: TimelineItem[]; clock: TimelineClock; defaultTimeZone?: ExamTimeZone; onEditBase: (id: string) => void }) {
   const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
-  const initialDays = Number.isInteger(defaultDays) && defaultDays >= 1 && defaultDays <= 7 ? defaultDays : 7;
-  const [maxDays, setMaxDays] = useState<number>(initialDays);
-  const [savingMaxDays, startSavingMaxDays] = useTransition();
-  const [range, setRange] = useState<DateRange>(() => ({ start: clock.WIB, end: endFor(clock.WIB, initialDays) }));
+  const zone: ExamTimeZone = defaultTimeZone;
+  const [maxDays, setMaxDays] = useState<number>(7);
+  const [range, setRange] = useState<DateRange>(() => ({ start: clock[zone], end: endFor(clock[zone], 7) }));
   const [draft, setDraft] = useState<DateRange>(range);
-  const [zone, setZone] = useState<ExamTimeZone>("WIB");
   const [selected, setSelected] = useState<ExamRunKind | "all">("all");
   const [hourWidth, setHourWidth] = useState(48);
   const [horizontalScrollbarHeight, setHorizontalScrollbarHeight] = useState(0);
@@ -85,6 +82,25 @@ export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { it
   const scroll = useRef<HTMLDivElement>(null);
   const dateHeader = useRef<HTMLDivElement>(null);
   const lastScale = useRef(0);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(TIMELINE_MAX_DAYS_STORAGE_KEY);
+      const parsed = stored ? Number(stored) : NaN;
+      if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 7 && parsed !== 7) {
+        const frame = window.requestAnimationFrame(() => {
+          setMaxDays(parsed);
+          setRange((prev) => {
+            const next = { start: prev.start, end: endFor(prev.start, parsed) };
+            setDraft(next);
+            return next;
+          });
+        });
+        return () => window.cancelAnimationFrame(frame);
+      }
+    } catch { /* Abaikan error penyimpanan browser. */ }
+    return undefined;
+  }, []);
 
   useEffect(() => {
     clockAnchor.current = { server: Date.parse(clock.now), client: Date.now() };
@@ -150,19 +166,10 @@ export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { it
     setRange(nextRange);
     setDraft(nextRange);
     if (scroll.current) scroll.current.scrollTop = 0;
-    startSavingMaxDays(async () => {
-      try {
-        const result = await saveTimelineDefaultDays(nextDays);
-        if (!result.ok) {
-          toast.error(result.error);
-          return;
-        }
-        toast.success(result.message);
-        router.refresh();
-      } catch {
-        toast.error("Pengaturan maksimal hari timeline belum dapat disimpan.");
-      }
-    });
+    try {
+      window.localStorage.setItem(TIMELINE_MAX_DAYS_STORAGE_KEY, String(nextDays));
+    } catch { /* Abaikan error penyimpanan browser. */ }
+    toast.success(`Maksimal rentang timeline disimpan menjadi ${nextDays} hari.`);
   }
   function chooseToday() {
     const anchor = clockAnchor.current;
@@ -176,8 +183,8 @@ export function ExamTimeline({ items, clock, defaultDays = 7, onEditBase }: { it
       <div className="min-w-0"><div className="flex items-center gap-2"><span className="flex size-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300"><CalendarDays className="size-4" /></span><div><p className="text-[10px] font-bold tracking-[0.12em] text-indigo-600 uppercase dark:text-indigo-300">Jadwal pelaksanaan</p><h2 className="text-base font-bold">Timeline tes</h2></div></div>
         <p className="mt-2 max-w-xl text-xs leading-5 text-muted-foreground">Lihat jadwal per hari. Draf, jadwal dirilis, dan rancangan yang belum memiliki pelaksanaan tetap ditampilkan.</p></div>
       <div className="flex flex-wrap items-end gap-2">
-        <div><label htmlFor="timeline-zone" className="mb-1 block text-xs font-semibold">Zona tampilan</label><select id="timeline-zone" disabled={!ready} value={zone} onChange={(event) => setZone(event.target.value as ExamTimeZone)} className="h-9 rounded-lg border bg-background px-2 text-sm"><option>WIB</option><option>WITA</option><option>WIT</option></select></div>
-        <div><label htmlFor="timeline-max-days" className="mb-1 block text-xs font-semibold">Maksimal hari</label><select id="timeline-max-days" aria-label="Maksimal hari timeline" disabled={!ready || savingMaxDays} value={maxDays} onChange={(event) => handleMaxDaysChange(Number(event.target.value))} className="h-9 rounded-lg border bg-background px-2 text-sm">{[1, 2, 3, 4, 5, 6, 7].map((daysOption) => <option key={daysOption} value={daysOption}>{daysOption} hari</option>)}</select></div>
+        <div className="flex h-9 items-center rounded-lg border bg-muted/40 px-2.5 text-xs font-semibold text-muted-foreground">Zona {zone}</div>
+        <div><label htmlFor="timeline-max-days" className="mb-1 block text-xs font-semibold">Maksimal hari</label><select id="timeline-max-days" aria-label="Maksimal hari timeline" disabled={!ready} value={maxDays} onChange={(event) => handleMaxDaysChange(Number(event.target.value))} className="h-9 rounded-lg border bg-background px-2 text-sm">{[1, 2, 3, 4, 5, 6, 7].map((daysOption) => <option key={daysOption} value={daysOption}>{daysOption} hari</option>)}</select></div>
         <fieldset className="min-w-0"><legend className="mb-1 text-xs font-semibold">Rentang tanggal · maksimal {maxDays} hari</legend><div className="flex flex-wrap items-center gap-1.5">
           <label className="sr-only" htmlFor="timeline-from">Tanggal mulai</label><input id="timeline-from" type="date" disabled={!ready} min="2000-01-01" max="2100-12-31" value={draft.start} onChange={(event) => setDraft((value) => ({ ...value, start: event.target.value }))} aria-invalid={draftCount === null} aria-describedby={draftCount === null ? "timeline-range-error" : undefined} className="h-9 max-w-[9.5rem] min-w-0 rounded-lg border bg-background px-2 text-xs sm:text-sm" />
           <span aria-hidden="true" className="text-xs text-muted-foreground">–</span>

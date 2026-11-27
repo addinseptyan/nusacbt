@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import type { AdminSessionUser } from "@/lib/admin-auth";
 import {
   ADMIN_PERMISSION_DEFINITIONS,
@@ -159,7 +160,7 @@ function RoleEditorCard({
               disabled={!actorCanEditSelectedRole || isPending}
               className="h-9 rounded-xl px-4 font-semibold"
             >
-              <Save className="size-4" /> Simpan hak akses
+              {isPending ? <Spinner aria-hidden="true" /> : <Save className="size-4" />} Simpan hak akses
             </Button>
           </div>
         </div>
@@ -459,7 +460,7 @@ export function RoleManager({
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Batal</Button>
-              <Button type="submit" disabled={isPending}>Buat peran</Button>
+              <Button type="submit" disabled={isPending}>{isPending && <Spinner aria-hidden="true" />}Buat peran</Button>
             </DialogFooter>
           </form>
         </DialogContent>

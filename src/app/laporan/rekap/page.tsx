@@ -11,6 +11,7 @@ import { matrixSearchParams, parseMatrixFilters, type MatrixFilters } from "@/li
 import { MATRIX_MAX_ATTEMPTS, MATRIX_MAX_STUDENTS, MATRIX_MAX_TESTS, MATRIX_PAGE_SIZE, MatrixPermissionDenied, MatrixSessionExpired, withMatrixSnapshot, type MatrixData } from "./matrix-data";
 import { MatrixKindFilter } from "./matrix-kind-filter";
 import { MatrixReportTable } from "./matrix-report-table";
+import { MatrixTestFilter } from "./matrix-test-filter";
 
 export const metadata = { title:"Rekap Hasil Tes — NusaCBT",robots:{index:false,follow:false} };
 export const dynamic = "force-dynamic";
@@ -23,11 +24,12 @@ export default async function ReportPage({searchParams}:{searchParams:Promise<Se
   const { allowed } = await requireAdminAccess("reports.view");
   if (!allowed) return <AccessDenied section="Laporan" title="Rekap Hasil Tes" />;
   const rawSearch = await searchParams;
-  const parsed=parseMatrixFilters(paramsOf(rawSearch));
+  const searchList = paramsOf(rawSearch);
+  const parsed=parseMatrixFilters(searchList);
   if(!parsed.ok) return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Rekap Hasil Tes</h1><Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Filter tidak valid</AlertTitle><AlertDescription>{parsed.error} <Link href="/laporan/rekap" className="underline">Atur ulang filter</Link>.</AlertDescription></Alert></div>;
   const applySmartDefaults = Object.keys(rawSearch).length === 0 && !parsed.filters.showAll;
   let data:MatrixData;
-  try { data=await withMatrixSnapshot(parsed.filters,parsed.page,false,(result)=>result,{applySmartDefaults}); }
+  try { data=await withMatrixSnapshot(parsed.filters,parsed.page,false,(result)=>result,{applySmartDefaults, zoneExplicit: searchList.has("zona")}); }
   catch(error) {if(error instanceof MatrixSessionExpired)redirect("/login");if(error instanceof MatrixPermissionDenied)return <AccessDenied section="Laporan" title="Rekap Hasil Tes" />;return <div className="mx-auto max-w-5xl p-6"><h1 className="text-2xl font-bold">Rekap Hasil Tes</h1><Alert variant="destructive" className="mt-5"><CircleAlert className="size-4" /><AlertTitle>Rekap belum dapat dimuat</AlertTitle><AlertDescription>Periksa PostgreSQL dan migrasi terbaru.</AlertDescription></Alert></div>;}
   const f = data.effectiveFilters;
   const opts=data.options!; const unknownYear=f.yearId && !opts.years.some((x)=>x.id===f.yearId),unknownPeriod=f.periodId && !opts.periods.some((x)=>x.id===f.periodId),unknownTest=f.testId && !opts.tests.some((x)=>x.id===f.testId),unknownClass=f.className && !opts.classes.includes(f.className);
@@ -50,14 +52,15 @@ export default async function ReportPage({searchParams}:{searchParams:Promise<Se
         )}
       </div>
       <form key={formKey} action="/laporan/rekap" className="mt-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {searchList.has("zona") && <input type="hidden" name="zona" value={f.zone} />}
       <div><label htmlFor="matrix-year" className="mb-1 block text-xs font-semibold">Tahun ajaran</label><select id="matrix-year" name="tahun" defaultValue={f.yearId??""} className={field}><option value="">Semua tahun</option>{unknownYear && <option value={f.yearId!}>Tahun tidak ditemukan</option>}{opts.years.map((x)=><option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
       <div><label htmlFor="matrix-period" className="mb-1 block text-xs font-semibold">Periode</label><select id="matrix-period" name="periode" defaultValue={f.periodId??""} className={field}><option value="">Semua periode</option>{unknownPeriod && <option value={f.periodId!}>Periode tidak ditemukan</option>}{opts.periods.map((x)=><option key={x.id} value={x.id}>{x.name}{x.year ? ` · ${x.year}` : " · belum dipetakan"}</option>)}</select></div>
       <div><label htmlFor="matrix-class" className="mb-1 block text-xs font-semibold">Kelas / rombel</label><select id="matrix-class" name="kelas" defaultValue={f.className??""} className={field}><option value="">Semua kelas</option>{unknownClass && <option value={f.className!}>{f.className}</option>}{opts.classes.map((x)=><option key={x} value={x}>{x}</option>)}</select></div>
-      <div><label htmlFor="matrix-test" className="mb-1 block text-xs font-semibold">Tes</label><select id="matrix-test" name="tes" defaultValue={f.testId??""} className={field}><option value="">Semua tes</option>{unknownTest && <option value={f.testId!}>Tes tidak ditemukan</option>}{opts.tests.map((x)=><option key={x.id} value={x.id}>{x.name} · {x.period}</option>)}</select></div>
+      <MatrixTestFilter key={f.testId ?? "all"} tests={opts.tests} initialTestId={f.testId} unknownTest={Boolean(unknownTest)} />
       <MatrixKindFilter key={`${f.kind}:${f.merge}`} initialKind={f.kind} initialMerge={f.merge} />
       <div><label htmlFor="matrix-from" className="mb-1 block text-xs font-semibold">Selesai dari tanggal</label><input id="matrix-from" name="dari" type="date" min="2000-01-01" max="2100-12-31" defaultValue={f.from??""} className={field} /></div>
       <div><label htmlFor="matrix-to" className="mb-1 block text-xs font-semibold">Selesai sampai tanggal</label><input id="matrix-to" name="sampai" type="date" min="2000-01-01" max="2100-12-31" defaultValue={f.to??""} className={field} /></div>
-      <div><label htmlFor="matrix-zone" className="mb-1 block text-xs font-semibold">Zona waktu</label><select id="matrix-zone" name="zona" defaultValue={f.zone} className={field}><option value="WIB">WIB</option><option value="WITA">WITA</option><option value="WIT">WIT</option></select></div>
+      <div><span className="mb-1 block text-xs font-semibold">Zona waktu</span><div className="flex h-10 items-center rounded-lg border border-input bg-muted/40 px-3 text-sm font-medium text-muted-foreground">{f.zone} · Pengaturan Aplikasi</div></div>
       <div><label htmlFor="matrix-student" className="mb-1 block text-xs font-semibold">Siswa / nomor / NISN</label><input id="matrix-student" name="siswa" maxLength={100} defaultValue={f.student??""} placeholder="Cari siswa" className={field} /></div>
       <div className="flex flex-wrap gap-2 lg:col-span-2">
         <Button type="submit">Terapkan</Button>

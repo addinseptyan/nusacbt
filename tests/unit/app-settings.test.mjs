@@ -3,15 +3,16 @@ import test from "node:test";
 import sharp from "sharp";
 
 import { normalizeBrandingImage } from "../../src/lib/app-settings-image.mjs";
-import { isValidPalette, validateAppSettingsInput } from "../../src/lib/app-settings-validation.mjs";
+import { isValidPalette, isValidTimeZone, validateAppSettingsInput } from "../../src/lib/app-settings-validation.mjs";
 
-test("validateAppSettingsInput membersihkan spasi, merapikan baris baru, dan memvalidasi palet", () => {
+test("validateAppSettingsInput membersihkan spasi, merapikan baris baru, dan memvalidasi palet serta zona waktu", () => {
   const result = validateAppSettingsInput({
     appName: "  NusaCBT   Sekolah ",
     appDescription: "  Platform   ujian lokal  ",
     schoolName: "  SMA   Nusantara 1  ",
     participantInfo: " Baris 1\r\n  Baris 2  ",
     colorPalette: "indigo",
+    defaultTimeZone: "WITA",
     revision: "4",
   });
   assert.equal(result.ok, true);
@@ -21,13 +22,18 @@ test("validateAppSettingsInput membersihkan spasi, merapikan baris baru, dan mem
     assert.equal(result.value.schoolName, "SMA Nusantara 1");
     assert.equal(result.value.participantInfo, "Baris 1\n  Baris 2");
     assert.equal(result.value.colorPalette, "indigo");
+    assert.equal(result.value.defaultTimeZone, "WITA");
     assert.equal(result.value.revision, "4");
   }
   assert.equal(isValidPalette("emerald"), true);
   assert.equal(isValidPalette("pink"), false);
+  assert.equal(isValidTimeZone("WIB"), true);
+  assert.equal(isValidTimeZone("WITA"), true);
+  assert.equal(isValidTimeZone("WIT"), true);
+  assert.equal(isValidTimeZone("UTC"), false);
 });
 
-test("validateAppSettingsInput menolak nama aplikasi kosong, palet tidak valid, karakter kontrol, dan revisi buruk", () => {
+test("validateAppSettingsInput menolak nama aplikasi kosong, palet tidak valid, zona tidak valid, karakter kontrol, dan revisi buruk", () => {
   assert.equal(
     validateAppSettingsInput({
       appName: "   ",
@@ -46,6 +52,18 @@ test("validateAppSettingsInput menolak nama aplikasi kosong, palet tidak valid, 
       schoolName: "Sekolah",
       participantInfo: "",
       colorPalette: "pink",
+      revision: "1",
+    }).ok,
+    false,
+  );
+  assert.equal(
+    validateAppSettingsInput({
+      appName: "NusaCBT",
+      appDescription: "",
+      schoolName: "Sekolah",
+      participantInfo: "",
+      colorPalette: "emerald",
+      defaultTimeZone: "UTC",
       revision: "1",
     }).ok,
     false,
@@ -79,13 +97,13 @@ test("validateAppSettingsInput menolak nama aplikasi kosong, palet tidak valid, 
     participantInfo: "",
     colorPalette: "emerald",
     appMode: "dev",
-    timelineDefaultDays: "3",
+    defaultTimeZone: "WIT",
     revision: "5",
   });
   assert.equal(devMode.ok, true);
   if (devMode.ok) {
     assert.equal(devMode.value.appMode, "dev");
-    assert.equal(devMode.value.timelineDefaultDays, 3);
+    assert.equal(devMode.value.defaultTimeZone, "WIT");
   }
   assert.equal(
     validateAppSettingsInput({
@@ -95,40 +113,14 @@ test("validateAppSettingsInput menolak nama aplikasi kosong, palet tidak valid, 
       participantInfo: "",
       colorPalette: "emerald",
       appMode: "staging",
-      timelineDefaultDays: "3",
-      revision: "5",
-    }).ok,
-    false,
-  );
-  assert.equal(
-    validateAppSettingsInput({
-      appName: "NusaCBT",
-      appDescription: "",
-      schoolName: "Sekolah",
-      participantInfo: "",
-      colorPalette: "emerald",
-      appMode: "production",
-      timelineDefaultDays: "8",
-      revision: "5",
-    }).ok,
-    false,
-  );
-  assert.equal(
-    validateAppSettingsInput({
-      appName: "NusaCBT",
-      appDescription: "",
-      schoolName: "Sekolah",
-      participantInfo: "",
-      colorPalette: "emerald",
-      appMode: "production",
-      timelineDefaultDays: "0",
+      defaultTimeZone: "WIB",
       revision: "5",
     }).ok,
     false,
   );
 });
 
-test("normalizeBrandingImage menerima PNG/JPEG statis dan menolak SVG atau berkas melebihi batas", async () => {
+test("normalizeBrandingImage menerima PNG/JPEG statis untuk logo dan menolak jenis tak dikenal, SVG, atau berkas melebihi batas", async () => {
   const png = await sharp({
     create: { width: 120, height: 120, channels: 4, background: { r: 29, g: 138, b: 92, alpha: 0.8 } },
   })
@@ -142,17 +134,21 @@ test("normalizeBrandingImage menerima PNG/JPEG statis dan menolak SVG atau berka
   }
 
   const jpg = await sharp({
-    create: { width: 800, height: 200, channels: 3, background: { r: 245, g: 245, b: 245 } },
+    create: { width: 200, height: 200, channels: 3, background: { r: 245, g: 245, b: 245 } },
   })
     .jpeg()
     .toBuffer();
-  const normalizedHeader = await normalizeBrandingImage(jpg, "letterhead");
-  assert.equal(normalizedHeader.ok, true);
-  if (normalizedHeader.ok) {
-    assert.equal(normalizedHeader.mime, "image/jpeg");
-    assert.equal(normalizedHeader.data[0], 0xff);
-    assert.equal(normalizedHeader.data[1], 0xd8);
+  const normalizedJpg = await normalizeBrandingImage(jpg, "logo");
+  assert.equal(normalizedJpg.ok, true);
+  if (normalizedJpg.ok) {
+    assert.equal(normalizedJpg.mime, "image/jpeg");
+    assert.equal(normalizedJpg.data[0], 0xff);
+    assert.equal(normalizedJpg.data[1], 0xd8);
   }
+
+  // @ts-expect-error -- uji penolakan jenis tidak didukung
+  const rejectedKind = await normalizeBrandingImage(jpg, "letterhead");
+  assert.equal(rejectedKind.ok, false);
 
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
   const svgResult = await normalizeBrandingImage(svg, "logo");

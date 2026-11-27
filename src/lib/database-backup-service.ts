@@ -66,7 +66,6 @@ export type DatabaseSummaryMetrics = {
   examTests: number;
   attempts: number;
   hasBrandingLogo: boolean;
-  hasBrandingLetterhead: boolean;
 };
 
 export type BackupAuditEntry = {
@@ -391,7 +390,6 @@ function summarizeParsedArchive(parsed: ParsedBackupArchive): DatabaseSummaryMet
 
   const appRows = rowsOf("app_settings");
   const logoIdx = colIndex("app_settings", "logo_image");
-  const letterheadIdx = colIndex("app_settings", "letterhead_image");
   const firstApp = appRows[0] ?? [];
 
   return {
@@ -403,7 +401,6 @@ function summarizeParsedArchive(parsed: ParsedBackupArchive): DatabaseSummaryMet
     examTests: rowsOf("exam_tests").length,
     attempts: rowsOf("exam_attempts").length,
     hasBrandingLogo: logoIdx >= 0 && firstApp[logoIdx] !== null,
-    hasBrandingLetterhead: letterheadIdx >= 0 && firstApp[letterheadIdx] !== null,
   };
 }
 
@@ -465,8 +462,7 @@ export async function loadToolDashboardData(): Promise<ToolDashboardData> {
            (SELECT count(*)::int FROM exam_question_snapshot_images) AS "snapshotImages",
            (SELECT count(*)::int FROM exam_tests) AS "examTests",
            (SELECT count(*)::int FROM exam_attempts) AS attempts,
-           COALESCE((SELECT logo_image IS NOT NULL FROM app_settings WHERE id = 1), false) AS "hasBrandingLogo",
-           COALESCE((SELECT letterhead_image IS NOT NULL FROM app_settings WHERE id = 1), false) AS "hasBrandingLetterhead"`,
+           COALESCE((SELECT logo_image IS NOT NULL FROM app_settings WHERE id = 1), false) AS "hasBrandingLogo"`,
       )
     ).rows[0];
 

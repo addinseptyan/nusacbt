@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   applyClassCheckboxToggle,
   applyClassSessionAssignment,
@@ -68,7 +69,7 @@ export function SessionPlanManager({ data }: { data: SessionPlanPage }) {
   );
   const [query, setQuery] = useState("");
   const [sessionFilter, setSessionFilter] = useState("all");
-  const [collapsedClasses, setCollapsedClasses] = useState<Set<string>>(() => new Set());
+  const [expandedClasses, setExpandedClasses] = useState<Set<string>>(() => new Set());
   const [classPages, setClassPages] = useState<Record<string, number>>({});
   const [groupPage, setGroupPage] = useState(0);
   const [confirming, setConfirming] = useState(false);
@@ -156,10 +157,10 @@ export function SessionPlanManager({ data }: { data: SessionPlanPage }) {
   }
 
   function toggleExpand(id: string) {
-    const next = new Set(collapsedClasses);
+    const next = new Set(expandedClasses);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    setCollapsedClasses(next);
+    setExpandedClasses(next);
   }
 
   function generate() {
@@ -454,7 +455,7 @@ export function SessionPlanManager({ data }: { data: SessionPlanPage }) {
               <div className="mt-4 space-y-3">
                 {pagedGroups.map((group) => {
                   const summary = summarizeClassSelection(group.students, chosen, assignments, capacities.length);
-                  const expanded = !collapsedClasses.has(group.classId);
+                  const expanded = Boolean(query.trim()) || expandedClasses.has(group.classId);
                   const cPages = Math.max(1, Math.ceil(group.students.length / CLASS_PAGE_SIZE));
                   const cPage = Math.min(classPages[group.classId] ?? 0, cPages - 1);
                   const visibleGroupStudents = group.students.slice(cPage * CLASS_PAGE_SIZE, (cPage + 1) * CLASS_PAGE_SIZE);
@@ -707,6 +708,7 @@ export function SessionPlanManager({ data }: { data: SessionPlanPage }) {
                 Batal
               </Button>
               <Button type="button" disabled={pending} onClick={save}>
+                {pending && <Spinner aria-hidden="true" />}
                 {pending ? "Menyimpan..." : "Ya, simpan pembagian"}
               </Button>
             </DialogFooter>

@@ -10,6 +10,7 @@ import { forgetRetakeOperation, notifyRetakeUncertain, prepareRetakeOperation, t
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 
 const subscribe = () => () => {};
 const clientReady = () => true;
@@ -77,7 +78,7 @@ export function RetakeControl(props: Props) {
         <DialogFooter>
           {error && <Button type="button" variant="outline" disabled={pending} onClick={() => { setOpen(false); router.refresh(); }}>Muat ulang daftar</Button>}
           <Button type="button" variant="outline" disabled={pending} onClick={() => changeOpen(false)}>Batal</Button>
-          <Button type="button" disabled={pending} onClick={confirm}>{pending ? "Memproses…" : isGrant ? "Ya, berikan izin" : "Ya, cabut izin"}</Button>
+          <Button type="button" disabled={pending} onClick={confirm}>{pending && <Spinner aria-hidden="true" />}{pending ? "Memproses…" : isGrant ? "Ya, berikan izin" : "Ya, cabut izin"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

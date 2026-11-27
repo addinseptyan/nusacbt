@@ -102,14 +102,22 @@ test("9 revisi UI & fitur: sticky ringkasan, theme spin, pagination riwayat, tim
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await loginAsAdmin(page);
 
-    // 7. DASHBOARD: Live Token table + animated ping
+    // 7. DASHBOARD: Live Token table (ping khusus badge LIVE, tidak berdenyut per baris) + Monitoring pelaksanaan tes
     await expect(page.getByRole("heading", { name: "Token Live" })).toBeVisible();
     await expect(page.getByTestId("live-token-ping")).toBeVisible();
+    await expect(page.getByTestId("live-token-ping").locator(".animate-ping")).toHaveCSS("animation-name", "ping");
     const tokenTable = page.getByRole("table", { name: "Tabel token live" });
     await expect(tokenTable).toBeVisible();
     await expect(tokenTable).toContainText("112233");
     await expect(tokenTable).toContainText("445566");
-    await expect(tokenTable.locator(".animate-ping").first()).toHaveCSS("animation-name", "ping");
+    await expect(tokenTable.locator(".animate-ping")).toHaveCount(0);
+
+    const monitoringTable = page.getByRole("table", { name: "Monitoring pelaksanaan tes" });
+    await expect(monitoringTable).toBeVisible();
+    await expect(monitoringTable).toContainText(`Fisika ${f.login.suffix}`);
+    await expect(
+      monitoringTable.locator("tr").filter({ hasText: `Fisika ${f.login.suffix}` }).getByRole("link", { name: "Detail" }),
+    ).toHaveAttribute("href", `/data-tes/monitoring?tes=${extraTestIds[0]}`);
 
     // 2. UI ADMIN: Theme toggle spin animation
     const themeButton = page.getByRole("button", { name: "Ganti tema" });
@@ -120,13 +128,14 @@ test("9 revisi UI & fitur: sticky ringkasan, theme spin, pagination riwayat, tim
     await themeButton.click();
     await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
 
-    // 9. UI ADMIN SIDEBAR: Single-open accordion
+    // 9. UI ADMIN SIDEBAR: Single-open accordion & Mata Pelajaran terpadu
     const sidebar = page.locator('[data-sidebar="sidebar"]');
     await sidebar.getByRole("button", { name: "Data Modul", exact: true }).click();
-    await expect(sidebar.getByRole("link", { name: "Manajemen Soal", exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: "Mata Pelajaran", exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: "Manajemen Soal", exact: true })).toHaveCount(0);
     await sidebar.getByRole("button", { name: "Data Peserta", exact: true }).click();
     await expect(sidebar.getByRole("link", { name: "Akun Peserta", exact: true })).toBeVisible();
-    await expect(sidebar.getByRole("link", { name: "Manajemen Soal", exact: true })).toBeHidden();
+    await expect(sidebar.getByRole("link", { name: "Mata Pelajaran", exact: true })).toBeHidden();
     await sidebar.getByRole("button", { name: "Data Tes", exact: true }).click();
     await expect(sidebar.getByRole("link", { name: "Daftar Tes", exact: true })).toBeVisible();
     await expect(sidebar.getByRole("link", { name: "Akun Peserta", exact: true })).toBeHidden();
@@ -185,9 +194,9 @@ test("9 revisi UI & fitur: sticky ringkasan, theme spin, pagination riwayat, tim
     await expect(page.locator("#monitor-from")).toHaveValue(todayWib);
     await expect(page.locator("#monitor-to")).toHaveValue(todayWib);
 
-    // Pilih salah satu tes lewat combobox shadcn UI
+    // Pilih salah satu tes lewat combobox shadcn UI (multi kata)
     await testCombobox.click();
-    await page.getByPlaceholder("Cari nama tes atau periode...").fill("Fisika");
+    await page.getByPlaceholder("Cari nama, tag, atau periode (multi kata)...").fill("Fisika");
     await page.getByRole("option", { name: new RegExp(`Fisika ${f.login.suffix}`) }).click();
     await expect(testCombobox).toContainText(`Fisika ${f.login.suffix}`);
     await page.getByRole("button", { name: "Terapkan", exact: true }).click();
@@ -258,7 +267,6 @@ test("9 revisi UI & fitur: sticky ringkasan, theme spin, pagination riwayat, tim
     const excelSummary = strFromU8(unzipSync(await excelResp.body())["xl/worksheets/sheet1.xml"]);
     expect(excelSummary).toContain(`Biologi ${f.login.suffix}`);
   } finally {
-    await client.query("UPDATE app_settings SET timeline_default_days = 7, revision = revision + 1 WHERE id = 1");
     await cleanupAttemptFixture(client, f);
     await client.end();
   }

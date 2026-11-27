@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import type { ExamPeriod } from "@/lib/period-types";
 
 const dateFormatter = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -101,7 +102,7 @@ function PeriodEditor({
           </div>
           <DialogFooter className="mt-5 -mx-4 -mb-4 rounded-b-2xl">
             <Button type="button" variant="outline" disabled={pending} onClick={() => handleOpenChange(false)}>Batal</Button>
-            <Button type="submit" disabled={pending}>{pending ? "Menyimpan..." : "Simpan periode"}</Button>
+            <Button type="submit" disabled={pending}>{pending && <Spinner aria-hidden="true" />}{pending ? "Menyimpan..." : "Simpan periode"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -175,7 +176,7 @@ function DeletePeriodDialog({
               Hapus beserta dependensi (Mode Dev)
             </Button>
           )}
-          <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>{pending ? "Menghapus..." : "Ya, hapus periode"}</Button>
+          <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>{pending && <Spinner aria-hidden="true" />}{pending ? "Menghapus..." : "Ya, hapus periode"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -241,6 +242,7 @@ function LoginPeriodDialog({ choice, activeRevision, onClose }: { choice: LoginC
       <DialogFooter>
         <Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button>
         <Button type="button" variant={choice.mode === "activate" ? "default" : "destructive"} disabled={pending} onClick={confirm}>
+          {pending && <Spinner aria-hidden="true" />}
           {pending ? "Menyimpan..." : choice.mode === "activate" ? "Ya, aktifkan login" : choice.mode === "deactivate" ? "Ya, nonaktifkan periode" : "Ya, nonaktifkan semua"}
         </Button>
       </DialogFooter>

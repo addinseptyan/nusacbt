@@ -45,7 +45,7 @@ export default async function AppSettingsPage() {
           <p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Pengaturan</p>
           <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Pengaturan Aplikasi</h1>
           <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-            Atur identitas sekolah, informasi peserta, logo, kop surat, dan palet warna aplikasi.
+            Atur identitas sekolah, informasi peserta, logo sekolah, zona waktu standar, palet warna, serta mode aplikasi.
           </p>
         </div>
       </div>

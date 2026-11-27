@@ -38,7 +38,7 @@ export type InspectCascadeResult =
 
 export type ExecuteCascadeResult =
   | { ok: true; message: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string; sessionExpired?: boolean };
 
 class DevCascadeProblem extends Error {}
 
@@ -820,3 +820,171 @@ export async function executeDevCascadeDelete(
 
   return { ok: true, message: `${label} beserta seluruh data dependensinya berhasil dihapus permanen.` };
 }
+
+const RESET_DATABASE_TABLES = [
+  "exam_retake_operations",
+  "exam_retake_permissions",
+  "exam_attempt_questions",
+  "exam_attempts",
+  "exam_schedule_participants",
+  "exam_schedule_custom_questions",
+  "exam_token_issue_operations",
+  "exam_session_assignments",
+  "exam_schedule_runs",
+  "participant_sessions",
+  "participant_passwords",
+  "participant_password_audit",
+  "exam_test_questions",
+  "exam_start_token_attempts",
+  "exam_session_groups",
+  "exam_score_visibility",
+  "exam_final_grade_state",
+  "exam_final_grade_operations",
+  "exam_final_grade_settings",
+  "exam_access_tokens",
+  "student_class_placements",
+  "question_import_batches",
+  "participant_identities",
+  "exam_tests",
+  "exam_session_plans",
+  "academic_year_enrollments",
+  "school_classes",
+  "question_bank",
+  "exam_question_snapshot_images",
+  "exam_question_snapshots",
+  "exam_periods",
+  "school_students",
+  "school_majors",
+  "question_topics",
+  "academic_years",
+  "participant_login_attempts",
+  "participant_password_key_binding",
+  "exam_token_key_binding",
+] as const;
+
+export async function resetOperationalDatabaseForDev(input: {
+  acknowledged: unknown;
+  confirmPhrase: unknown;
+}): Promise<ExecuteCascadeResult> {
+  if (input.acknowledged !== true) {
+    return { ok: false, error: "Centang konfirmasi pemahaman sebelum mereset database." };
+  }
+  if (typeof input.confirmPhrase !== "string" || input.confirmPhrase.trim() !== "RESET DATABASE") {
+    return { ok: false, error: 'Ketik persis "RESET DATABASE" untuk melanjutkan reset database.' };
+  }
+
+  const client = await getPostgresPool().connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(2026111728)");
+
+    const admin = await lockActiveAdminSession(client);
+    if (!admin) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "Sesi admin telah berakhir. Silakan masuk kembali.", sessionExpired: true };
+    }
+    if (!admin.isSuperuser) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "Reset database hanya diizinkan untuk akun Superadmin." };
+    }
+
+    const modeRow = await client.query<{ appMode: string }>(
+      `SELECT app_mode AS "appMode" FROM app_settings WHERE id = 1 FOR UPDATE`,
+    );
+    if (modeRow.rows[0]?.appMode !== "dev") {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "Reset database hanya tersedia saat Mode Dev aktif dan tersimpan." };
+    }
+
+    await client.query(
+      `UPDATE academic_year_settings SET active_year_id = NULL, revision = revision + 1 WHERE id = 1`,
+    );
+    await client.query(`UPDATE participant_login_settings SET period_id = NULL WHERE id = 1`);
+    await client.query(
+      `UPDATE participant_login_global_limit SET window_started_at = clock_timestamp(), attempts = 0 WHERE id = 1`,
+    );
+    await client.query(
+      `UPDATE exam_start_token_global_limit SET window_started_at = clock_timestamp(), failed_attempts = 0 WHERE id = 1`,
+    );
+    await client.query(
+      `UPDATE exam_work_settings
+       SET submission_window_minutes = 5, updated_at = clock_timestamp(), updated_by = NULL, revision = revision + 1
+       WHERE id = 1`,
+    );
+    await client.query(
+      `UPDATE exam_score_category_visibility
+       SET visible_to_participants = true, updated_at = clock_timestamp(), updated_by = NULL, revision = revision + 1`,
+    );
+
+    for (const table of RESET_DATABASE_TABLES) {
+      await client.query(`DELETE FROM ${table}`);
+    }
+
+    await client.query(
+      `UPDATE app_settings
+       SET app_name = 'NusaCBT',
+           app_description = 'Platform ujian sekolah',
+           school_name = '',
+           participant_info = '',
+           color_palette = 'emerald',
+           default_time_zone = 'WIB',
+           app_mode = 'production',
+           logo_image = NULL,
+           logo_image_mime = NULL,
+           updated_by = $1,
+           updated_at = now(),
+           revision = revision + 1
+       WHERE id = 1`,
+      [admin.id],
+    );
+
+    const stillActive = await lockActiveAdminSession(client);
+    if (!stillActive || stillActive.id !== admin.id) {
+      throw new DevCascadeProblem("Sesi admin sudah berakhir. Masuk kembali.");
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (error instanceof DevCascadeProblem) return { ok: false, error: error.message };
+    return { ok: false, error: "Reset database gagal diselesaikan. Tidak ada data yang diubah." };
+  } finally {
+    client.release();
+  }
+
+  revalidatePath("/", "layout");
+  for (const path of [
+    "/",
+    "/pengaturan/aplikasi",
+    "/pengaturan/pengguna",
+    "/data-peserta/tahun-ajaran",
+    "/data-peserta/periode",
+    "/data-peserta/kelas",
+    "/data-peserta/siswa",
+    "/data-peserta/identitas",
+    "/data-peserta/sandi",
+    "/data-peserta/akun",
+    "/data-peserta/kartu",
+    "/data-modul/topik",
+    "/data-modul/soal",
+    "/data-modul/export-soal",
+    "/data-tes/daftar",
+    "/data-tes/daftar/sesi",
+    "/data-tes/token",
+    "/data-tes/token/riwayat",
+    "/data-tes/monitoring",
+    "/data-tes/pengaturan-pengerjaan",
+    "/laporan/rekap",
+    "/peserta/login",
+    "/peserta",
+  ]) {
+    revalidatePath(path);
+  }
+
+  return {
+    ok: true,
+    message:
+      "Seluruh data operasional berhasil direset ke kondisi awal, akun admin dan RBAC tetap dipertahankan, dan mode kembali ke Production.",
+  };
+}
+

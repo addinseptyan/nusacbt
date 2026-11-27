@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, CircleAlert, Database, Download, Loader2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleAlert, Database, Download, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -17,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import type { ToolDashboardData } from "@/lib/database-backup-service";
 
 function filenameFromHeader(header: string | null): string {
@@ -127,7 +128,7 @@ export function BackupManager({ data }: { data: ToolDashboardData }) {
               <div>
                 <h2 className="text-lg font-bold">Buat cadangan penuh (.zip)</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Mengemas seluruh tabel database NusaCBT, riwayat pengerjaan, gambar bank soal, gambar snapshot, logo, dan kop surat ke dalam satu arsip berintegritas SHA-256 tanpa memerlukan program eksternal <code>pg_dump</code>.
+                  Mengemas seluruh tabel database NusaCBT, riwayat pengerjaan, gambar bank soal, gambar snapshot, dan logo ke dalam satu arsip berintegritas SHA-256 tanpa memerlukan program eksternal <code>pg_dump</code>.
                 </p>
               </div>
             </div>
@@ -161,7 +162,7 @@ export function BackupManager({ data }: { data: ToolDashboardData }) {
             >
               {downloading ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" /> Menyiapkan arsip…
+                  <Spinner aria-hidden="true" /> Menyiapkan arsip…
                 </>
               ) : (
                 <>

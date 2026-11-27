@@ -1,4 +1,4 @@
-import type { AppModeId, ColorPaletteId } from "@/lib/app-settings-validation.mjs";
+import type { AppModeId, AppTimeZone, ColorPaletteId } from "@/lib/app-settings-validation.mjs";
 
 export type PublicAppSettings = {
   appName: string;
@@ -6,14 +6,13 @@ export type PublicAppSettings = {
   schoolName: string;
   participantInfo: string;
   colorPalette: ColorPaletteId;
+  defaultTimeZone: AppTimeZone;
   hasLogo: boolean;
-  hasLetterhead: boolean;
   revision: string;
 };
 
 export type AdminAppSettings = PublicAppSettings & {
   appMode: AppModeId;
-  timelineDefaultDays: number;
   updatedAt: string;
   updatedByUsername: string | null;
 };

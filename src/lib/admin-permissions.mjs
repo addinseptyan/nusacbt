@@ -16,14 +16,14 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   {
     key: "topics.manage",
     section: "Data Modul",
-    label: "Topik / Mata Pelajaran",
-    description: "Menambah, mengubah, mencari, dan menghapus topik atau mata pelajaran.",
+    label: "Mata Pelajaran",
+    description: "Menambah, mengubah, mencari, dan menghapus mata pelajaran beserta tag.",
     sensitive: false,
   },
   {
     key: "questions.manage",
     section: "Data Modul",
-    label: "Manajemen Soal",
+    label: "Bank Soal",
     description: "Melihat gambar/kunci soal serta menambah, mengubah, dan menghapus soal.",
     sensitive: false,
   },
@@ -143,7 +143,7 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
     key: "app_settings.manage",
     section: "Pengaturan",
     label: "Pengaturan Aplikasi & Branding",
-    description: "Mengubah nama aplikasi, nama sekolah, info peserta, logo, kop surat, dan warna.",
+    description: "Mengubah nama aplikasi, nama sekolah, zona waktu, mode aplikasi, info peserta, logo, dan warna.",
     sensitive: true,
   },
   {

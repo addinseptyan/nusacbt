@@ -6,7 +6,8 @@ import { ExamTestManager } from "@/app/data-tes/daftar/exam-test-manager";
 import { AccessDenied } from "@/components/access-denied";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { requireAdminAccess } from "@/lib/admin-auth";
-import type { ExamPeriodOption, ExamTest } from "@/lib/exam-test-types";
+import { APP_TIME_ZONE_IANA, loadDefaultTimeZoneWithClient } from "@/lib/app-settings-service";
+import type { ExamPeriodOption, ExamTest, ExamTimeZone } from "@/lib/exam-test-types";
 import { getPostgresPool } from "@/lib/postgres";
 import type { Question, QuestionLetter, QuestionTopicOption } from "@/lib/question-types";
 
@@ -24,11 +25,13 @@ export default async function ExamTestsPage() {
   const { allowed } = await requireAdminAccess("exams.manage");
   if (!allowed) return <AccessDenied section="Data tes" title="Daftar Tes" />;
   let periods: ExamPeriodOption[]; let tests: ExamTest[]; let topics: QuestionTopicOption[]; let questions: Question[]; let timeline: TimelineItem[]; let clock: TimelineClock;
-  let timelineDefaultDays = 7;
+  let defaultTimeZone: ExamTimeZone = "WIB";
   let client: PoolClient | undefined;
   try {
     client = await getPostgresPool().connect();
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    defaultTimeZone = await loadDefaultTimeZoneWithClient(client);
+    const ianaZone = APP_TIME_ZONE_IANA[defaultTimeZone];
     const periodResult = await client.query<ExamPeriodOption>(
       `SELECT id::text AS id, name, to_char(start_date,'YYYY-MM-DD') AS "startDate",
          CASE WHEN end_date IS NULL THEN NULL ELSE to_char(end_date,'YYYY-MM-DD') END AS "endDate",
@@ -36,12 +39,17 @@ export default async function ExamTestsPage() {
        FROM exam_periods ORDER BY is_active DESC, start_date DESC, id DESC`,
     );
     const testResult = await client.query<ExamTest>(
-      `SELECT e.id::text AS id, e.xmin::text AS revision, e.name, e.period_id::text AS "periodId", p.name AS "periodName",
-         to_char(e.starts_at AT TIME ZONE (CASE e.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'YYYY-MM-DD"T"HH24:MI') AS "startLocal",
-         to_char((e.starts_at + e.duration_minutes * interval '1 minute') AT TIME ZONE (CASE e.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'YYYY-MM-DD"T"HH24:MI') AS "endLocal",
-         e.time_zone AS "timeZone", e.duration_minutes AS "durationMinutes", e.shuffle_questions AS "shuffleQuestions", e.shuffle_options AS "shuffleOptions",
+      `SELECT e.id::text AS id, e.xmin::text AS revision, e.name,
+         COALESCE(e.tags, ARRAY[]::text[]) AS tags,
+         e.period_id::text AS "periodId", p.name AS "periodName",
+         to_char(p.start_date, 'YYYY-MM-DD') AS "periodStartDate",
+         CASE WHEN p.end_date IS NULL THEN NULL ELSE to_char(p.end_date, 'YYYY-MM-DD') END AS "periodEndDate",
+         to_char(e.starts_at AT TIME ZONE $1, 'YYYY-MM-DD"T"HH24:MI') AS "startLocal",
+         to_char((e.starts_at + e.duration_minutes * interval '1 minute') AT TIME ZONE $1, 'YYYY-MM-DD"T"HH24:MI') AS "endLocal",
+         $2::text AS "timeZone", e.duration_minutes AS "durationMinutes", e.shuffle_questions AS "shuffleQuestions", e.shuffle_options AS "shuffleOptions",
          COALESCE((SELECT array_agg(eq.question_id::text ORDER BY eq.position) FROM exam_test_questions eq WHERE eq.exam_test_id=e.id), ARRAY[]::text[]) AS "questionIds"
        FROM exam_tests e JOIN exam_periods p ON p.id=e.period_id ORDER BY e.starts_at DESC, e.id DESC`,
+      [ianaZone, defaultTimeZone],
     );
     const timelineResult = await client.query<TimelineItem>(
       `SELECT t.id::text AS "testId",r.id::text AS "runId",t.name AS "testName",p.name AS "periodName",
@@ -61,14 +69,8 @@ export default async function ExamTestsPage() {
          to_char(statement_timestamp() AT TIME ZONE 'Asia/Jayapura','YYYY-MM-DD') AS "WIT",
          to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`,
     );
-    const appSettingsResult = await client.query<{ days: number }>(
-      "SELECT timeline_default_days AS days FROM app_settings WHERE id = 1",
-    );
-    if (appSettingsResult.rows[0]?.days >= 1 && appSettingsResult.rows[0]?.days <= 7) {
-      timelineDefaultDays = appSettingsResult.rows[0].days;
-    }
     const topicResult = await client.query<QuestionTopicOption>(
-      "SELECT id::text AS id, name, COALESCE(tags, ARRAY[]::text[]) AS tags FROM question_topics ORDER BY lower(name), name, id",
+      "SELECT id::text AS id, name, COALESCE(tags, ARRAY[]::text[]) AS tags FROM question_topics ORDER BY lower(name), tags_signature, name, id",
     );
     const questionResult = await client.query<QuestionRow>(
       `SELECT q.id::text AS id, q.xmin::text AS revision, q.topic_id::text AS "topicId", t.name AS "topicName",
@@ -108,7 +110,7 @@ export default async function ExamTestsPage() {
         <span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><ClipboardList className="size-5" /></span>
         <div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Daftar Tes</h1><p className="mt-2 text-[13px] leading-6 text-muted-foreground">Siapkan rancangan, jadwal, soal, dan pengaturan acak untuk setiap tes.</p></div>
       </div>
-      <ExamTestManager periods={periods} tests={tests} topics={topics} questions={questions} timeline={timeline} clock={clock} defaultDays={timelineDefaultDays} />
+      <ExamTestManager periods={periods} tests={tests} topics={topics} questions={questions} timeline={timeline} clock={clock} defaultTimeZone={defaultTimeZone} />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { loginAsAdmin } from "./helpers";
 import { suffix, testDatabase } from "./question-helpers";
 import { cleanupTokens, confirmIssue, globalPanel, issueForm, openTokenHistory, showAllTokenDates, testPanel, tokenBaseline, visibleCode } from "./token-helpers";
 
-test("filter tanggal berdasarkan zona dan irisan jadwal, termasuk tes sejak kemarin", async ({ page }) => {
+test("filter tanggal berdasarkan zona terpusat dan irisan jadwal, termasuk tes sejak kemarin", async ({ page }) => {
   test.setTimeout(90_000);
   const client = testDatabase(); await client.connect(); const before = await tokenBaseline(client); const periods: string[] = []; const tag = suffix();
   try {
@@ -30,7 +30,7 @@ test("filter tanggal berdasarkan zona dan irisan jadwal, termasuk tes sejak kema
 
     await loginAsAdmin(page); await page.goto("/data-tes/token");
     await expect(page.getByRole("link", { name: "Hari ini", exact: true })).toHaveAttribute("aria-current", "page");
-    await expect(page.getByLabel("Zona waktu")).toHaveValue("WIB");
+    await expect(page.getByText("Zona WIB")).toBeVisible();
     await expect(testPanel(page, yesterday)).toContainText("Berlangsung (jadwal)");
     await expect(testPanel(page, active)).toContainText("Berlangsung (jadwal)");
     await expect(testPanel(page, past)).toHaveCount(0); await expect(testPanel(page, tomorrow)).toHaveCount(0);
@@ -41,17 +41,30 @@ test("filter tanggal berdasarkan zona dan irisan jadwal, termasuk tes sejak kema
     for (const id of [early, endAtStart, startAtEnd, past]) await expect(testPanel(page, id)).toHaveCount(0);
     await confirmIssue(await issueForm(page, `tes ${startAtStart}`)); const specificCode = await visibleCode(page, `tes ${startAtStart}`);
     await expect(testPanel(page, late)).toContainText("Menggunakan token global");
-    await page.getByLabel("Zona waktu").selectOption("WITA");
-    await expect(page).toHaveURL(/zona=WITA/); await expect(page.getByLabel("Pilih tanggal")).toHaveValue(selectedDate);
+
+    // Zona WITA dari Pengaturan Aplikasi otomatis diikuti di Token dan Riwayat Token
+    await client.query("UPDATE app_settings SET default_time_zone = 'WITA', revision = revision + 1 WHERE id = 1");
+    await page.reload();
+    await expect(page.getByText("Zona WITA")).toBeVisible();
+    await expect(page.getByLabel("Pilih tanggal")).toHaveValue(selectedDate);
     for (const id of [early, endAtStart, crossing, startAtStart]) await expect(testPanel(page, id)).toBeVisible();
     for (const id of [late, startAtEnd, past]) await expect(testPanel(page, id)).toHaveCount(0);
     expect(await visibleCode(page)).toBe(globalCode); expect(await visibleCode(page, `tes ${startAtStart}`)).toBe(specificCode);
-    await openTokenHistory(page); await expect(page.getByLabel("Zona waktu")).toHaveValue("WITA");
+
+    await openTokenHistory(page);
+    await expect(page.getByText("Zona WITA")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Riwayat token");
     await expect(page.getByRole("link", { name: "Token", exact: true })).toHaveAttribute("aria-current", "location");
-    await page.getByLabel("Zona waktu").selectOption("WIT"); await expect(page).toHaveURL(/zona=WIT/);
-    await page.getByRole("link", { name: "Kembali ke Token" }).click(); await expect(page).toHaveURL(/zona=WIT/); await expect(page.getByLabel("Pilih tanggal")).toHaveValue(selectedDate);
+
+    await client.query("UPDATE app_settings SET default_time_zone = 'WIT', revision = revision + 1 WHERE id = 1");
+    await page.reload();
+    await expect(page.getByText("Zona WIT")).toBeVisible();
+    await page.getByRole("link", { name: "Kembali ke Token" }).click();
+    await expect(page.getByText("Zona WIT")).toBeVisible();
+    await expect(page.getByLabel("Pilih tanggal")).toHaveValue(selectedDate);
     expect(await visibleCode(page, `tes ${startAtStart}`)).toBe(specificCode);
+
+    await client.query("UPDATE app_settings SET default_time_zone = 'WIB', revision = revision + 1 WHERE id = 1");
     await page.getByRole("link", { name: "Hari ini", exact: true }).click(); await expect(testPanel(page, startAtStart)).toHaveCount(0);
     const response = await page.goto("/data-tes/token"); await expect(testPanel(page, startAtStart)).toHaveCount(0);
     const html = await response!.text();
@@ -61,13 +74,13 @@ test("filter tanggal berdasarkan zona dan irisan jadwal, termasuk tes sejak kema
     for (const id of [yesterday, active, tomorrow, early, endAtStart, crossing, startAtStart, late, startAtEnd]) await expect(testPanel(page, id)).toBeVisible();
     await expect(testPanel(page, past)).toHaveCount(0);
     await page.goto("/data-tes/token?tanggal=2026-02-30&zona=invalid");
-    await expect(page.getByRole("link", { name: "Hari ini", exact: true })).toHaveAttribute("aria-current", "page"); await expect(page.getByLabel("Zona waktu")).toHaveValue("WIB");
+    await expect(page.getByRole("link", { name: "Hari ini", exact: true })).toHaveAttribute("aria-current", "page"); await expect(page.getByText("Zona WIB")).toBeVisible();
     await page.goto(`/data-tes/token?tanggal=all&tanggal=${selectedDate}&zona=WITA&zona=WIT`);
-    await expect(page.getByRole("link", { name: "Hari ini", exact: true })).toHaveAttribute("aria-current", "page"); await expect(page.getByLabel("Zona waktu")).toHaveValue("WIB");
-  } finally { await cleanupTokens(client, before, periods); await client.end(); }
+    await expect(page.getByRole("link", { name: "Hari ini", exact: true })).toHaveAttribute("aria-current", "page"); await expect(page.getByText("Zona WIB")).toBeVisible();
+  } finally { await client.query("UPDATE app_settings SET default_time_zone = 'WIB', revision = revision + 1 WHERE id = 1").catch(() => {}); await cleanupTokens(client, before, periods); await client.end(); }
 });
 
-test("daftar tes dipaginasi di server dan pilihan tanggal/zona bertahan setelah riwayat", async ({ page }) => {
+test("daftar tes dipaginasi di server dan pilihan tanggal bertahan setelah riwayat", async ({ page }) => {
   test.setTimeout(60_000);
   const client = testDatabase(); await client.connect(); const before = await tokenBaseline(client); const periods: string[] = []; const tag = suffix();
   try {
@@ -86,9 +99,9 @@ test("daftar tes dipaginasi di server dan pilihan tanggal/zona bertahan setelah 
     await page.getByRole("link", { name: "Berikutnya" }).click(); await expect(page.getByText("Halaman 2 dari 3")).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`tanggal=${chosen}.*halaman=2`)); await expect(testPanel(page, rows[20].id)).toBeVisible(); await expect(testPanel(page, rows[0].id)).toHaveCount(0);
     expect(await visibleCode(page)).toBe(global); await expect(globalPanel(page)).toContainText("Aktif");
-    await openTokenHistory(page); await page.getByLabel("Zona waktu").selectOption("WITA"); await expect(page).toHaveURL(/zona=WITA/);
+    await openTokenHistory(page);
     await page.getByRole("link", { name: "Kembali ke Token" }).click(); await expect(page.getByText("Halaman 2 dari 3")).toBeVisible();
-    await expect(page.getByLabel("Zona waktu")).toHaveValue("WITA"); await expect(page.getByLabel("Pilih tanggal")).toHaveValue(chosen);
+    await expect(page.getByLabel("Pilih tanggal")).toHaveValue(chosen);
     await page.getByRole("link", { name: "Berikutnya" }).click(); await expect(page.getByText("Halaman 3 dari 3")).toBeVisible();
     await expect(page.getByRole("list", { name: "Tes berlangsung dan mendatang" }).locator(":scope > li")).toHaveCount(5);
     await expect(testPanel(page, rows[44].id)).toBeVisible();

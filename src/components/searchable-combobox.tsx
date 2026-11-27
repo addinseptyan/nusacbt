@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, ChevronsUpDown, Search, X } from "lucide-react";
 import { cn } from "cn";
+import { matchesMultiKeyword } from "@/lib/topic-validation.mjs";
 
 export type ComboboxOption = {
   value: string;
@@ -57,26 +58,15 @@ export function SearchableCombobox({
   );
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("id-ID");
-    if (!q) return options;
-    return options.filter((opt) => {
-      const hay = [
-        opt.label,
-        opt.subtitle ?? "",
-        ...(opt.tags ?? []),
-        opt.keywords ?? "",
-      ]
-        .join(" ")
-        .toLocaleLowerCase("id-ID");
-      return hay.includes(q);
-    });
+    if (!search.trim()) return options;
+    return options.filter((opt) =>
+      matchesMultiKeyword(search, [opt.label, opt.subtitle, ...(opt.tags ?? []), opt.keywords]),
+    );
   }, [options, search]);
 
   const flatEntries = useMemo(() => {
     const items: Array<{ value: string; label: string; option?: ComboboxOption; isAll?: boolean }> = [];
-    if (emptyOptionLabel && !search.trim()) {
-      items.push({ value: "", label: emptyOptionLabel, isAll: true });
-    } else if (emptyOptionLabel && emptyOptionLabel.toLocaleLowerCase("id-ID").includes(search.trim().toLocaleLowerCase("id-ID"))) {
+    if (emptyOptionLabel && matchesMultiKeyword(search, [emptyOptionLabel])) {
       items.push({ value: "", label: emptyOptionLabel, isAll: true });
     }
     for (const opt of filtered) {

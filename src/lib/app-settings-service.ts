@@ -1,20 +1,29 @@
 import "server-only";
 import { cache } from "react";
 import { revalidatePath } from "next/cache";
+import type { PoolClient } from "pg";
 
 import { lockActiveAdminSession, PERMISSION_DENIED_MESSAGE } from "@/lib/admin-auth";
 import { adminHasPermission } from "@/lib/admin-permissions.mjs";
-import { LETTERHEAD_MAX_BYTES, LOGO_MAX_BYTES, normalizeBrandingImage } from "@/lib/app-settings-image";
+import { LOGO_MAX_BYTES, normalizeBrandingImage } from "@/lib/app-settings-image";
 import type { AdminAppSettings, PublicAppSettings } from "@/lib/app-settings-types";
 import {
   DEFAULT_APP_SETTINGS,
   isValidAppMode,
   isValidPalette,
-  parseTimelineDefaultDays,
+  isValidTimeZone,
+  parseAppTimeZone,
   validateAppSettingsInput,
   type AppModeId,
+  type AppTimeZone,
 } from "@/lib/app-settings-validation.mjs";
 import { getPostgresPool } from "@/lib/postgres";
+
+export const APP_TIME_ZONE_IANA: Record<AppTimeZone, string> = {
+  WIB: "Asia/Jakarta",
+  WITA: "Asia/Makassar",
+  WIT: "Asia/Jayapura",
+};
 
 type SettingsRow = {
   appName: string;
@@ -22,17 +31,16 @@ type SettingsRow = {
   schoolName: string;
   participantInfo: string;
   colorPalette: string;
+  defaultTimeZone: string;
   appMode: string;
-  timelineDefaultDays: number;
   hasLogo: boolean;
-  hasLetterhead: boolean;
   revision: string;
   updatedAt: string;
   updatedByUsername: string | null;
 };
 
 function mapPublicSettings(
-  row: Omit<SettingsRow, "appMode" | "timelineDefaultDays" | "updatedAt" | "updatedByUsername">,
+  row: Omit<SettingsRow, "appMode" | "updatedAt" | "updatedByUsername">,
 ): PublicAppSettings {
   return {
     appName: row.appName || DEFAULT_APP_SETTINGS.appName,
@@ -40,24 +48,42 @@ function mapPublicSettings(
     schoolName: row.schoolName ?? "",
     participantInfo: row.participantInfo ?? "",
     colorPalette: isValidPalette(row.colorPalette) ? row.colorPalette : "emerald",
+    defaultTimeZone: parseAppTimeZone(row.defaultTimeZone),
     hasLogo: Boolean(row.hasLogo),
-    hasLetterhead: Boolean(row.hasLetterhead),
     revision: row.revision || "1",
   };
 }
 
+export async function loadDefaultTimeZoneWithClient(client: PoolClient): Promise<AppTimeZone> {
+  const result = await client.query<{ zone: string }>(
+    `SELECT default_time_zone AS zone FROM app_settings WHERE id = 1`,
+  );
+  return parseAppTimeZone(result.rows[0]?.zone);
+}
+
+export const getDefaultTimeZoneSafe = cache(async (): Promise<AppTimeZone> => {
+  try {
+    const result = await getPostgresPool().query<{ zone: string }>(
+      `SELECT default_time_zone AS zone FROM app_settings WHERE id = 1`,
+    );
+    return parseAppTimeZone(result.rows[0]?.zone);
+  } catch {
+    return "WIB";
+  }
+});
+
 export const getPublicAppSettingsSafe = cache(async (): Promise<PublicAppSettings> => {
   try {
     const result = await getPostgresPool().query<
-      Omit<SettingsRow, "appMode" | "timelineDefaultDays" | "updatedAt" | "updatedByUsername">
+      Omit<SettingsRow, "appMode" | "updatedAt" | "updatedByUsername">
     >(
       `SELECT app_name AS "appName",
         app_description AS "appDescription",
         school_name AS "schoolName",
         participant_info AS "participantInfo",
         color_palette AS "colorPalette",
+        default_time_zone AS "defaultTimeZone",
         logo_image IS NOT NULL AS "hasLogo",
-        letterhead_image IS NOT NULL AS "hasLetterhead",
         revision::text AS revision
        FROM app_settings WHERE id = 1`,
     );
@@ -80,17 +106,6 @@ export const getAdminAppModeSafe = cache(async (): Promise<AppModeId> => {
   }
 });
 
-export const getTimelineDefaultDaysSafe = cache(async (): Promise<number> => {
-  try {
-    const result = await getPostgresPool().query<{ days: number }>(
-      `SELECT timeline_default_days::int AS days FROM app_settings WHERE id = 1`,
-    );
-    return parseTimelineDefaultDays(result.rows[0]?.days) ?? 7;
-  } catch {
-    return 7;
-  }
-});
-
 export async function loadAdminAppSettings(): Promise<AdminAppSettings> {
   const result = await getPostgresPool().query<SettingsRow>(
     `SELECT s.app_name AS "appName",
@@ -98,12 +113,18 @@ export async function loadAdminAppSettings(): Promise<AdminAppSettings> {
       s.school_name AS "schoolName",
       s.participant_info AS "participantInfo",
       s.color_palette AS "colorPalette",
+      s.default_time_zone AS "defaultTimeZone",
       s.app_mode AS "appMode",
-      s.timeline_default_days::int AS "timelineDefaultDays",
       s.logo_image IS NOT NULL AS "hasLogo",
-      s.letterhead_image IS NOT NULL AS "hasLetterhead",
       s.revision::text AS revision,
-      to_char(s.updated_at AT TIME ZONE 'Asia/Jakarta', 'DD/MM/YYYY HH24:MI') || ' WIB' AS "updatedAt",
+      to_char(
+        s.updated_at AT TIME ZONE CASE s.default_time_zone
+          WHEN 'WITA' THEN 'Asia/Makassar'
+          WHEN 'WIT' THEN 'Asia/Jayapura'
+          ELSE 'Asia/Jakarta'
+        END,
+        'DD/MM/YYYY HH24:MI'
+      ) || ' ' || s.default_time_zone AS "updatedAt",
       u.username AS "updatedByUsername"
      FROM app_settings s
      LEFT JOIN admin_users u ON u.id = s.updated_by
@@ -114,27 +135,24 @@ export async function loadAdminAppSettings(): Promise<AdminAppSettings> {
   return {
     ...mapPublicSettings(row),
     appMode: isValidAppMode(row.appMode) ? row.appMode : "production",
-    timelineDefaultDays: parseTimelineDefaultDays(row.timelineDefaultDays) ?? 7,
     updatedAt: row.updatedAt,
     updatedByUsername: row.updatedByUsername,
   };
 }
 
-export async function loadBrandingImage(kind: "logo" | "letterhead"): Promise<{ data: Buffer; mime: string; revision: string } | null> {
-  const column = kind === "logo" ? "logo_image" : "letterhead_image";
-  const mimeColumn = kind === "logo" ? "logo_image_mime" : "letterhead_image_mime";
+export async function loadBrandingImage(kind: "logo"): Promise<{ data: Buffer; mime: string; revision: string } | null> {
+  if (kind !== "logo") return null;
   const result = await getPostgresPool().query<{ data: Buffer | null; mime: string | null; revision: string }>(
-    `SELECT ${column} AS data, ${mimeColumn} AS mime, revision::text AS revision FROM app_settings WHERE id = 1`,
+    `SELECT logo_image AS data, logo_image_mime AS mime, revision::text AS revision FROM app_settings WHERE id = 1`,
   );
   const row = result.rows[0];
   if (!row || !row.data || !row.mime) return null;
   return { data: row.data, mime: row.mime, revision: row.revision };
 }
 
-async function readImageUpload(
+async function readLogoUpload(
   fileEntry: FormDataEntryValue | null,
   removeFlag: boolean,
-  kind: "logo" | "letterhead",
 ): Promise<
   | { ok: true; mode: "keep" }
   | { ok: true; mode: "remove" }
@@ -144,13 +162,11 @@ async function readImageUpload(
   const isFile = fileEntry instanceof File && fileEntry.size > 0;
   if (removeFlag && !isFile) return { ok: true, mode: "remove" };
   if (!isFile) return { ok: true, mode: "keep" };
-  const maxBytes = kind === "logo" ? LOGO_MAX_BYTES : LETTERHEAD_MAX_BYTES;
-  const label = kind === "logo" ? "Logo sekolah" : "Gambar kop surat";
-  if (fileEntry.size > maxBytes) {
-    return { ok: false, error: `${label} maksimal ${kind === "logo" ? "1 MiB" : "2 MiB"}.` };
+  if (fileEntry.size > LOGO_MAX_BYTES) {
+    return { ok: false, error: "Logo sekolah maksimal 1 MiB." };
   }
   const bytes = Buffer.from(await fileEntry.arrayBuffer());
-  const normalized = await normalizeBrandingImage(bytes, kind);
+  const normalized = await normalizeBrandingImage(bytes, "logo");
   if (!normalized.ok) return normalized;
   return { ok: true, mode: "replace", data: normalized.data, mime: normalized.mime };
 }
@@ -167,20 +183,13 @@ export async function saveAppSettings(formData: FormData): Promise<SaveAppSettin
     participantInfo: formData.get("participantInfo"),
     colorPalette: formData.get("colorPalette"),
     appMode: formData.get("appMode"),
-    timelineDefaultDays: formData.get("timelineDefaultDays"),
+    defaultTimeZone: formData.get("defaultTimeZone"),
     revision: formData.get("revision"),
   });
   if (!validated.ok) return { ok: false, error: validated.error };
 
-  const logoResult = await readImageUpload(formData.get("logoFile"), formData.get("removeLogo") === "1", "logo");
+  const logoResult = await readLogoUpload(formData.get("logoFile"), formData.get("removeLogo") === "1");
   if (!logoResult.ok) return { ok: false, error: logoResult.error };
-
-  const letterheadResult = await readImageUpload(
-    formData.get("letterheadFile"),
-    formData.get("removeLetterhead") === "1",
-    "letterhead",
-  );
-  if (!letterheadResult.ok) return { ok: false, error: letterheadResult.error };
 
   const client = await getPostgresPool().connect();
   try {
@@ -196,7 +205,7 @@ export async function saveAppSettings(formData: FormData): Promise<SaveAppSettin
     }
 
     const currentRow = await client.query<{ appMode: string }>(
-      "SELECT app_mode AS \"appMode\" FROM app_settings WHERE id = 1 AND revision = $1::bigint FOR UPDATE",
+      `SELECT app_mode AS "appMode" FROM app_settings WHERE id = 1 AND revision = $1::bigint FOR UPDATE`,
       [validated.value.revision],
     );
     if (currentRow.rowCount !== 1) {
@@ -243,21 +252,15 @@ export async function saveAppSettings(formData: FormData): Promise<SaveAppSettin
       params.push(validated.value.appMode);
       sets.push(`app_mode = $${params.length}`);
     }
-    if (validated.value.timelineDaysProvided) {
-      params.push(validated.value.timelineDefaultDays);
-      sets.push(`timeline_default_days = $${params.length}`);
+    if (validated.value.defaultTimeZoneProvided && isValidTimeZone(validated.value.defaultTimeZone)) {
+      params.push(validated.value.defaultTimeZone);
+      sets.push(`default_time_zone = $${params.length}`);
     }
     if (logoResult.mode === "remove") {
       sets.push("logo_image = NULL", "logo_image_mime = NULL");
     } else if (logoResult.mode === "replace") {
       params.push(logoResult.data, logoResult.mime);
       sets.push(`logo_image = $${params.length - 1}`, `logo_image_mime = $${params.length}`);
-    }
-    if (letterheadResult.mode === "remove") {
-      sets.push("letterhead_image = NULL", "letterhead_image_mime = NULL");
-    } else if (letterheadResult.mode === "replace") {
-      params.push(letterheadResult.data, letterheadResult.mime);
-      sets.push(`letterhead_image = $${params.length - 1}`, `letterhead_image_mime = $${params.length}`);
     }
 
     const updated = await client.query(
@@ -292,44 +295,11 @@ export async function saveAppSettings(formData: FormData): Promise<SaveAppSettin
   revalidatePath("/peserta");
   revalidatePath("/data-peserta/kartu");
   revalidatePath("/data-tes/daftar");
+  revalidatePath("/data-tes/monitoring");
+  revalidatePath("/data-tes/token");
+  revalidatePath("/data-tes/token/riwayat");
+  revalidatePath("/laporan/rekap");
 
   const fresh = await loadAdminAppSettings();
   return { ok: true, settings: fresh, message: "Pengaturan aplikasi berhasil disimpan." };
-}
-
-export async function saveTimelineDefaultDays(daysRaw: unknown): Promise<{ ok: true; days: number } | { ok: false; error: string }> {
-  const days = parseTimelineDefaultDays(daysRaw);
-  if (days === null) return { ok: false, error: "Rentang bawaan timeline harus antara 1 sampai 7 hari." };
-
-  const client = await getPostgresPool().connect();
-  try {
-    await client.query("BEGIN");
-    const admin = await lockActiveAdminSession(client);
-    if (!admin) {
-      await client.query("ROLLBACK");
-      return { ok: false, error: "Sesi admin berakhir. Masuk kembali." };
-    }
-    if (!adminHasPermission(admin, "exams.manage")) {
-      await client.query("ROLLBACK");
-      return { ok: false, error: PERMISSION_DENIED_MESSAGE };
-    }
-    await client.query(
-      "UPDATE app_settings SET timeline_default_days = $1::smallint, updated_at = now(), updated_by = $2, revision = revision + 1 WHERE id = 1",
-      [days, admin.id],
-    );
-    const active = await lockActiveAdminSession(client);
-    if (!active || active.id !== admin.id) {
-      await client.query("ROLLBACK");
-      return { ok: false, error: "Sesi admin berakhir. Masuk kembali." };
-    }
-    await client.query("COMMIT");
-  } catch {
-    await client.query("ROLLBACK").catch(() => {});
-    return { ok: false, error: "Gagal menyimpan pengaturan rentang timeline." };
-  } finally {
-    client.release();
-  }
-  revalidatePath("/data-tes/daftar");
-  revalidatePath("/pengaturan/aplikasi");
-  return { ok: true, days };
 }

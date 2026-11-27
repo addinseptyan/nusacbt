@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { isNewParticipantPassword, NEW_PARTICIPANT_PASSWORD_ERROR, PARTICIPANT_PASSWORD_BATCH_SIZE } from "@/lib/participant-password-constants.mjs";
 import type { IdentityPeriod } from "@/lib/participant-identity-types";
 import type { PasswordAudit, PasswordDisplayRow, PasswordKeyStatus, PasswordPageData } from "@/lib/participant-password-types";
@@ -77,7 +78,7 @@ function PasswordEditor({ row, period, onClose }: { row: PasswordDisplayRow; per
         </div></fieldset>
         {mode === "manual" && <div className="space-y-4"><div className="space-y-2"><label htmlFor="new-participant-password" className="text-sm font-semibold">Sandi baru</label><Input id="new-participant-password" name="password" type="password" autoComplete="new-password" autoCapitalize="characters" spellCheck={false} maxLength={128} aria-describedby="participant-password-rule" required disabled={pending} className="h-11 rounded-xl" /></div><div className="space-y-2"><label htmlFor="confirm-participant-password" className="text-sm font-semibold">Ulangi sandi baru</label><Input id="confirm-participant-password" name="passwordConfirmation" type="password" autoComplete="new-password" autoCapitalize="characters" spellCheck={false} maxLength={128} aria-describedby="participant-password-rule" required disabled={pending} className="h-11 rounded-xl" /></div><p id="participant-password-rule" className="text-[11px] leading-5 text-muted-foreground">Tepat 8 huruf kapital A–Z, tanpa angka, spasi, atau simbol. Sandi lama tetap berlaku sampai di-reset.</p></div>}
         <p className="rounded-xl bg-muted/40 p-3 text-[11px] leading-5 text-muted-foreground">Sandi tidak ditampilkan setelah disimpan. Gunakan tombol <strong>Lihat sandi</strong> jika diperlukan; setiap penampilan berhasil dicatat.</p>
-        <DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="submit" disabled={pending}>{pending ? "Menyimpan..." : reset ? "Ya, reset sandi" : "Buat sandi"}</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="submit" disabled={pending}>{pending && <Spinner aria-hidden="true" />}{pending ? "Menyimpan..." : reset ? "Ya, reset sandi" : "Buat sandi"}</Button></DialogFooter>
       </form>
     </DialogContent>
   </Dialog>;
@@ -117,7 +118,7 @@ function GenerateDialog({ data, onClose }: { data: PasswordPageData; onClose: ()
         {error && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertDescription>{error}</AlertDescription></Alert>}
         {batch && batch.totalMissing > batch.candidates.length && <Alert><Info className="size-4" /><AlertTitle>Batch pertama</AlertTitle><AlertDescription>{batch.candidates.length} dari {batch.totalMissing} peserta diproses menurut urutan nama. Setelah selesai, ulangi untuk sisanya.</AlertDescription></Alert>}
         <p className="rounded-xl bg-muted/40 p-3 text-[11px] leading-5 text-muted-foreground">Sandi acak dibuat secara terpisah untuk setiap peserta. Maksimal {PARTICIPANT_PASSWORD_BATCH_SIZE} peserta per batch; pencarian tidak memengaruhi pilihan. Sandi yang sudah ada tidak ditimpa. Jika data berubah, seluruh batch dibatalkan.</p>
-        <DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="submit" disabled={pending || !batch}>{pending ? "Membuat..." : "Ya, buat sandi"}</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="submit" disabled={pending || !batch}>{pending && <Spinner aria-hidden="true" />}{pending ? "Membuat..." : "Ya, buat sandi"}</Button></DialogFooter>
       </form>
     </DialogContent>
   </Dialog>;

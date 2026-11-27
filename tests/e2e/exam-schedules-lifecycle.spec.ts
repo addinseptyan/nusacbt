@@ -15,6 +15,7 @@ test("dua tab pembagian menolak versi usang tanpa menimpa hasil pemenang",async(
     const nisn=(await client.query<{nisn:string}>("SELECT nisn FROM school_students WHERE id=$1",[f.studentA])).rows[0].nisn;
     await Promise.all([loginAsAdmin(page),loginAsAdmin(second)]); await Promise.all([page.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`),second.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`)]);
     for(const tab of [page,second]) {
+      await tab.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas X ${f.majorName}`}).click();
       await tab.getByLabel(`Pilih ${f.studentAName} ${nisn}`).check(); await tab.getByRole("button",{name:"Acak pembagian"}).click();
       await tab.getByRole("button",{name:"Simpan pembagian sesi"}).click();
     }
@@ -25,6 +26,7 @@ test("dua tab pembagian menolak versi usang tanpa menimpa hasil pemenang",async(
     expect((await client.query<{revision:string}>("SELECT revision::text FROM exam_session_plans WHERE period_id=$1",[f.periodA])).rows[0].revision).toBe("1");
     expect((await client.query("SELECT 1 FROM exam_session_assignments WHERE period_id=$1 AND student_id=$2",[f.periodA,f.studentA])).rowCount).toBe(1);
     await page.getByRole("button",{name:"Acak pembagian"}).click();
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas X ${f.majorName}`}).click();
     await expect(page.getByLabel(`Sesi ${f.studentAName} ${nisn}`)).toHaveValue("1");
   } finally { await other.close(); await cleanupLoginFixture(client,f); await client.end(); }
 });
@@ -97,7 +99,9 @@ test("perubahan kelompok membatalkan simpan dan rilis usang; peserta tertinggal 
     const editor=page.getByRole("dialog",{name:"Tambah pelaksanaan"});
     await editor.getByLabel("Nama pelaksanaan").fill("Draf usang");
     await editor.getByRole("button",{name:"Pilih semua yang tersedia"}).click();
-    await second.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`); await second.getByLabel(`Pilih ${extraName} ${nisn}`).check();
+    await second.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`);
+    await second.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas X ${f.majorName}`}).click();
+    await second.getByLabel(`Pilih ${extraName} ${nisn}`).check();
     await second.getByRole("button",{name:"Acak pembagian"}).click(); await second.getByRole("button",{name:"Simpan pembagian sesi"}).click();
     const confirmation=second.getByRole("dialog",{name:"Simpan pembagian sesi?"}); await confirmation.getByRole("button",{name:"Ya, simpan pembagian"}).click(); await expect(confirmation).toBeHidden();
     await editor.getByRole("button",{name:"Simpan draf"}).click(); await expect(editor.getByRole("alert")).toContainText("Kelompok sesi telah berubah");
@@ -169,6 +173,7 @@ test("kelompok dan pelaksanaan dapat diatur pada layar kecil, termasuk kapasitas
     await expect(page.locator("html")).toHaveClass(/\bdark\b/);
     await page.goto(`/data-tes/daftar/sesi?periode=${f.periodA}`);
     await page.getByLabel("Kapasitas sesi 1").fill("2"); await page.getByRole("button",{name:"Tambah sesi"}).click(); await page.getByLabel("Kapasitas sesi 2").fill("1");
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas X ${f.majorName}`}).click();
     await page.getByLabel(`Pilih ${longName} ${firstNisn}`).check(); await page.getByLabel(`Pilih ${extraName} ${nisn}`).check();
     await page.getByRole("button",{name:"Acak pembagian"}).click();
     await page.getByLabel(`Sesi ${longName} ${firstNisn}`).selectOption("1"); await page.getByLabel(`Sesi ${extraName} ${nisn}`).selectOption("1");
@@ -179,6 +184,7 @@ test("kelompok dan pelaksanaan dapat diatur pada layar kecil, termasuk kapasitas
     await page.getByLabel("Kapasitas sesi 1").fill("1");
     await expect(page.getByRole("alert").filter({hasText:"melebihi kapasitas"})).toBeVisible();
     await expect(page.getByRole("button",{name:"Simpan pembagian sesi"})).toBeDisabled();
+    await page.getByRole("button",{name:`Tampilkan atau sembunyikan siswa kelas X ${f.majorName}`}).click();
     await page.getByLabel(`Sesi ${extraName} ${nisn}`).selectOption("2");
     await page.getByRole("button",{name:"Simpan pembagian sesi"}).click(); dialog=page.getByRole("dialog",{name:"Simpan pembagian sesi?"});
     await dialog.getByRole("button",{name:"Ya, simpan pembagian"}).click(); await expect(dialog).toBeHidden();

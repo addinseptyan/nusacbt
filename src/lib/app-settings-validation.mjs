@@ -9,8 +9,15 @@ export const APP_COLOR_PALETTES = [
 
 export const APP_MODES = ["production", "dev"];
 
+export const APP_TIME_ZONES = [
+  { id: "WIB", label: "WIB (UTC+7)", detail: "Waktu Indonesia Barat · Asia/Jakarta" },
+  { id: "WITA", label: "WITA (UTC+8)", detail: "Waktu Indonesia Tengah · Asia/Makassar" },
+  { id: "WIT", label: "WIT (UTC+9)", detail: "Waktu Indonesia Timur · Asia/Jayapura" },
+];
+
 const PALETTE_IDS = new Set(APP_COLOR_PALETTES.map((item) => item.id));
 const APP_MODE_SET = new Set(APP_MODES);
+const TIME_ZONE_SET = new Set(APP_TIME_ZONES.map((item) => item.id));
 const CTRL_ANY = /[\u0000-\u001f\u007f-\u009f]/;
 const CTRL_MULTILINE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/;
 
@@ -20,8 +27,8 @@ export const DEFAULT_APP_SETTINGS = {
   schoolName: "",
   participantInfo: "",
   colorPalette: "emerald",
+  defaultTimeZone: "WIB",
   hasLogo: false,
-  hasLetterhead: false,
   revision: "1",
 };
 
@@ -46,9 +53,13 @@ export function isValidAppMode(raw) {
 }
 
 /** @param {unknown} raw */
-export function parseTimelineDefaultDays(raw) {
-  const num = typeof raw === "number" ? raw : typeof raw === "string" && /^[1-7]$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
-  return Number.isInteger(num) && num >= 1 && num <= 7 ? num : null;
+export function isValidTimeZone(raw) {
+  return typeof raw === "string" && TIME_ZONE_SET.has(raw);
+}
+
+/** @param {unknown} raw @param {"WIB" | "WITA" | "WIT"} [fallback] */
+export function parseAppTimeZone(raw, fallback = "WIB") {
+  return isValidTimeZone(raw) ? raw : fallback;
 }
 
 /** @param {Record<string, unknown>} input */
@@ -61,8 +72,13 @@ export function validateAppSettingsInput(input) {
   const revision = typeof input.revision === "string" ? input.revision.trim() : "";
   const hasAppMode = input.appMode !== undefined && input.appMode !== null && input.appMode !== "";
   const appMode = hasAppMode ? (typeof input.appMode === "string" ? input.appMode.trim() : "") : "production";
-  const hasTimelineDays = input.timelineDefaultDays !== undefined && input.timelineDefaultDays !== null && input.timelineDefaultDays !== "";
-  const timelineDefaultDays = hasTimelineDays ? parseTimelineDefaultDays(input.timelineDefaultDays) : 7;
+  const hasDefaultTimeZone =
+    input.defaultTimeZone !== undefined && input.defaultTimeZone !== null && input.defaultTimeZone !== "";
+  const defaultTimeZone = hasDefaultTimeZone
+    ? typeof input.defaultTimeZone === "string"
+      ? input.defaultTimeZone.trim()
+      : ""
+    : "WIB";
 
   if (appName === null || Array.from(appName).length < 1 || Array.from(appName).length > 60 || CTRL_ANY.test(appName)) {
     return { ok: false, error: "Nama aplikasi wajib 1–60 karakter tanpa karakter kontrol." };
@@ -82,8 +98,8 @@ export function validateAppSettingsInput(input) {
   if (!isValidAppMode(appMode)) {
     return { ok: false, error: "Mode aplikasi harus dev atau production." };
   }
-  if (timelineDefaultDays === null) {
-    return { ok: false, error: "Rentang bawaan timeline harus 1 sampai 7 hari." };
+  if (!isValidTimeZone(defaultTimeZone)) {
+    return { ok: false, error: "Zona waktu standar harus WIB, WITA, atau WIT." };
   }
   if (!/^[1-9]\d{0,18}$/.test(revision)) {
     return { ok: false, error: "Versi pengaturan tidak valid. Muat ulang halaman." };
@@ -98,10 +114,10 @@ export function validateAppSettingsInput(input) {
       participantInfo,
       colorPalette,
       appMode,
-      timelineDefaultDays,
+      defaultTimeZone,
       revision,
       appModeProvided: hasAppMode,
-      timelineDaysProvided: hasTimelineDays,
+      defaultTimeZoneProvided: hasDefaultTimeZone,
     },
   };
 }

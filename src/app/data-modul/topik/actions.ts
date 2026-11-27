@@ -76,7 +76,7 @@ async function applyMutation(mutation: Mutation): Promise<TopicActionResult> {
   revalidatePath("/data-modul/import-soal");
   revalidatePath("/data-modul/export-soal");
   revalidatePath("/data-tes/daftar");
-  return { ok: true, message: mutation.kind === "create" ? "Topik berhasil ditambahkan." : mutation.kind === "update" ? "Topik berhasil diubah." : "Topik berhasil dihapus." };
+  return { ok: true, message: mutation.kind === "create" ? "Mata pelajaran berhasil ditambahkan." : mutation.kind === "update" ? "Mata pelajaran berhasil diubah." : "Mata pelajaran berhasil dihapus." };
 }
 
 export async function saveTopic(formData: FormData): Promise<TopicActionResult> {

@@ -11,12 +11,14 @@ export function validateTopicName(value) {
 }
 
 /**
- * Validasi daftar tag mata pelajaran (maksimal 10 tag unik per kategori, masing-masing 1-30 karakter).
+ * Validasi daftar tag (maksimal 10 tag unik per entitas, masing-masing 1-30 karakter)
+ * dan mengurutkan hasilnya secara alfabetis.
  * Menerima array string atau string dipisah koma.
  * @param {unknown} value
+ * @param {string} [entityLabel]
  * @returns {{ok: true, value: string[], signature: string} | {ok: false, error: string}}
  */
-export function validateTopicTags(value) {
+export function validateTagList(value, entityLabel = "mata pelajaran / topik") {
   let rawItems = [];
   if (value === null || value === undefined || value === "") {
     rawItems = [];
@@ -49,12 +51,39 @@ export function validateTopicTags(value) {
       tags.push(cleaned);
     }
     if (tags.length > 10) {
-      return { ok: false, error: "Maksimal 10 tag untuk setiap mata pelajaran / topik." };
+      return { ok: false, error: `Maksimal 10 tag untuk setiap ${entityLabel}.` };
     }
   }
 
+  tags.sort((a, b) => a.localeCompare(b, "id", { sensitivity: "base" }) || a.localeCompare(b));
   const signature = tags.length === 0 ? "" : tags.map((tag) => tag.toLowerCase()).sort().join("\x1f");
   return { ok: true, value: tags, signature };
+}
+
+/**
+ * Validasi daftar tag mata pelajaran (diurutkan alfabetis).
+ * @param {unknown} value
+ * @returns {{ok: true, value: string[], signature: string} | {ok: false, error: string}}
+ */
+export function validateTopicTags(value) {
+  return validateTagList(value, "mata pelajaran / topik");
+}
+
+/**
+ * Pencarian multi-kata tidak terurut: seluruh kata kunci (dipisah spasi) harus muncul
+ * di salah satu bagian teks kandidat (mis. "kelas x matematika" cocok dengan "Matematika" + tag "Kelas X").
+ * @param {string} search
+ * @param {Array<string | null | undefined>} parts
+ * @returns {boolean}
+ */
+export function matchesMultiKeyword(search, parts) {
+  const tokens = search.trim().toLocaleLowerCase("id-ID").split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const hay = parts
+    .filter((part) => typeof part === "string" && part.length > 0)
+    .join(" ")
+    .toLocaleLowerCase("id-ID");
+  return tokens.every((token) => hay.includes(token));
 }
 
 /**

@@ -124,7 +124,7 @@ test("batas 1000 soal diterapkan pada pilih semua dan dapat disimpan sebagai sat
       SELECT $1, $2 || CASE WHEN n<=1000 THEN ' PILIH ' ELSE ' EXTRA ' END || n::text, 'A','B','C','D','E','A' FROM generate_series(1,1001) AS n`, [topics[0], tag]);
     await loginAsAdmin(page); await page.goto("/data-tes/daftar"); await page.getByRole("button", { name: "Tambah tes", exact: true }).click();
     const form = page.getByRole("dialog", { name: "Tambah rancangan tes" }); await form.getByLabel("Nama tes").fill(`Batas ${tag}`); await form.getByLabel("Periode ujian").selectOption(periodId); await form.getByLabel("Tanggal dan waktu mulai").fill("2026-11-17T08:30");
-    await selectComboboxOption(form, "Filter topik / mata pelajaran", `Batas Tes ${tag}`); await form.getByRole("button", { name: "Pilih semua hasil" }).click();
+    await selectComboboxOption(form, "Filter mata pelajaran", `Batas Tes ${tag}`); await form.getByRole("button", { name: "Pilih semua hasil" }).click();
     await expect(form.getByRole("alert")).toContainText("melebihi batas 1000 soal");
     await form.getByLabel("Cari soal bank").fill(`${tag} PILIH`); await form.getByRole("button", { name: "Pilih semua hasil" }).click();
     await expect(form.getByText("Urutan soal terpilih (1000)")).toBeVisible(); await form.getByRole("button", { name: "Simpan rancangan" }).click();

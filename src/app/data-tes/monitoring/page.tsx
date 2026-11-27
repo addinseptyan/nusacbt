@@ -44,7 +44,7 @@ export default async function MonitoringPage({ searchParams }: { searchParams: P
       parsed.finalPage,
       false,
       (result) => result,
-      { applySmartDefaults },
+      { applySmartDefaults, zoneExplicit: searchList.has("zona") },
     );
   } catch (error) {
     if (error instanceof MonitoringSessionExpired) redirect("/login");
@@ -74,6 +74,7 @@ export default async function MonitoringPage({ searchParams }: { searchParams: P
         )}
       </div>
       <form key={formKey} action="/data-tes/monitoring" className="mt-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {searchList.has("zona") && <input type="hidden" name="zona" value={f.zone} />}
         <SearchableTest key={f.testId ?? "all"} options={opts.tests} selectedId={f.testId} />
         <div><label htmlFor="monitor-year" className="mb-1 block text-xs font-semibold">Tahun ajaran</label><select id="monitor-year" name="tahun" defaultValue={f.yearId ?? ""} className={field}><option value="">Semua tahun</option>{unknownYear && <option value={f.yearId!}>Tahun tidak ditemukan</option>}{opts.years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}</select></div>
         <div><label htmlFor="monitor-class" className="mb-1 block text-xs font-semibold">Kelas / rombel</label><select id="monitor-class" name="kelas" defaultValue={f.className ?? ""} className={field}><option value="">Semua kelas</option>{unknownClass && <option value={f.className!}>{f.className}</option>}{opts.classes.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
@@ -81,7 +82,7 @@ export default async function MonitoringPage({ searchParams }: { searchParams: P
         <div><label htmlFor="monitor-status" className="mb-1 block text-xs font-semibold">Status peserta</label><select id="monitor-status" name="status" defaultValue={f.status ?? ""} className={field}><option value="">Semua status</option>{Object.entries(statusLabels).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></div>
         <div><label htmlFor="monitor-from" className="mb-1 block text-xs font-semibold">Tanggal jadwal dari</label><input id="monitor-from" name="dari" type="date" min="2000-01-01" max="2100-12-31" defaultValue={f.from ?? ""} className={field} /></div>
         <div><label htmlFor="monitor-to" className="mb-1 block text-xs font-semibold">Tanggal jadwal sampai</label><input id="monitor-to" name="sampai" type="date" min="2000-01-01" max="2100-12-31" defaultValue={f.to ?? ""} className={field} /></div>
-        <div><label htmlFor="monitor-zone" className="mb-1 block text-xs font-semibold">Zona waktu</label><select id="monitor-zone" name="zona" defaultValue={f.zone} className={field}><option value="WIB">WIB</option><option value="WITA">WITA</option><option value="WIT">WIT</option></select></div>
+        <div><span className="mb-1 block text-xs font-semibold">Zona waktu</span><div className="flex h-10 items-center rounded-lg border border-input bg-muted/40 px-3 text-sm font-medium text-muted-foreground">{f.zone} · Pengaturan Aplikasi</div></div>
         <div><label htmlFor="monitor-order" className="mb-1 block text-xs font-semibold">Urutkan</label><select id="monitor-order" name="urut" defaultValue={f.order} className={field}><option value="time_desc">Waktu terbaru</option><option value="time_asc">Waktu terlama</option><option value="score_desc">Nilai tertinggi</option><option value="score_asc">Nilai terendah</option><option value="student_asc">Nama peserta A–Z</option><option value="student_desc">Nama peserta Z–A</option><option value="test_asc">Nama tes A–Z</option><option value="test_desc">Nama tes Z–A</option></select></div>
         <div className="flex flex-wrap gap-2 lg:col-span-3">
           <Button type="submit">Terapkan</Button>

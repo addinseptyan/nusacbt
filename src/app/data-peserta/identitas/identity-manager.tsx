@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { DEFAULT_IDENTITY_PATTERN } from "@/lib/participant-identity-constants.mjs";
 import type { IdentityBatch, IdentityPageData, IdentityPeriod, ParticipantIdentityRow } from "@/lib/participant-identity-types";
 
@@ -76,7 +77,7 @@ function IdentityEditor({ row, period, onClose }: { row: ParticipantIdentityRow 
           <div className="space-y-2"><label htmlFor="participant-number" className="text-sm font-semibold">Nomor peserta <span className="text-destructive">*</span></label><Input id="participant-number" name="participantNumber" type="text" maxLength={64} defaultValue={row?.participantNumber ?? ""} autoComplete="off" spellCheck={false} required disabled={pending} className="h-11 rounded-xl" /><p className="text-[11px] leading-5 text-muted-foreground">1–64 karakter; nol di depan tetap disimpan. Kolom Nomor Excel bukan nomor peserta.</p></div>
           <div className="space-y-2"><label htmlFor="participant-username" className="text-sm font-semibold">Username <span className="text-destructive">*</span></label><Input id="participant-username" name="username" type="text" maxLength={64} minLength={3} defaultValue={row?.username ?? ""} autoComplete="off" spellCheck={false} required disabled={pending} className="h-11 rounded-xl" /><p className="text-[11px] leading-5 text-muted-foreground">3–64 karakter. Nomor dan username boleh sama atau berbeda.</p></div>
           <p className="rounded-xl bg-muted/40 p-3 text-[11px] leading-5 text-muted-foreground">Gunakan huruf atau angka di awal; berikutnya boleh huruf, angka, titik, garis bawah, atau tanda hubung. Keduanya unik dalam periode ini tanpa membedakan huruf besar/kecil.</p>
-          <DialogFooter className="rounded-b-2xl"><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="submit" disabled={pending}>{pending ? "Menyimpan..." : "Simpan identitas"}</Button></DialogFooter>
+          <DialogFooter className="rounded-b-2xl"><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="submit" disabled={pending}>{pending && <Spinner aria-hidden="true" />}{pending ? "Menyimpan..." : "Simpan identitas"}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -133,7 +134,7 @@ function GenerateDialog({ open, onClose, period, batch }: { open: boolean; onClo
             <p className="mt-2">Pola sama menghasilkan nomor dan username sama; pola berbeda dibuat terpisah. Nilai acak ditentukan saat menyimpan. Maksimal 1.000 kombinasi per pola; jika tidak cukup, tidak ada data yang disimpan.</p>
             <p className="mt-2">Batch berlaku untuk siswa yang belum memiliki identitas, bukan hasil pencarian. Siswa harus memiliki kelas aktif pada periode ini.</p>
           </div>
-          <DialogFooter className="rounded-b-2xl"><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="submit" disabled={pending || !batch}>{pending ? "Membuat..." : "Ya, buat identitas"}</Button></DialogFooter>
+          <DialogFooter className="rounded-b-2xl"><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="submit" disabled={pending || !batch}>{pending && <Spinner aria-hidden="true" />}{pending ? "Membuat..." : "Ya, buat identitas"}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

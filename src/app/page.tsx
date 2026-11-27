@@ -1,4 +1,5 @@
 import {
+  Activity,
   ArrowDownToLine,
   ArrowRight,
   BookOpenText,
@@ -25,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/admin-auth";
-import { adminHasPermission } from "@/lib/admin-permissions.mjs";
+import { adminHasAnyPermission, adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 import { loadDashboardLiveTokens, loadDashboardSummary, type DashboardLiveTokenData, type DashboardSummary } from "@/lib/dashboard-data";
 
@@ -37,9 +38,10 @@ export default async function DashboardPage() {
   const admin = await requireAdmin();
   const canManageAppSettings = adminHasPermission(admin, "app_settings.manage");
   const canManageTokens = adminHasPermission(admin, "tokens.manage");
+  const canViewMonitoring = adminHasAnyPermission(admin, ["monitoring.view", "grading_overrides.manage"]);
   const [branding, summaryResult, liveTokenResult] = await Promise.all([
     getPublicAppSettingsSafe(),
-    loadDashboardSummary().then(
+    loadDashboardSummary({ canViewMonitoring }).then(
       (data) => ({ ok: true as const, data }),
       () => ({ ok: false as const }),
     ),
@@ -70,8 +72,8 @@ export default async function DashboardPage() {
     {
       title: "Bank soal",
       value: data ? String(data.totalQuestions) : "—",
-      detail: data ? `${data.totalTopics} topik · ${data.questionsWithImages} bergambar` : "Database belum tersedia",
-      href: "/data-modul/soal",
+      detail: data ? `${data.totalTopics} mata pelajaran · ${data.questionsWithImages} bergambar` : "Database belum tersedia",
+      href: "/data-modul/topik",
       icon: BookOpenText,
       color: "bg-violet-50 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300",
     },
@@ -120,10 +122,10 @@ export default async function DashboardPage() {
         {
           number: "03",
           title: "Susun & ekspor bank soal",
-          detail: `${data.totalQuestions} soal pada ${data.totalTopics} topik tersedia; mendukung impor dan ekspor Word (.docx).`,
+          detail: `${data.totalQuestions} soal pada ${data.totalTopics} mata pelajaran tersedia; mendukung impor dan ekspor Word (.docx).`,
           status: data.totalQuestions > 0 ? "Tersedia" : "Kosong",
           ready: data.totalQuestions > 0,
-          href: "/data-modul/soal",
+          href: "/data-modul/topik",
           color: "bg-violet-50 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300",
         },
         {
@@ -225,7 +227,94 @@ export default async function DashboardPage() {
           tokens={liveTokenData.tokens}
           serverNow={liveTokenData.serverNow}
           keyStatus={liveTokenData.keyStatus}
+          defaultTimeZone={data?.defaultTimeZone ?? branding.defaultTimeZone ?? "WIB"}
         />
+      )}
+
+      {data && data.canViewMonitoring && (
+        <Card className={`${cardClass} mt-4 gap-0 p-5 sm:p-6`}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
+                <Activity className="size-[18px]" />
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[14px] font-bold">Monitoring pelaksanaan tes</h2>
+                  <Badge variant="secondary" className="rounded-full text-[10px]">
+                    {data.examMonitoringRows.length} pelaksanaan
+                  </Badge>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Ringkasan status peserta terbaru per pelaksanaan (zona {data.defaultTimeZone}).
+                </p>
+              </div>
+            </div>
+            <Button asChild variant="ghost" className="h-9 rounded-lg text-[11px] font-semibold text-primary">
+              <Link href="/data-tes/monitoring" prefetch={false}>
+                Buka monitoring <ArrowRight className="size-3.5" />
+              </Link>
+            </Button>
+          </div>
+          {data.examMonitoringRows.length > 0 ? (
+            <div className="mt-4 overflow-x-auto" data-testid="dashboard-monitoring-table-container">
+              <table className="w-full min-w-[780px] text-left text-xs" aria-label="Monitoring pelaksanaan tes">
+                <thead className="border-b bg-muted/40 text-[11px] text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="px-3 py-2.5 font-semibold">Tes &amp; Pelaksanaan</th>
+                    <th scope="col" className="px-3 py-2.5 font-semibold">Jadwal ({data.defaultTimeZone})</th>
+                    <th scope="col" className="px-3 py-2.5 text-right font-semibold">Peserta</th>
+                    <th scope="col" className="px-3 py-2.5 text-right font-semibold">Belum mulai</th>
+                    <th scope="col" className="px-3 py-2.5 text-right font-semibold">Mengerjakan</th>
+                    <th scope="col" className="px-3 py-2.5 text-right font-semibold">Menunggu</th>
+                    <th scope="col" className="px-3 py-2.5 text-right font-semibold">Dikumpulkan</th>
+                    <th scope="col" className="px-3 py-2.5 text-right font-semibold">Waktu habis</th>
+                    <th scope="col" className="px-3 py-2.5 text-right font-semibold">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {data.examMonitoringRows.map((row) => (
+                    <tr key={row.runId} data-testid="dashboard-monitoring-row" className="align-middle">
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5 font-semibold text-foreground">
+                          <span className="break-words">{row.testName}</span>
+                          <Badge variant={row.live ? "default" : "outline"} className="text-[10px]">
+                            {row.live ? "Berlangsung" : row.published ? "Dirilis" : "Draf"}
+                          </Badge>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {row.kind === "regular" ? "Reguler" : row.kind === "makeup" ? "Susulan" : "Remidi"} · {row.runLabel} · {row.periodName}
+                        </p>
+                      </td>
+                      <td className="px-3 py-3 text-[11px] whitespace-nowrap text-muted-foreground tabular-nums">
+                        {row.startLocal}–{row.endLocal}
+                      </td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums">{row.totalParticipants}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">{row.notStartedCount}</td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-blue-700 dark:text-blue-300">{row.workingCount}</td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-amber-700 dark:text-amber-300">{row.waitingCount}</td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{row.submittedCount}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">{row.timeExpiredCount}</td>
+                      <td className="px-3 py-3 text-right">
+                        <Button asChild variant="outline" size="sm" className="h-7 rounded-lg px-2.5 text-[11px]">
+                          <Link href={`/data-tes/monitoring?tes=${row.examTestId}`} prefetch={false}>
+                            Detail
+                          </Link>
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="mt-4 flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 py-6 text-center">
+              <Activity className="size-5 text-muted-foreground/55" />
+              <p className="mt-2 text-[12px] font-semibold text-foreground">Belum ada pelaksanaan tes untuk dipantau</p>
+              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Buat dan jadwalkan pelaksanaan di Daftar Tes agar status pengerjaan tampil di sini.</p>
+            </div>
+          )}
+        </Card>
       )}
 
       <div className="mt-6 grid items-start gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(310px,0.9fr)]">

@@ -1,6 +1,8 @@
 import "server-only";
 
 import { displayToken, TOKEN_COLUMNS, TOKEN_JOINS, type TokenRow } from "@/app/data-tes/token/token-data";
+import { APP_TIME_ZONE_IANA, loadDefaultTimeZoneWithClient } from "@/lib/app-settings-service";
+import type { ExamTimeZone } from "@/lib/exam-test-types";
 import { ExamTokenKeyProblem, readConfiguredTokenKey, tokenKeyStatus } from "@/lib/exam-token-key";
 import type { AccessTokenRecord, TokenKeyStatus } from "@/lib/exam-token-types";
 import { getPostgresPool } from "@/lib/postgres";
@@ -17,11 +19,30 @@ export type DashboardScheduleItem = {
   testName: string;
   runLabel: string;
   kind: "regular" | "makeup" | "remedial";
-  timeZone: "WIB" | "WITA" | "WIT";
+  timeZone: ExamTimeZone;
   startLocal: string;
   endLocal: string;
   durationMinutes: number;
   participantCount: number;
+  live: boolean;
+};
+
+export type DashboardExamMonitoringRow = {
+  runId: string;
+  examTestId: string;
+  testName: string;
+  runLabel: string;
+  kind: "regular" | "makeup" | "remedial";
+  published: boolean;
+  periodName: string;
+  startLocal: string;
+  endLocal: string;
+  totalParticipants: number;
+  notStartedCount: number;
+  workingCount: number;
+  waitingCount: number;
+  submittedCount: number;
+  timeExpiredCount: number;
   live: boolean;
 };
 
@@ -48,13 +69,20 @@ export type DashboardSummary = {
   activeAttempts: number;
   waitingAttempts: number;
   finalizedGrades: number;
+  defaultTimeZone: ExamTimeZone;
+  canViewMonitoring: boolean;
   schedules: DashboardScheduleItem[];
+  examMonitoringRows: DashboardExamMonitoringRow[];
 };
 
-export async function loadDashboardSummary(): Promise<DashboardSummary> {
+export async function loadDashboardSummary(options?: { canViewMonitoring?: boolean }): Promise<DashboardSummary> {
+  const canViewMonitoring = Boolean(options?.canViewMonitoring);
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ");
+
+    const defaultTimeZone = await loadDefaultTimeZoneWithClient(client);
+    const ianaZone = APP_TIME_ZONE_IANA[defaultTimeZone];
 
     const stats = (
       await client.query<{
@@ -132,22 +160,17 @@ export async function loadDashboardSummary(): Promise<DashboardSummary> {
     ).rows[0];
 
     const schedules = (
-      await client.query<DashboardScheduleItem>(`
+      await client.query<DashboardScheduleItem>(
+        `
         SELECT
           r.id::text AS "runId",
           r.exam_test_id::text AS "examTestId",
           t.name AS "testName",
           r.label AS "runLabel",
           r.kind,
-          r.time_zone AS "timeZone",
-          to_char(
-            r.starts_at AT TIME ZONE CASE r.time_zone WHEN 'WITA' THEN 'Asia/Makassar' WHEN 'WIT' THEN 'Asia/Jayapura' ELSE 'Asia/Jakarta' END,
-            'DD/MM/YYYY HH24:MI'
-          ) AS "startLocal",
-          to_char(
-            (r.starts_at + make_interval(mins => r.duration_minutes)) AT TIME ZONE CASE r.time_zone WHEN 'WITA' THEN 'Asia/Makassar' WHEN 'WIT' THEN 'Asia/Jayapura' ELSE 'Asia/Jakarta' END,
-            'DD/MM/YYYY HH24:MI'
-          ) AS "endLocal",
+          $2::text AS "timeZone",
+          to_char(r.starts_at AT TIME ZONE $1, 'DD/MM/YYYY HH24:MI') AS "startLocal",
+          to_char((r.starts_at + make_interval(mins => r.duration_minutes)) AT TIME ZONE $1, 'DD/MM/YYYY HH24:MI') AS "endLocal",
           r.duration_minutes AS "durationMinutes",
           (SELECT count(*)::int FROM exam_schedule_participants sp WHERE sp.run_id = r.id) AS "participantCount",
           (clock_timestamp() >= r.starts_at AND clock_timestamp() < r.starts_at + make_interval(mins => r.duration_minutes)) AS live
@@ -157,11 +180,54 @@ export async function loadDashboardSummary(): Promise<DashboardSummary> {
           AND r.starts_at + make_interval(mins => r.duration_minutes) > clock_timestamp()
         ORDER BY live DESC, r.starts_at ASC, r.id ASC
         LIMIT 6
-      `)
+      `,
+        [ianaZone, defaultTimeZone],
+      )
     ).rows;
 
+    const examMonitoringRows = canViewMonitoring
+      ? (
+          await client.query<DashboardExamMonitoringRow>(
+            `
+            SELECT
+              r.id::text AS "runId",
+              r.exam_test_id::text AS "examTestId",
+              t.name AS "testName",
+              r.label AS "runLabel",
+              r.kind,
+              (r.published_at IS NOT NULL) AS published,
+              p.name AS "periodName",
+              to_char(r.starts_at AT TIME ZONE $1, 'DD/MM/YYYY HH24:MI') AS "startLocal",
+              to_char((r.starts_at + make_interval(mins => r.duration_minutes)) AT TIME ZONE $1, 'DD/MM/YYYY HH24:MI') AS "endLocal",
+              count(rp.student_id)::int AS "totalParticipants",
+              count(*) FILTER (WHERE rp.student_id IS NOT NULL AND a.id IS NULL)::int AS "notStartedCount",
+              count(*) FILTER (WHERE a.id IS NOT NULL AND a.completed_at IS NULL AND a.deadline > clock_timestamp())::int AS "workingCount",
+              count(*) FILTER (WHERE a.id IS NOT NULL AND a.completed_at IS NULL AND a.deadline <= clock_timestamp())::int AS "waitingCount",
+              count(*) FILTER (WHERE a.completed_at IS NOT NULL AND a.completion_reason = 'submitted')::int AS "submittedCount",
+              count(*) FILTER (WHERE a.completed_at IS NOT NULL AND a.completion_reason = 'time_expired')::int AS "timeExpiredCount",
+              (r.published_at IS NOT NULL AND clock_timestamp() >= r.starts_at AND clock_timestamp() < r.starts_at + make_interval(mins => r.duration_minutes)) AS live
+            FROM exam_schedule_runs r
+            JOIN exam_tests t ON t.id = r.exam_test_id
+            JOIN exam_periods p ON p.id = r.period_id
+            LEFT JOIN exam_schedule_participants rp ON rp.run_id = r.id
+            LEFT JOIN LATERAL (
+              SELECT ea.id, ea.completed_at, ea.completion_reason, ea.deadline
+              FROM exam_attempts ea
+              WHERE ea.run_id = rp.run_id AND ea.student_id = rp.student_id
+              ORDER BY ea.id DESC
+              LIMIT 1
+            ) a ON rp.student_id IS NOT NULL
+            GROUP BY r.id, t.id, p.id
+            ORDER BY live DESC, (r.published_at IS NOT NULL) DESC, r.starts_at DESC, r.id DESC
+            LIMIT 12
+          `,
+            [ianaZone],
+          )
+        ).rows
+      : [];
+
     await client.query("COMMIT");
-    return { ...stats, schedules };
+    return { ...stats, defaultTimeZone, canViewMonitoring, schedules, examMonitoringRows };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;

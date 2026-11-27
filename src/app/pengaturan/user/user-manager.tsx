@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import type { AdminSessionUser } from "@/lib/admin-auth";
 import { canActorManagePermissions } from "@/lib/admin-permissions.mjs";
 import type {
@@ -586,7 +587,7 @@ export function UserManager({
             </label>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Batal</Button>
-              <Button type="submit" disabled={isPending}>Simpan pengguna</Button>
+              <Button type="submit" disabled={isPending}>{isPending && <Spinner aria-hidden="true" />}Simpan pengguna</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -659,7 +660,7 @@ export function UserManager({
               </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditUser(null)}>Batal</Button>
-                <Button type="submit" disabled={isPending}>Simpan perubahan</Button>
+                <Button type="submit" disabled={isPending}>{isPending && <Spinner aria-hidden="true" />}Simpan perubahan</Button>
               </DialogFooter>
             </form>
           )}
@@ -704,7 +705,7 @@ export function UserManager({
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setResetUser(null)}>Batal</Button>
-                <Button type="submit" disabled={isPending}>Simpan sandi baru</Button>
+                <Button type="submit" disabled={isPending}>{isPending && <Spinner aria-hidden="true" />}Simpan sandi baru</Button>
               </DialogFooter>
             </form>
           )}

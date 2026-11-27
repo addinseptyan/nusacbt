@@ -179,9 +179,9 @@ test('periode lama dipetakan secara eksplisit dan konflik kelas tidak ditimpa',a
     expect((await client.query('SELECT academic_year_id FROM exam_periods WHERE id=$1',[legacy])).rows[0].academic_year_id).toBeNull();
     expect((await client.query('SELECT ended_at FROM student_class_placements WHERE id=$1',[a.placementA])).rows[0].ended_at).toBeNull();
     await page.goto(`/data-peserta/siswa?tahun=${a.yearId}`);
-    await page.getByRole('row').filter({hasText:a.studentAName}).getByRole('button',{name:'Kelas / status'}).click();
-    const student=page.getByRole('dialog',{name:`Kelas / status ${a.studentAName}`});await student.getByLabel('Kelas / rombel').selectOption(xi);
-    page.once('dialog',(confirmation)=>confirmation.accept());await student.getByRole('button',{name:'Simpan',exact:true}).click();await expect(student).toBeHidden();
+    await page.getByRole('row').filter({hasText:a.studentAName}).getByRole('button',{name:`Kelola ${a.studentAName}`}).click();
+    const student=page.getByRole('dialog',{name:`Kelola siswa · ${a.studentAName}`});await student.getByLabel('Kelas / rombel').selectOption(xi);
+    await student.getByRole('button',{name:'Simpan perubahan',exact:true}).click();await expect(student).toBeHidden();
     expect((await client.query('SELECT ended_at FROM student_class_placements WHERE id=$1',[a.placementA])).rows[0].ended_at).not.toBeNull();
     expect((await client.query('SELECT placement_id::text AS id FROM exam_schedule_participants WHERE run_id=$1 AND student_id=$2',[f.runId,a.studentA])).rows[0].id).toBe(a.placementA);
     await page.goto('/data-peserta/periode');await attach(`Legacy bentrok ${a.suffix}`);
