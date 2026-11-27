@@ -25,11 +25,13 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { adminHasAnyPermission, adminHasPermission } from "@/lib/admin-permissions.mjs";
+import { getAppVersionInfo } from "@/lib/app-version.mjs";
 import { navigation, navigationPageContains } from "@/lib/navigation";
 
 export function AppSidebar() {
   const pathname = usePathname();
   const branding = useBranding();
+  const versionInfo = getAppVersionInfo();
   const currentUser = useCurrentAdminUser();
   const { isMobile, setOpenMobile } = useSidebar();
   const [openState, setOpenState] = useState<{ forPath: string; section: string | null } | null>(null);
@@ -166,7 +168,7 @@ export function AppSidebar() {
             {footerCardContent}
           </div>
         )}
-        <div className="flex items-center gap-1.5 px-1 pt-2 text-[10px] font-medium text-muted-foreground/75"><Code2 className="size-3" /> {branding.appName} · v0.1.0</div>
+        <div className="flex items-center gap-1.5 px-1 pt-2 text-[10px] font-medium text-muted-foreground/75"><Code2 className="size-3" /> {branding.appName} · {versionInfo.tag}</div>
       </SidebarFooter>
     </Sidebar>
   );

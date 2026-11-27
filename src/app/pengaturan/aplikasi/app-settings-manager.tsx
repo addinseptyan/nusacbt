@@ -3,15 +3,20 @@
 import {
   AlertTriangle,
   Check,
+  CheckCircle2,
   CircleAlert,
   Clock,
+  Download,
+  ExternalLink,
   Image as ImageIcon,
   Info,
   Lock,
   Palette,
+  RefreshCw,
   RotateCcw,
   Save,
   School,
+  Tag,
   Trash2,
   Upload,
   Wrench,
@@ -20,7 +25,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { resetDevDatabaseAction, saveAppSettingsAction } from "@/app/pengaturan/aplikasi/actions";
+import { checkAppUpdateAction, resetDevDatabaseAction, saveAppSettingsAction } from "@/app/pengaturan/aplikasi/actions";
 import { useCurrentAdminUser } from "@/components/admin-user-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +35,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { AdminAppSettings } from "@/lib/app-settings-types";
+import { getAppVersionInfo, type CheckUpdateResult } from "@/lib/app-version.mjs";
 import {
   APP_COLOR_PALETTES,
   APP_TIME_ZONES,
@@ -65,8 +71,35 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
   const [logoFileName, setLogoFileName] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [updatePending, setUpdatePending] = useState(false);
+  const [updateResult, setUpdateResult] = useState<CheckUpdateResult | null>(null);
+  const versionInfo = getAppVersionInfo();
 
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleCheckUpdate() {
+    if (updatePending) return;
+    setUpdatePending(true);
+    try {
+      const result = await checkAppUpdateAction();
+      if (!result.ok && result.sessionExpired) {
+        router.push("/login");
+        router.refresh();
+        return;
+      }
+      setUpdateResult(result);
+    } catch {
+      setUpdateResult({
+        ok: false,
+        currentVersion: versionInfo.version,
+        currentTag: versionInfo.tag,
+        offline: true,
+        error: "Pemeriksaan pembaruan gagal diselesaikan. Periksa koneksi jaringan server.",
+      });
+    } finally {
+      setUpdatePending(false);
+    }
+  }
 
   async function submitSave() {
     if (pending || resetPending) return;
@@ -165,6 +198,7 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
   }
 
   return (
+    <div className="space-y-6">
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <Alert variant="destructive" role="alert" className="rounded-2xl">
@@ -690,5 +724,109 @@ export function AppSettingsManager({ initialSettings }: { initialSettings: Admin
         </DialogContent>
       </Dialog>
     </form>
+
+    <Card id="versi-pembaruan" className="gap-0 rounded-[20px] p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+            <Tag className="size-5" />
+          </span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-bold">Versi &amp; Pembaruan Aplikasi</h2>
+              <Badge variant="secondary" className="rounded-full font-mono text-xs">{versionInfo.tag}</Badge>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Repositori rilis: <span className="font-mono">{versionInfo.repo}</span>
+              {versionInfo.commitSha ? ` · build ${versionInfo.commitSha.slice(0, 7)}` : ""}
+              {versionInfo.buildDate ? ` (${versionInfo.buildDate.slice(0, 10)})` : ""}. Pemeriksaan hanya berjalan saat tombol diklik (tanpa auto-update).
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={updatePending}
+          onClick={() => void handleCheckUpdate()}
+          className="h-10 rounded-xl font-semibold"
+        >
+          {updatePending ? <Spinner aria-hidden="true" className="size-4" /> : <RefreshCw className="size-4" />}
+          {updatePending ? "Memeriksa rilis..." : "Cek Pembaruan"}
+        </Button>
+      </div>
+
+      <div className="pt-4">
+        {!updateResult ? (
+          <p className="text-xs leading-5 text-muted-foreground">
+            Klik <strong>Cek Pembaruan</strong> untuk memeriksa tag rilis terbaru di GitHub. Untuk memperbarui aplikasi secara langsung di PC server Windows (mengganti runtime/kode dan menjalankan migrasi otomatis), gunakan tombol <strong>Cek Update</strong> pada aplikasi <strong>NusaCBT-Server.exe</strong>.
+          </p>
+        ) : !updateResult.ok ? (
+          <Alert variant={updateResult.offline ? "default" : "destructive"} role="status" className="rounded-xl">
+            <CircleAlert className="size-4" />
+            <AlertTitle className="text-xs font-bold">Pembaruan belum dapat diperiksa</AlertTitle>
+            <AlertDescription className="text-xs leading-5">{updateResult.error}</AlertDescription>
+          </Alert>
+        ) : updateResult.noReleaseYet ? (
+          <Alert role="status" className="rounded-xl">
+            <Info className="size-4" />
+            <AlertTitle className="text-xs font-bold">Belum ada rilis tag di GitHub ({updateResult.currentTag})</AlertTitle>
+            <AlertDescription className="text-xs leading-5">
+              Anda sedang menjalankan versi <strong>{updateResult.currentTag}</strong>. Buat dan push tag rilis (mis. <code>v1.0.0</code>) agar pembaruan terbit di GitHub Releases.
+            </AlertDescription>
+          </Alert>
+        ) : !updateResult.hasUpdate ? (
+          <Alert role="status" className="rounded-xl border-emerald-300 bg-emerald-50/70 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+            <CheckCircle2 className="size-4 text-emerald-700 dark:text-emerald-300" />
+            <AlertTitle className="text-xs font-bold">Sudah menggunakan versi terbaru ({updateResult.currentTag})</AlertTitle>
+            <AlertDescription className="text-xs leading-5">
+              Rilis terbaru di GitHub adalah <strong>{updateResult.latestTag}</strong>. Tidak ada pembaruan yang perlu dipasang.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert role="status" className="rounded-xl border-blue-300 bg-blue-50/70 text-blue-950 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-100">
+            <Download className="size-4 text-blue-700 dark:text-blue-300" />
+            <AlertTitle className="text-xs font-bold">
+              Pembaruan tersedia: {updateResult.latestTag} (terpasang {updateResult.currentTag})
+            </AlertTitle>
+            <AlertDescription className="space-y-3 text-xs leading-5">
+              <p>
+                {updateResult.releaseName && <strong>{updateResult.releaseName}</strong>}
+                {updateResult.publishedAt ? ` · Dirilis ${updateResult.publishedAt.slice(0, 10)}` : ""}
+              </p>
+              {updateResult.notes && (
+                <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-blue-200 bg-background/80 p-3 font-sans text-[11px] leading-5 text-foreground dark:border-blue-800">
+                  {updateResult.notes}
+                </pre>
+              )}
+              <p>
+                Buka <strong>NusaCBT-Server.exe</strong> di PC server Windows lalu klik <strong>Cek Update</strong> → <strong>Perbarui Sekarang</strong> agar aplikasi memperbarui berkas program dan migrasi database secara otomatis tanpa menghapus pengaturan maupun data ujian.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {updateResult.assets.installer && (
+                  <Button asChild size="sm" variant="default" className="h-8 rounded-lg text-xs">
+                    <a href={updateResult.assets.installer.url} target="_blank" rel="noopener noreferrer">
+                      <Download className="size-3.5" /> Unduh Installer Windows ({updateResult.assets.installer.name})
+                    </a>
+                  </Button>
+                )}
+                {updateResult.assets.portableZip && (
+                  <Button asChild size="sm" variant="outline" className="h-8 rounded-lg text-xs">
+                    <a href={updateResult.assets.portableZip.url} target="_blank" rel="noopener noreferrer">
+                      <Download className="size-3.5" /> Unduh Paket Portable ZIP
+                    </a>
+                  </Button>
+                )}
+                <Button asChild size="sm" variant="outline" className="h-8 rounded-lg text-xs">
+                  <a href={updateResult.releaseUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-3.5" /> Lihat Catatan Rilis di GitHub
+                  </a>
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+    </Card>
+    </div>
   );
 }
