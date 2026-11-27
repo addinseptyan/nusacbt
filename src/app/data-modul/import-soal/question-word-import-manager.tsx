@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowDownToLine, CheckCircle2, CircleAlert, FileText, Info, ListChecks, UploadCloud } from "lucide-react";
 
 import { previewQuestionWord, saveQuestionWord } from "@/app/data-modul/import-soal/actions";
@@ -26,6 +27,7 @@ function Part({ part, label }: { part: QuestionImportPart; label: string }) {
 }
 
 export function QuestionWordImportManager({ topics }: { topics: QuestionTopicOption[] }) {
+  const router = useRouter();
   const [topicId, setTopicId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<QuestionImportPreview | null>(null);
@@ -38,7 +40,13 @@ export function QuestionWordImportManager({ topics }: { topics: QuestionTopicOpt
   const pages = preview ? Math.ceil(preview.questions.length / PAGE_SIZE) : 0;
   const visible = preview?.questions.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE) ?? [];
   const topicOptions = useMemo<ComboboxOption[]>(
-    () => topics.map((t) => ({ value: t.id, label: t.name, tags: t.tags ?? [] })),
+    () =>
+      topics.map((t) => ({
+        value: t.id,
+        label: t.name,
+        tags: t.tags ?? [],
+        badge: `${t.questionCount ?? 0} soal`,
+      })),
     [topics],
   );
 
@@ -76,6 +84,7 @@ export function QuestionWordImportManager({ topics }: { topics: QuestionTopicOpt
       if (!result.ok) return setError(result.error);
       setCompleted({ count: result.count, alreadySaved: result.alreadySaved });
       setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = "";
+      router.refresh();
     } catch {
       setConfirmOpen(false);
       // Keep the same preview/operation ID: retrying it is idempotent.

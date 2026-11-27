@@ -236,9 +236,38 @@ test("tag tes, filter tag, pencarian multi-kata, dan peringatan tanggal di luar 
 
     await page.getByLabel("Cari tes").fill(`Kelas-XI Fisika ${tag}`);
     await expect(row(page, stored[0].id)).toBeVisible();
+    await expect(row(page, stored[0].id)).toContainText("Belum ada pelaksanaan");
     await page.getByLabel("Cari tes").fill("");
     await page.getByLabel("Filter tag tes").getByRole("button", { name: `UTS-${tag}`, exact: true }).click();
     await expect(row(page, stored[0].id)).toBeVisible();
-  } finally { await cleanup(client, periodId, []); await client.end(); }
+
+    const admin = (await client.query<{ id: string }>("SELECT id::text AS id FROM admin_users WHERE username=$1", [process.env.TEST_ADMIN_USERNAME])).rows[0].id;
+    await client.query("INSERT INTO exam_session_plans(period_id,updated_by) VALUES($1,$2)", [periodId, admin]);
+    await client.query("INSERT INTO exam_session_groups(period_id,session_number,capacity) VALUES($1,1,30),($1,2,30)", [periodId]);
+    await client.query(
+      `INSERT INTO exam_schedule_runs(exam_test_id,period_id,kind,session_number,label,starts_at,time_zone,duration_minutes,created_by,published_at,published_by)
+       VALUES
+         ($1,$2,'regular',1,'Sesi 1','2045-01-01T01:00:00Z','WIB',60,$3,clock_timestamp(),$3),
+         ($1,$2,'regular',2,'Sesi 2','2045-01-01T03:00:00Z','WIB',60,$3,NULL,NULL),
+         ($1,$2,'makeup',NULL,'Susulan 1','2045-01-02T01:00:00Z','WIB',60,$3,NULL,NULL),
+         ($1,$2,'remedial',NULL,'Remidi 1','2045-01-03T01:00:00Z','WIB',45,$3,clock_timestamp(),$3)`,
+      [stored[0].id, periodId, admin],
+    );
+    await page.reload();
+    await page.getByLabel("Cari tes").fill(`Fisika ${tag}`);
+    const statusBox = row(page, stored[0].id).getByLabel(`Status pelaksanaan tes ${stored[0].id}`);
+    await expect(statusBox).toContainText("Reguler · 1 dirilis");
+    await expect(statusBox).toContainText("Reguler · 1 draf");
+    await expect(statusBox).toContainText("Susulan · 1 draf");
+    await expect(statusBox).toContainText("Remidi · 1 dirilis");
+  } finally {
+    if (periodId) {
+      await client.query("DELETE FROM exam_schedule_runs WHERE period_id=$1", [periodId]);
+      await client.query("DELETE FROM exam_session_groups WHERE period_id=$1", [periodId]);
+      await client.query("DELETE FROM exam_session_plans WHERE period_id=$1", [periodId]);
+    }
+    await cleanup(client, periodId, []);
+    await client.end();
+  }
 });
 

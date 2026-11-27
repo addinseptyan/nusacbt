@@ -4,7 +4,7 @@ export const QUESTION_IMAGE_SLOTS = ["prompt", ...QUESTION_LETTERS] as const;
 export type QuestionLetter = (typeof QUESTION_LETTERS)[number];
 export type QuestionImageSlot = (typeof QUESTION_IMAGE_SLOTS)[number];
 
-export type QuestionTopicOption = { id: string; name: string; tags?: string[] };
+export type QuestionTopicOption = { id: string; name: string; tags?: string[]; questionCount?: number };
 export type QuestionOption = { letter: QuestionLetter; text: string; rich: unknown | null; hasImage: boolean };
 export type Question = {
   id: string;

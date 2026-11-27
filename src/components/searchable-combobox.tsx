@@ -9,6 +9,7 @@ export type ComboboxOption = {
   value: string;
   label: string;
   tags?: string[];
+  badge?: string;
   subtitle?: string;
   keywords?: string;
 };
@@ -143,6 +144,11 @@ export function SearchableCombobox({
                     ))}
                   </span>
                 )}
+                {selected.badge && (
+                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold tabular-nums text-secondary-foreground">
+                    {selected.badge}
+                  </span>
+                )}
                 {selected.subtitle && (
                   <span className="truncate text-xs text-muted-foreground">{selected.subtitle}</span>
                 )}
@@ -266,6 +272,11 @@ export function SearchableCombobox({
                                 {tag}
                               </span>
                             ))}
+                          </span>
+                        )}
+                        {entry.option?.badge && (
+                          <span className="ml-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold tabular-nums text-secondary-foreground">
+                            {entry.option.badge}
                           </span>
                         )}
                       </div>
