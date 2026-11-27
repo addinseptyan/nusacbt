@@ -1,0 +1,98 @@
+name: Release Windows Server Package
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Versi rilis opsional (mis. v1.0.0) untuk build manual"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Determine release version
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and -not [string]::IsNullOrWhiteSpace("${{ github.event.inputs.tag }}")) {
+            $tag = "${{ github.event.inputs.tag }}"
+          } elseif ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+            $tag = "v$($pkg.version)"
+          }
+          $version = $tag.TrimStart("v")
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Windows Portable ZIP and Installer EXE
+        shell: pwsh
+        env:
+          NEXT_PUBLIC_APP_BUILD_SHA: ${{ github.sha }}
+        run: |
+          .\scripts\build-windows-release.ps1 -Version "${{ steps.ver.outputs.version }}"
+
+      - name: Smoke test packaged NusaCBT-Server launcher CLI
+        shell: pwsh
+        run: |
+          $tmpData = Join-Path $env:RUNNER_TEMP "nusacbt-smoke-data"
+          New-Item -ItemType Directory -Path $tmpData -Force | Out-Null
+          $out = & .\dist\portable\runtime\node.exe .\dist\portable\app\scripts\launcher-cli.mjs check --data-dir $tmpData
+          Write-Host $out
+          $json = $out | ConvertFrom-Json
+          if (-not $json.ok -or -not $json.appReady) {
+            throw "Preflight CLI gagal di paket Windows!"
+          }
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: NusaCBT ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            dist/release/NusaCBT-*-win64.exe
+            dist/release/NusaCBT-*-win64-portable.zip
+            dist/release/SHA256SUMS.txt
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nusacbt-windows-${{ steps.ver.outputs.tag }}
+          path: dist/release/*
+          if-no-files-found: error
