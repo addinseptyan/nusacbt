@@ -1,6 +1,6 @@
 {
   "name": "nusacbt",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -24,12 +24,13 @@
     "test:upgrade-027": "node tests/integration/upgrade-027.mjs",
     "test:upgrade-028": "node tests/integration/upgrade-028.mjs",
     "test:upgrade-029": "node tests/integration/upgrade-029.mjs",
+    "test:upgrade-030": "node tests/integration/upgrade-030.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "launcher:check": "node scripts/launcher-cli.mjs check",
     "admin:create": "node scripts/create-admin.mjs",
     "participant:key:create": "node scripts/create-participant-key.mjs",
     "token:key:create": "node scripts/create-exam-token-key.mjs",
-    "test:unit": "node --test tests/unit/password.test.mjs tests/unit/admin-permissions.test.mjs tests/unit/database-backup.test.mjs tests/unit/period-validation.test.mjs tests/unit/class-validation.test.mjs tests/unit/student-validation.test.mjs tests/unit/student-import.test.mjs tests/unit/participant-identity.test.mjs tests/unit/participant-password.test.mjs tests/unit/topic-validation.test.mjs tests/unit/question-validation.test.mjs tests/unit/question-image.test.mjs tests/unit/question-rich.test.mjs tests/unit/question-math.test.mjs tests/unit/question-docx.test.mjs tests/unit/question-docx-export.test.mjs tests/unit/app-settings.test.mjs tests/unit/app-version.test.mjs tests/unit/launcher-cli.test.mjs tests/unit/exam-test-validation.test.mjs tests/unit/exam-session.test.mjs tests/unit/exam-schedule.test.mjs tests/unit/exam-attempt-validation.test.mjs tests/unit/exam-work-settings.test.mjs tests/unit/exam-timeline.test.mjs tests/unit/exam-grading.test.mjs tests/unit/exam-final-grade.test.mjs tests/unit/report-filter.test.mjs tests/unit/report-xlsx.test.mjs tests/unit/participant-card-filter.test.mjs tests/unit/academic-year-matrix.test.mjs tests/unit/exam-token.test.mjs tests/unit/exam-token-crypto.test.mjs tests/unit/exam-token-date.test.mjs tests/unit/participant-login.test.mjs tests/unit/migration-encoding.test.mjs"
+    "test:unit": "node --test tests/unit/password.test.mjs tests/unit/admin-permissions.test.mjs tests/unit/database-backup.test.mjs tests/unit/period-validation.test.mjs tests/unit/class-validation.test.mjs tests/unit/student-validation.test.mjs tests/unit/student-import.test.mjs tests/unit/participant-identity.test.mjs tests/unit/participant-password.test.mjs tests/unit/topic-validation.test.mjs tests/unit/question-validation.test.mjs tests/unit/question-image.test.mjs tests/unit/question-rich.test.mjs tests/unit/question-math.test.mjs tests/unit/question-docx.test.mjs tests/unit/question-docx-export.test.mjs tests/unit/app-settings.test.mjs tests/unit/app-version.test.mjs tests/unit/launcher-cli.test.mjs tests/unit/exam-test-validation.test.mjs tests/unit/exam-session.test.mjs tests/unit/exam-schedule.test.mjs tests/unit/exam-attempt-validation.test.mjs tests/unit/exam-work-settings.test.mjs tests/unit/exam-timeline.test.mjs tests/unit/exam-grading.test.mjs tests/unit/exam-final-grade.test.mjs tests/unit/report-filter.test.mjs tests/unit/report-xlsx.test.mjs tests/unit/participant-card-filter.test.mjs tests/unit/academic-year-matrix.test.mjs tests/unit/exam-token.test.mjs tests/unit/exam-token-crypto.test.mjs tests/unit/exam-token-date.test.mjs tests/unit/participant-login.test.mjs tests/unit/session-cookie.test.mjs tests/unit/preview-session.test.mjs tests/unit/migration-encoding.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

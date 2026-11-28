@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
+import { useMemo, useState, useSyncExternalStore, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ClipboardList, Eye, Info, Pencil, Plus, Search, Tag, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ClipboardList, Eye, Info, Pencil, Plus, Search, Tag, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { ExamTimeline, type TimelineClock, type TimelineItem } from "@/app/data-tes/daftar/exam-timeline";
@@ -21,10 +21,39 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  EXAM_TEST_DEFAULT_SORT,
+  EXAM_TEST_SORT_OPTIONS,
+  EXAM_TEST_SORT_STORAGE_KEY,
+  normalizeExamTestSortMode,
+  sortExamTests,
+  type ExamTestSortMode,
+} from "@/lib/exam-test-sort.mjs";
 import type { ExamPeriodOption, ExamTest, ExamTimeZone } from "@/lib/exam-test-types";
 import { checkExamDateAgainstPeriod, EXAM_TEST_FORM_VERSION, EXAM_TEST_MAX_DURATION, EXAM_TEST_MAX_QUESTIONS, validateExamStart, validateExamTestTags } from "@/lib/exam-test-validation.mjs";
 import type { Question, QuestionImageSlot, QuestionTopicOption } from "@/lib/question-types";
 import { matchesMultiKeyword } from "@/lib/topic-validation.mjs";
+
+const SORT_CHANGE_EVENT = "nusacbt-exam-test-sort";
+function subscribeSort(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", callback);
+  window.addEventListener(SORT_CHANGE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(SORT_CHANGE_EVENT, callback);
+  };
+}
+function getSortSnapshot(): ExamTestSortMode {
+  try {
+    return normalizeExamTestSortMode(window.localStorage.getItem(EXAM_TEST_SORT_STORAGE_KEY));
+  } catch {
+    return EXAM_TEST_DEFAULT_SORT;
+  }
+}
+function getServerSortSnapshot(): ExamTestSortMode {
+  return EXAM_TEST_DEFAULT_SORT;
+}
 
 const PAGE_SIZE = 10;
 const selectClass = "h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50";
@@ -72,7 +101,7 @@ function TestQuestionImage({ question, slot, alt }: { question: Question; slot: 
 }
 export function QuestionPreview({ question }: { question: Question }) {
   return <div className="mt-3 min-w-0 space-y-3 rounded-xl border border-border bg-background p-3 text-sm">
-    <div><p className="mb-1 text-xs font-bold">Isi soal #{question.id}</p><QuestionRichDisplay document={question.promptRich} fallback={question.prompt} />{question.hasPromptImage && <TestQuestionImage question={question} slot="prompt" alt={`Gambar soal ${question.id}`} />}</div>
+    <div><p className="mb-1 text-xs font-bold">Isi soal</p><QuestionRichDisplay document={question.promptRich} fallback={question.prompt} />{question.hasPromptImage && <TestQuestionImage question={question} slot="prompt" alt={`Gambar soal ${question.id}`} />}</div>
     <div className="space-y-2"><p className="text-xs font-bold">Pilihan dan kunci untuk admin</p>{question.options.map((option) => <div key={option.letter} className="rounded-lg border p-2"><p className="text-xs font-semibold">{option.letter}. {question.correctOption === option.letter && <span className="text-primary">Jawaban benar</span>}</p><QuestionRichDisplay document={option.rich} fallback={option.text} />{option.hasImage && <TestQuestionImage question={question} slot={option.letter} alt={`Gambar pilihan ${option.letter} soal ${question.id}`} />}</div>)}</div>
   </div>;
 }
@@ -109,11 +138,23 @@ function ExamTestEditor({
   const [tagDraft, setTagDraft] = useState("");
   const [error, setError] = useState<Notice>(null); const [selectionError, setSelectionError] = useState(""); const [pending, startTransition] = useTransition();
 
-  const topicOptions = useMemo(() => topics.map((t) => ({
-    value: t.id,
-    label: t.name,
-    tags: t.tags,
-  })), [topics]);
+  const topicQuestionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const q of bank) {
+      counts.set(q.topicId, (counts.get(q.topicId) ?? 0) + 1);
+    }
+    return counts;
+  }, [bank]);
+
+  const topicOptions = useMemo(() => topics.map((t) => {
+    const count = topicQuestionCounts.get(t.id) ?? t.questionCount ?? 0;
+    return {
+      value: t.id,
+      label: t.name,
+      tags: t.tags,
+      badge: `${count} soal`,
+    };
+  }), [topics, topicQuestionCounts]);
 
   const filtered = bank.filter(
     (question) =>
@@ -292,13 +333,13 @@ function ExamTestEditor({
         <fieldset disabled={pending} className="space-y-2 rounded-xl border border-border p-4"><legend className="px-1 text-sm font-bold">Pengaturan acak</legend><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="shuffleQuestions" value="1" defaultChecked={test?.shuffleQuestions ?? false} className="size-4 accent-primary" /> Acak urutan soal</label><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="shuffleOptions" value="1" defaultChecked={test?.shuffleOptions ?? false} className="size-4 accent-primary" /> Acak urutan pilihan jawaban</label><p className="text-xs leading-5 text-muted-foreground">Urutan diacak saat mulai sesuai pengaturan ini dan tetap untuk pengerjaan yang sama.</p></fieldset>
         <fieldset disabled={pending} className="space-y-3 rounded-xl border border-border p-4"><legend className="px-1 text-sm font-bold">Pilih soal dari bank</legend>
           <p className="text-xs leading-5 text-muted-foreground">Boleh kosong saat menyusun rancangan. Pilih maksimal 1000 soal. Saat acak soal tidak aktif, urutan mengikuti daftar soal terpilih di bawah. Perubahan isi soal di bank akan terlihat pada rancangan ini.</p>
-          <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1"><label htmlFor="test-question-search" className="text-xs font-semibold">Cari soal bank</label><Input id="test-question-search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); setPreviewId(null); }} placeholder="Cari nama, tag, isi, atau ID (multi kata)" className="h-10" /></div><div className="space-y-1"><label htmlFor="test-topic" className="text-xs font-semibold">Filter mata pelajaran</label><SearchableCombobox id="test-topic" options={topicOptions} value={topicId} onChange={(nextValue) => { setTopicId(nextValue); setPage(0); setPreviewId(null); }} placeholder="Semua mata pelajaran" searchPlaceholder="Cari nama atau tag (mis. matematika kelas x)..." emptyOptionLabel="Semua mata pelajaran" disabled={pending} /></div></div>
+          <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1"><label htmlFor="test-question-search" className="text-xs font-semibold">Cari soal bank</label><Input id="test-question-search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); setPreviewId(null); }} placeholder="Cari nama, tag, atau isi soal (multi kata)" className="h-10" /></div><div className="space-y-1"><label htmlFor="test-topic" className="text-xs font-semibold">Filter mata pelajaran</label><SearchableCombobox id="test-topic" options={topicOptions} value={topicId} onChange={(nextValue) => { setTopicId(nextValue); setPage(0); setPreviewId(null); }} placeholder={`Semua mata pelajaran (${bank.length} soal)`} searchPlaceholder="Cari nama atau tag (mis. matematika kelas x)..." emptyOptionLabel={`Semua mata pelajaran (${bank.length} soal)`} disabled={pending} /></div></div>
           <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{filtered.length} soal cocok · {selected.length} terpilih</p><Button type="button" variant="outline" size="sm" onClick={selectAll} disabled={!filtered.length}>Pilih semua hasil</Button></div>
           {selectionError && <p role="alert" className="text-xs text-destructive">{selectionError}</p>}
-          {!bank.length ? <p className="rounded-xl bg-muted/50 p-3 text-xs">Belum ada soal. <Link href="/data-modul/soal" className="font-semibold text-primary underline">Buka Bank Soal</Link>.</p> : !filtered.length ? <p className="rounded-xl bg-muted/50 p-3 text-xs">Tidak ada soal yang cocok dengan filter.</p> : <ul aria-label="Hasil soal bank" className="divide-y divide-border rounded-xl border border-border">{visible.map((question, idx) => <li key={question.id} className="min-w-0 p-3"><div className="flex items-start gap-2"><label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2"><input type="checkbox" aria-label={`Pilih soal ${question.id}`} checked={selectedSet.has(question.id)} onChange={() => toggle(question.id)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span className="min-w-0 text-xs leading-5"><span className="font-bold">{currentPage * PAGE_SIZE + idx + 1}. #{question.id} · {question.topicName}</span>{(question.topicTags ?? []).length > 0 && <span className="ml-1.5 inline-flex flex-wrap gap-1 align-middle">{(question.topicTags ?? []).map((tag) => <Badge key={tag} variant="outline" className="px-1.5 py-0 text-[10px] font-medium">{tag}</Badge>)}</span>}<span className="block break-words text-muted-foreground">{excerpt(question)}</span></span></label><Button type="button" variant="ghost" size="sm" aria-label={`Lihat isi soal ${question.id}`} aria-expanded={previewId === question.id} onClick={() => setPreviewId(previewId === question.id ? null : question.id)}><Eye className="size-4" /> Lihat</Button></div>{previewId === question.id && <QuestionPreview key={question.id} question={question} />}</li>)}</ul>}
+          {!bank.length ? <p className="rounded-xl bg-muted/50 p-3 text-xs">Belum ada soal. <Link href="/data-modul/soal" className="font-semibold text-primary underline">Buka Bank Soal</Link>.</p> : !filtered.length ? <p className="rounded-xl bg-muted/50 p-3 text-xs">Tidak ada soal yang cocok dengan filter.</p> : <ul aria-label="Hasil soal bank" className="divide-y divide-border rounded-xl border border-border">{visible.map((question, idx) => <li key={question.id} className="min-w-0 p-3"><div className="flex items-start gap-2"><label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2"><input type="checkbox" aria-label={`Pilih soal ${question.id}`} checked={selectedSet.has(question.id)} onChange={() => toggle(question.id)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span className="min-w-0 text-xs leading-5"><span className="font-bold">{currentPage * PAGE_SIZE + idx + 1}. {question.topicName}</span>{(question.topicTags ?? []).length > 0 && <span className="ml-1.5 inline-flex flex-wrap gap-1 align-middle">{(question.topicTags ?? []).map((tag) => <Badge key={tag} variant="outline" className="px-1.5 py-0 text-[10px] font-medium">{tag}</Badge>)}</span>}<span className="block break-words text-muted-foreground">{excerpt(question)}</span></span></label><Button type="button" variant="ghost" size="sm" aria-label={`Lihat isi soal ${question.id}`} aria-expanded={previewId === question.id} onClick={() => setPreviewId(previewId === question.id ? null : question.id)}><Eye className="size-4" /> Lihat</Button></div>{previewId === question.id && <QuestionPreview key={question.id} question={question} />}</li>)}</ul>}
           {filtered.length > PAGE_SIZE && <div className="flex items-center justify-between gap-2 text-xs"><span>Halaman {currentPage + 1} dari {pageCount}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => { setPage(currentPage - 1); setPreviewId(null); }}><ChevronLeft className="size-4" /> Sebelumnya</Button><Button type="button" variant="outline" size="sm" disabled={currentPage + 1 >= pageCount} onClick={() => { setPage(currentPage + 1); setPreviewId(null); }}>Berikutnya <ChevronRight className="size-4" /></Button></div></div>}
           <div className="space-y-2 border-t border-border pt-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-bold">Urutan soal terpilih ({selected.length})</p><Button type="button" variant="ghost" size="sm" disabled={!selected.length} onClick={() => { setSelected([]); setSelectionError(""); }}>Lepas semua</Button></div>
-            {!selected.length ? <p className="text-xs text-muted-foreground">Belum ada soal terpilih.</p> : <ol aria-label="Urutan soal terpilih" className="max-h-64 space-y-2 overflow-y-auto pr-1">{selected.map((id, index) => <li key={id} className="flex min-w-0 items-center gap-1 rounded-lg bg-muted/40 p-2 text-xs"><span className="min-w-0 flex-1 break-words">{index + 1}. #{id} · {byId.has(id) ? excerpt(byId.get(id)!) : "Soal tidak ditemukan; muat ulang daftar."}</span><Button type="button" variant="ghost" size="icon-sm" disabled={index === 0} aria-label={`Naikkan soal ${id}`} onClick={() => move(index, -1)}><ArrowUp className="size-4" /></Button><Button type="button" variant="ghost" size="icon-sm" disabled={index === selected.length - 1} aria-label={`Turunkan soal ${id}`} onClick={() => move(index, 1)}><ArrowDown className="size-4" /></Button><Button type="button" variant="ghost" size="icon-sm" aria-label={`Lepas soal ${id}`} onClick={() => toggle(id)}><X className="size-4" /></Button></li>)}</ol>}
+            {!selected.length ? <p className="text-xs text-muted-foreground">Belum ada soal terpilih.</p> : <ol aria-label="Urutan soal terpilih" className="max-h-64 space-y-2 overflow-y-auto pr-1">{selected.map((id, index) => <li key={id} className="flex min-w-0 items-center gap-1 rounded-lg bg-muted/40 p-2 text-xs"><span className="min-w-0 flex-1 break-words">{index + 1}. {byId.has(id) ? `${byId.get(id)!.topicName} · ${excerpt(byId.get(id)!)}` : "Soal tidak ditemukan; muat ulang daftar."}</span><Button type="button" variant="ghost" size="icon-sm" disabled={index === 0} aria-label={`Naikkan soal ${id}`} onClick={() => move(index, -1)}><ArrowUp className="size-4" /></Button><Button type="button" variant="ghost" size="icon-sm" disabled={index === selected.length - 1} aria-label={`Turunkan soal ${id}`} onClick={() => move(index, 1)}><ArrowDown className="size-4" /></Button><Button type="button" variant="ghost" size="icon-sm" aria-label={`Lepas soal ${id}`} onClick={() => toggle(id)}><X className="size-4" /></Button></li>)}</ol>}
           </div>
         </fieldset>
         {error && <ErrorNotice error={error} onReload={reload} />}
@@ -363,8 +404,18 @@ export function ExamTestManager({
   defaultTimeZone?: ExamTimeZone;
 }) {
   const [query, setQuery] = useState(""); const [periodId, setPeriodId] = useState(""); const [tagFilter, setTagFilter] = useState(""); const [page, setPage] = useState(0);
+  const sortMode = useSyncExternalStore(subscribeSort, getSortSnapshot, getServerSortSnapshot);
   const [editorOpen, setEditorOpen] = useState(false); const [editing, setEditing] = useState<ExamTest | null>(null); const [deleting, setDeleting] = useState<ExamTest | null>(null);
   const [cascadeTest, setCascadeTest] = useState<ExamTest | null>(null);
+
+  function changeSort(nextMode: string) {
+    const normalized = normalizeExamTestSortMode(nextMode);
+    try {
+      window.localStorage.setItem(EXAM_TEST_SORT_STORAGE_KEY, normalized);
+    } catch { /* Abaikan error penyimpanan browser. */ }
+    window.dispatchEvent(new Event(SORT_CHANGE_EVENT));
+    setPage(0);
+  }
 
   const allTestTags = useMemo(() => {
     const map = new Map<string, string>();
@@ -378,12 +429,15 @@ export function ExamTestManager({
   }, [tests]);
 
   const normalizedTag = tagFilter.trim().toLowerCase();
-  const filtered = tests.filter(
-    (test) =>
-      (!periodId || test.periodId === periodId) &&
-      (!normalizedTag || (test.tags ?? []).some((tag) => tag.toLowerCase() === normalizedTag)) &&
-      matchesMultiKeyword(query, [test.name, test.periodName, test.id, ...(test.tags ?? [])]),
-  );
+  const filtered = useMemo(() => {
+    const matching = tests.filter(
+      (test) =>
+        (!periodId || test.periodId === periodId) &&
+        (!normalizedTag || (test.tags ?? []).some((tag) => tag.toLowerCase() === normalizedTag)) &&
+        matchesMultiKeyword(query, [test.name, test.periodName, test.id, ...(test.tags ?? [])]),
+    );
+    return sortExamTests(matching, sortMode);
+  }, [tests, periodId, normalizedTag, query, sortMode]);
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)); const currentPage = Math.min(page, pages - 1); const visible = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
   function openEditor(test: ExamTest | null) { setEditing(test); setEditorOpen(true); }
   return <TooltipProvider delayDuration={350}>
@@ -393,7 +447,20 @@ export function ExamTestManager({
     <Card className="gap-0 overflow-hidden rounded-[18px] bg-card py-0 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)]">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border p-5 sm:px-6"><div><div className="flex items-center gap-2.5"><h2 className="text-[15px] font-bold">Rancangan tes</h2><Badge variant="secondary" className="rounded-full text-[10px]">{tests.length} tes</Badge></div><p className="mt-1 text-[12px] text-muted-foreground">Kelola jadwal, susunan soal, dan akses pelaksanaan tiap tes.</p></div><div className="flex flex-wrap gap-2"><Tooltip><TooltipTrigger asChild><Button asChild variant="outline" className="h-10 rounded-xl px-4 font-semibold"><Link href="/data-tes/daftar/sesi">Atur kelompok sesi</Link></Button></TooltipTrigger><TooltipContent sideOffset={6}>Bagi siswa ke kelompok tetap per periode.</TooltipContent></Tooltip><Button onClick={() => openEditor(null)} disabled={!periods.length} className="h-10 rounded-xl px-4 font-semibold"><Plus className="size-4" /> Tambah tes</Button></div></div>
       <div className="space-y-3 border-b border-border p-5 sm:px-6">
-        <div className="grid gap-3 sm:grid-cols-2"><div className="relative"><Search className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" /><Input aria-label="Cari tes" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Cari nama, tag, periode, atau ID tes" className="h-10 pl-9" /></div><select aria-label="Filter periode tes" value={periodId} onChange={(event) => { setPeriodId(event.target.value); setPage(0); }} className={selectClass}><option value="">Semua periode</option>{periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}</select></div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="relative"><Search className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" /><Input aria-label="Cari tes" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Cari nama, tag, atau periode tes" className="h-10 pl-9" /></div>
+          <select aria-label="Filter periode tes" value={periodId} onChange={(event) => { setPeriodId(event.target.value); setPage(0); }} className={selectClass}><option value="">Semua periode</option>{periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}</select>
+          <div className="relative flex items-center sm:col-span-2 lg:col-span-1">
+            <ArrowUpDown className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
+            <select aria-label="Urutkan daftar tes" value={sortMode} onChange={(event) => changeSort(event.target.value)} className={`${selectClass} pl-9`}>
+              {EXAM_TEST_SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  Urutkan: {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         {allTestTags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5" aria-label="Filter tag tes">
             <span className="mr-1 text-[11px] font-semibold text-muted-foreground">Filter tag:</span>
@@ -420,7 +487,8 @@ export function ExamTestManager({
           </div>
         )}
       </div>
-      {!visible.length ? <div className="flex flex-col items-center px-6 py-14 text-center"><span className="flex size-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><ClipboardList className="size-6" /></span><h3 className="mt-4 text-sm font-bold">{tests.length ? "Tidak ada tes yang cocok" : "Belum ada rancangan tes"}</h3><p className="mt-1.5 max-w-sm text-[12px] leading-6 text-muted-foreground">{tests.length ? "Ubah pencarian atau filter periode." : "Buat rancangan setelah periode ujian tersedia."}</p></div> : <ul aria-label="Daftar rancangan tes" className="divide-y divide-border">{visible.map((test) => {
+      {!visible.length ? <div className="flex flex-col items-center px-6 py-14 text-center"><span className="flex size-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"><ClipboardList className="size-6" /></span><h3 className="mt-4 text-sm font-bold">{tests.length ? "Tidak ada tes yang cocok" : "Belum ada rancangan tes"}</h3><p className="mt-1.5 max-w-sm text-[12px] leading-6 text-muted-foreground">{tests.length ? "Ubah pencarian atau filter periode." : "Buat rancangan setelah periode ujian tersedia."}</p></div> : <ul aria-label="Daftar rancangan tes" className="divide-y divide-border">{visible.map((test, idx) => {
+        const rowNumber = currentPage * PAGE_SIZE + idx + 1;
         const outOfPeriod = checkExamDateAgainstPeriod(test.startLocal, test.endLocal, test.periodStartDate, test.periodEndDate);
         const runSummary = test.runSummary ?? {
           regular: { draft: 0, published: 0 },
@@ -431,7 +499,7 @@ export function ExamTestManager({
           runSummary.regular.draft + runSummary.regular.published +
           runSummary.makeup.draft + runSummary.makeup.published +
           runSummary.remedial.draft + runSummary.remedial.published;
-        return <li key={test.id} className="flex flex-col gap-4 p-5 sm:px-6 lg:flex-row lg:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-sm font-bold">{test.name}</h3><Badge variant="outline" className="rounded-full text-[10px]">Rancangan</Badge>{(test.tags ?? []).map((tag) => <Badge key={tag} variant="secondary" className="rounded-full text-[10px] font-medium">{tag}</Badge>)}</div><div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label={`Status pelaksanaan tes ${test.id}`}>{totalRuns === 0 ? <Badge variant="outline" className="rounded-full border-dashed text-[10px] font-medium text-muted-foreground">Belum ada pelaksanaan</Badge> : RUN_SUMMARY_KINDS.flatMap((kindMeta) => {
+        return <li key={test.id} className="flex flex-col gap-4 p-5 sm:px-6 lg:flex-row lg:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span aria-label={`Nomor tes ${rowNumber}`} className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-lg bg-muted px-1.5 text-xs font-bold tabular-nums text-foreground">{rowNumber}</span><h3 className="break-words text-sm font-bold">{test.name}</h3><Badge variant="outline" className="rounded-full text-[10px]">Rancangan</Badge>{(test.tags ?? []).map((tag) => <Badge key={tag} variant="secondary" className="rounded-full text-[10px] font-medium">{tag}</Badge>)}</div><div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label={`Status pelaksanaan tes ${test.id}`}>{totalRuns === 0 ? <Badge variant="outline" className="rounded-full border-dashed text-[10px] font-medium text-muted-foreground">Belum ada pelaksanaan</Badge> : RUN_SUMMARY_KINDS.flatMap((kindMeta) => {
           const item = runSummary[kindMeta.key];
           const badges = [];
           if (item.published > 0) {
@@ -450,7 +518,7 @@ export function ExamTestManager({
             );
           }
           return badges;
-        })}</div><p className="mt-1.5 break-words text-xs text-muted-foreground">#{test.id} · {test.periodName} · {test.questionIds.length} soal</p><p className="mt-1.5 text-xs leading-5 text-muted-foreground">Mulai: <strong className="text-foreground">{formatLocal(test.startLocal)} {defaultTimeZone}</strong> · Akhir: <strong className="text-foreground">{formatLocal(test.endLocal)} {defaultTimeZone}</strong> · {test.durationMinutes} menit</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Acak soal: {test.shuffleQuestions ? "aktif" : "tidak"} · Acak pilihan: {test.shuffleOptions ? "aktif" : "tidak"}</p>{outOfPeriod && <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"><AlertTriangle className="size-3.5 shrink-0" /> {outOfPeriod}</p>}</div><div className="flex flex-wrap shrink-0 gap-2"><Tooltip><TooltipTrigger asChild><Button asChild variant="default" size="sm"><Link href={`/data-tes/daftar/${test.id}`} aria-label={`Pelaksanaan tes ${test.id}`}>Pelaksanaan</Link></Button></TooltipTrigger><TooltipContent sideOffset={6}>Atur jadwal, peserta, dan rilis tes ini.</TooltipContent></Tooltip><Button type="button" variant="outline" size="sm" aria-label={`Ubah tes ${test.id}`} onClick={() => openEditor(test)}><Pencil className="size-3.5" /> Ubah</Button><Button type="button" variant="outline" size="sm" aria-label={`Hapus tes ${test.id}`} onClick={() => setDeleting(test)} className="text-destructive hover:text-destructive"><Trash2 className="size-3.5" /> Hapus</Button></div></li>;
+        })}</div><p className="mt-1.5 break-words text-xs text-muted-foreground">{test.periodName} · {test.questionIds.length} soal</p><p className="mt-1.5 text-xs leading-5 text-muted-foreground">Mulai: <strong className="text-foreground">{formatLocal(test.startLocal)} {defaultTimeZone}</strong> · Akhir: <strong className="text-foreground">{formatLocal(test.endLocal)} {defaultTimeZone}</strong> · {test.durationMinutes} menit</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Acak soal: {test.shuffleQuestions ? "aktif" : "tidak"} · Acak pilihan: {test.shuffleOptions ? "aktif" : "tidak"}</p>{outOfPeriod && <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"><AlertTriangle className="size-3.5 shrink-0" /> {outOfPeriod}</p>}</div><div className="flex flex-wrap shrink-0 gap-2"><Tooltip><TooltipTrigger asChild><Button asChild variant="default" size="sm"><Link href={`/data-tes/daftar/${test.id}`} aria-label={`Pelaksanaan tes ${test.id}`}>Pelaksanaan</Link></Button></TooltipTrigger><TooltipContent sideOffset={6}>Atur jadwal, peserta, dan rilis tes ini.</TooltipContent></Tooltip><Button type="button" variant="outline" size="sm" aria-label={`Ubah tes ${test.id}`} onClick={() => openEditor(test)}><Pencil className="size-3.5" /> Ubah</Button><Button type="button" variant="outline" size="sm" aria-label={`Hapus tes ${test.id}`} onClick={() => setDeleting(test)} className="text-destructive hover:text-destructive"><Trash2 className="size-3.5" /> Hapus</Button></div></li>;
       })}</ul>}
       {filtered.length > PAGE_SIZE && <div className="flex items-center justify-between gap-2 border-t border-border p-5 text-xs sm:px-6"><span>Halaman {currentPage + 1} dari {pages}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft className="size-4" /> Sebelumnya</Button><Button type="button" variant="outline" size="sm" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>Berikutnya <ChevronRight className="size-4" /></Button></div></div>}
     </Card>

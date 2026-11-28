@@ -7,7 +7,7 @@ import { lockParticipantSession, participantCandidate, participantSessionHash, p
 import { getPostgresPool } from "@/lib/postgres";
 
 type AttemptRow = {
-  id: string; kind: "regular" | "makeup" | "remedial"; testName: string; runLabel: string; deadline: Date; questionCount: number;
+  id: string; kind: "regular" | "makeup" | "remedial"; testName: string; testTags: string[]; runLabel: string; deadline: Date; questionCount: number;
   completedAt: Date | null; completionReason: "submitted" | "time_expired" | null; expired: boolean; now: Date;
 };
 type OptionContent = { text: string; rich: unknown | null; hasImage: boolean };
@@ -16,8 +16,8 @@ type RawQuestion = {
   prompt: string; promptRich: unknown | null; hasPromptImage: boolean; options: Record<string, OptionContent>;
 };
 export type AttemptView =
-  | { state: "finished"; testName: string; runLabel: string; reason: "submitted" | "time_expired"; score: string | null }
-  | { state: "working"; attemptId: string; testName: string; runLabel: string; deadline: string; serverNow: string;
+  | { state: "finished"; testName: string; testTags: string[]; runLabel: string; reason: "submitted" | "time_expired"; score: string | null }
+  | { state: "working"; attemptId: string; testName: string; testTags: string[]; runLabel: string; deadline: string; serverNow: string;
       participant: { name: string; nisn: string; className: string; period: string };
       total: number; position: number; answered: number; navigation: { position: number; answered: boolean; doubtful: boolean }[];
       question: { prompt: string; promptRich: unknown | null; hasPromptImage: boolean; answer: string | null; revision: string;
@@ -36,7 +36,9 @@ const NOT_FOUND = "Pengerjaan tidak ditemukan atau bukan milik sesi ini.";
 
 async function lockAttempt(client: PoolClient, attemptId: string, identityId: string): Promise<AttemptRow | null> {
   const result = await client.query<AttemptRow>(
-    `SELECT id::text AS id,kind,test_name_snapshot AS "testName",run_label_snapshot AS "runLabel",deadline,
+    `SELECT id::text AS id,kind,test_name_snapshot AS "testName",
+       COALESCE((SELECT t.tags FROM exam_tests t WHERE t.id=exam_attempts.exam_test_id),ARRAY[]::text[]) AS "testTags",
+       run_label_snapshot AS "runLabel",deadline,
        question_count AS "questionCount",completed_at AS "completedAt",completion_reason AS "completionReason",
        deadline<=clock_timestamp() AS expired,clock_timestamp() AS now
      FROM exam_attempts WHERE id=$1::bigint AND participant_identity_id=$2::bigint FOR UPDATE`, [attemptId, identityId],
@@ -105,7 +107,7 @@ async function finishedAttemptView(client: PoolClient, attempt: AttemptRow, reas
     if (!grade || !grade.ok) throw new Error("Nilai pengerjaan tidak konsisten.");
     score = grade.display;
   }
-  return { state: "finished", testName: attempt.testName, runLabel: attempt.runLabel, reason, score };
+  return { state: "finished", testName: attempt.testName, testTags: attempt.testTags ?? [], runLabel: attempt.runLabel, reason, score };
 }
 
 /** Kunci jawaban tidak pernah dikirim; nilai hanya jika selesai dan diizinkan server. */
@@ -147,7 +149,7 @@ export async function loadExamAttempt(attemptId: string, requestedPosition: numb
       await client.query("COMMIT"); return finished;
     }
     await client.query("COMMIT");
-    return { state: "working", attemptId: attempt.id, testName: attempt.testName, runLabel: attempt.runLabel,
+    return { state: "working", attemptId: attempt.id, testName: attempt.testName, testTags: attempt.testTags ?? [], runLabel: attempt.runLabel,
       deadline: attempt.deadline.toISOString(), serverNow: now.now.toISOString(), total: attempt.questionCount, position,
       participant: { name: participant.studentName, nisn: participant.studentNisn, className: participant.className, period: participant.periodName },
       answered: navigation.filter((item) => item.answered).length, navigation,

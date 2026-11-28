@@ -7,6 +7,7 @@ import { participantLogoutAction } from "@/app/peserta/login/actions";
 import { RefreshScheduleButton } from "@/app/peserta/refresh-schedule-button";
 import { SharedScoresDialog } from "@/app/peserta/shared-scores-dialog";
 import { ParticipantStatusDialog } from "@/app/peserta/status-dialog";
+import { PreviewSessionSync } from "@/components/preview-session-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 import { participantView, type ParticipantView } from "@/lib/participant-auth";
 import { participantPageNumber } from "@/lib/participant-login-validation.mjs";
+import { getPreviewParticipantTokenForClient, isPreviewIframeAuthEnabled } from "@/lib/preview-session";
 
 export const metadata = { title: "Ruang Peserta", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -27,9 +29,11 @@ export default async function ParticipantPage({ searchParams }: Props) {
   try { view = await participantView(participantPageNumber(params.halaman)); }
   catch { redirect("/peserta/login?error=database"); }
   if (!view) redirect("/peserta/login?sesi=berakhir");
+  const previewParticipantToken = isPreviewIframeAuthEnabled() ? await getPreviewParticipantTokenForClient() : null;
 
   return (
     <main className="min-h-svh bg-background">
+      {previewParticipantToken && <PreviewSessionSync participantAction={{ type: "set", token: previewParticipantToken }} />}
       <header className="border-b bg-card/95">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -105,6 +109,15 @@ export default async function ParticipantPage({ searchParams }: Props) {
                       <h3 className="min-w-0 break-words text-sm leading-6 font-bold">{test.name}</h3>
                       <Badge variant="outline" className={test.status === "Berlangsung" ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" : test.status === "Berakhir" ? "bg-muted text-muted-foreground" : "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"}>{test.status}</Badge>
                     </div>
+                    {test.tags.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {test.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="rounded-full px-2 py-0 text-[10px]">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                     <p className="mt-1 break-words text-xs text-muted-foreground">{test.kind === "regular" ? "Reguler" : test.kind === "makeup" ? "Susulan" : "Remidi"} · {test.label}</p>
                     <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs leading-5 text-muted-foreground">
                       <span className="inline-flex items-start gap-1.5"><CalendarDays className="mt-0.5 size-3.5 shrink-0" /> Mulai {test.startLocal} {test.zone}</span>
@@ -116,9 +129,9 @@ export default async function ParticipantPage({ searchParams }: Props) {
                     ) : <>
                       {test.retakePermissionId && <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"><strong>Izin mengulang tersedia.</strong> Satu kali, dengan batas akhir yang sama. Jawaban baru dimulai kosong.</p>}
                       <div className="flex flex-wrap items-start gap-x-2"><ParticipantStatusDialog attemptId={test.attemptId} testName={test.name} runLabel={test.label} />
-                        {test.retakePermissionId && <StartForm runId={test.id} testName={test.name} runLabel={test.label} initialOpen={false} retakePermissionId={test.retakePermissionId} finalRevision={test.finalRevision} />}</div>
+                        {test.retakePermissionId && <StartForm runId={test.id} testName={test.name} testTags={test.tags} runLabel={test.label} initialOpen={false} retakePermissionId={test.retakePermissionId} finalRevision={test.finalRevision} />}</div>
                     </>
-                      : test.status === "Berlangsung" && !test.finalized ? <StartForm runId={test.id} testName={test.name} runLabel={test.label} initialOpen={false} finalRevision={test.finalRevision} /> : null}
+                      : test.status === "Berlangsung" && !test.finalized ? <StartForm runId={test.id} testName={test.name} testTags={test.tags} runLabel={test.label} initialOpen={false} finalRevision={test.finalRevision} /> : null}
                   </li>
                 ))}
               </ul>

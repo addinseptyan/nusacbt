@@ -13,7 +13,8 @@ import { adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { loadDefaultTimeZoneWithClient } from "@/lib/app-settings-service";
 import { parseTokenDateFilter, parseTokenZone, tokenDayBounds, tokenPageNumber } from "@/lib/exam-token-date.mjs";
 import { ExamTokenKeyProblem, readConfiguredTokenKey, tokenKeyMessage, tokenKeyStatus } from "@/lib/exam-token-key";
-import type { AccessTokenRecord, AccessTokenTestOption, TokenKeyStatus } from "@/lib/exam-token-types";
+import type { AccessTokenRecord, AccessTokenTestOption, GlobalTokenAutoRotateState, TokenKeyStatus } from "@/lib/exam-token-types";
+import { ensureGlobalTokenAutoRotated, readGlobalAutoRotateWithClient } from "@/lib/global-token-scheduler";
 import { getPostgresPool } from "@/lib/postgres";
 
 export const metadata = { title: "Token" };
@@ -34,11 +35,13 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
   const rawPage = tokenPageNumber(params.halaman);
   let client: PoolClient | undefined; let key: Buffer | undefined;
   let tests: AccessTokenTestOption[] = []; let current: AccessTokenRecord[] = [];
+  let autoRotate: GlobalTokenAutoRotateState = { enabled: false, durationMinutes: 15, updatedAt: null };
   let serverNow = ""; let keyStatus: TokenKeyStatus = "missing"; let page = 1; let pages = 1; let total = 0;
   let filter: { mode: "today" | "date" | "all"; date: string | null } = { mode: "all", date: null };
   try {
     try { key = await readConfiguredTokenKey(); }
     catch (error) { keyStatus = error instanceof ExamTokenKeyProblem ? error.status : "invalid"; }
+    await ensureGlobalTokenAutoRotated().catch(() => false);
     client = await getPostgresPool().connect();
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     const admin = await lockActiveAdminSession(client);
@@ -47,6 +50,7 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
     defaultTimeZone = await loadDefaultTimeZoneWithClient(client);
     if (!hasExplicitZone) zone = defaultTimeZone;
     if (key) keyStatus = await tokenKeyStatus(client, key);
+    autoRotate = await readGlobalAutoRotateWithClient(client);
     const clock = await client.query<{ now: Date }>("SELECT clock_timestamp() AS now");
     const now = clock.rows[0].now; filter = parseTokenDateFilter(params.tanggal, now, zone);
     const bounds = filter.date ? tokenDayBounds(filter.date, zone) : null;
@@ -55,7 +59,7 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
     total = Math.min(Number(count.rows[0].total), Number.MAX_SAFE_INTEGER);
     pages = Math.max(1, Math.ceil(total / TESTS_PER_PAGE)); page = Math.min(rawPage, pages);
     const testResult = await client.query<TestRow>(
-      `SELECT t.id::text AS id,t.xmin::text AS revision,t.name,p.name AS "periodName",sched.starts_at AS "startsAt",
+      `SELECT t.id::text AS id,t.xmin::text AS revision,t.name,COALESCE(t.tags,ARRAY[]::text[]) AS tags,p.name AS "periodName",sched.starts_at AS "startsAt",
          sched.ends_at AS "endsAt",sched.time_zone AS "timeZone",sched.label AS "scheduleLabel",sched.kind AS "scheduleKind",sched.published AS "schedulePublished"
        FROM exam_tests t JOIN exam_periods p ON p.id=t.period_id ${TOKEN_SCHEDULE_LATERAL}
        ORDER BY (sched.starts_at <= $1::timestamptz) DESC,sched.starts_at,t.id LIMIT $4 OFFSET $5`,
@@ -83,5 +87,5 @@ export default async function TokenPage({ searchParams }: { searchParams: Promis
     return <div className="mx-auto w-full max-w-[1500px] px-4 py-8 sm:px-7 lg:px-9"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-2 text-[29px] font-bold tracking-tight">Token</h1><Alert variant="destructive" role="alert" className="mt-6 max-w-2xl"><CircleAlert className="size-4" /><AlertTitle>Data token belum dapat dimuat</AlertTitle><AlertDescription>Pastikan PostgreSQL berjalan dan migrasi terbaru telah dijalankan dengan <code>npm run db:migrate</code>.</AlertDescription></Alert></div>;
   } finally { key?.fill(0); client?.release(); }
 
-  return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9"><div className="mb-6 flex items-start gap-3"><span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"><KeyRound className="size-5" /></span><div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Token</h1><p className="mt-2 text-[13px] leading-6 text-muted-foreground">Kelola token global dan token khusus tes dari satu halaman.</p></div></div><TokenManager tests={tests} current={current} filter={filter} zone={zone} defaultTimeZone={defaultTimeZone} page={page} pages={pages} total={total} keyStatus={keyStatus} keyMessage={tokenKeyMessage(keyStatus)} serverNow={serverNow} /></div>;
+  return <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9"><div className="mb-6 flex items-start gap-3"><span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"><KeyRound className="size-5" /></span><div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.15em] text-primary uppercase">Data tes</p><h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">Token</h1><p className="mt-2 text-[13px] leading-6 text-muted-foreground">Kelola token global dan token khusus tes dari satu halaman.</p></div></div><TokenManager tests={tests} current={current} autoRotate={autoRotate} filter={filter} zone={zone} defaultTimeZone={defaultTimeZone} page={page} pages={pages} total={total} keyStatus={keyStatus} keyMessage={tokenKeyMessage(keyStatus)} serverNow={serverNow} /></div>;
 }

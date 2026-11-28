@@ -10,8 +10,9 @@ import { validDataId } from "@/lib/class-validation.mjs";
 import { EXAM_TOKEN_ADVISORY_LOCK } from "@/lib/exam-token-constants.mjs";
 import { digestSixDigitToken, encryptSixDigitToken, generateSixDigitToken } from "@/lib/exam-token-crypto.mjs";
 import { ExamTokenKeyProblem, lockTokenKeyBinding, readConfiguredTokenKey } from "@/lib/exam-token-key";
-import type { IssueTokenResult, ResolveTokenIssueResult, RevokeTokenResult } from "@/lib/exam-token-types";
-import { EXAM_TOKEN_FORM_VERSION, validTokenOperationId, validateExamTokenCreation } from "@/lib/exam-token-validation.mjs";
+import type { IssueTokenResult, ResolveTokenIssueResult, RevokeTokenResult, UpdateAutoRotateResult } from "@/lib/exam-token-types";
+import { EXAM_TOKEN_FORM_VERSION, validTokenOperationId, validateExamTokenCreation, validateGlobalAutoRotate } from "@/lib/exam-token-validation.mjs";
+import { readGlobalAutoRotateWithClient, rotateGlobalTokenWithClient } from "@/lib/global-token-scheduler";
 import { getPostgresPool } from "@/lib/postgres";
 import { validTopicRevision } from "@/lib/topic-validation.mjs";
 
@@ -122,6 +123,7 @@ export async function issueExamToken(formData: FormData): Promise<IssueTokenResu
     return { ok: false, error: "Hasil pembuatan token belum dapat dipastikan. Periksa dan amankan permintaan sebelum membuat token lain.", uncertain: true };
   } finally { key?.fill(0); client?.release(); }
   revalidatePath("/data-tes/token");
+  revalidatePath("/");
   return { ok: true, ...issued, scope: draft.scope };
 }
 
@@ -186,6 +188,12 @@ export async function revokeExamToken(formData: FormData): Promise<RevokeTokenRe
       throw new TokenProblem("Token sudah berubah atau tidak aktif. Muat ulang daftar.", true);
     }
     await client.query("UPDATE exam_access_tokens SET revoked_at=clock_timestamp(), revoked_reason='manual', revoked_by_admin_id=$2::bigint WHERE id=$1::bigint", [id, admin.id]);
+    if (current.scope === "global") {
+      await client.query(
+        "UPDATE global_token_auto_rotate SET enabled=false, updated_by_admin_id=$1::bigint, updated_at=clock_timestamp() WHERE id=1 AND enabled=true",
+        [admin.id],
+      );
+    }
     const active = await lockActiveAdminSession(client);
     if (!active || active.id !== admin.id) throw new TokenProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
     await client.query("COMMIT");
@@ -195,5 +203,72 @@ export async function revokeExamToken(formData: FormData): Promise<RevokeTokenRe
     return { ok: false, error: "Hasil pencabutan belum dapat dipastikan. Muat ulang status sebelum mencoba lagi.", reload: true };
   } finally { client?.release(); }
   revalidatePath("/data-tes/token");
+  revalidatePath("/");
   return { ok: true, message: "Token berhasil dicabut." };
+}
+
+export async function updateGlobalTokenAutoRotate(formData: FormData): Promise<UpdateAutoRotateResult> {
+  const { allowed } = await requireAdminAccess("tokens.manage");
+  if (!allowed) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+  if (["enabled", "durationMinutes"].some((field) => formData.getAll(field).length !== 1)) {
+    return { ok: false, error: "Data pengaturan auto-generate tidak valid. Muat ulang halaman.", reload: true };
+  }
+  const parsed = validateGlobalAutoRotate({
+    enabled: formData.get("enabled"),
+    durationMinutes: formData.get("durationMinutes"),
+  });
+  if (!parsed.ok) return parsed;
+  const { enabled, durationMinutes } = parsed.value;
+  let client: PoolClient | undefined;
+  let key: Buffer | undefined;
+  let rotated = false;
+  let state: { enabled: boolean; durationMinutes: number; updatedAt: string | null } = {
+    enabled,
+    durationMinutes,
+    updatedAt: null,
+  };
+  try {
+    if (enabled) key = await readConfiguredTokenKey();
+    client = await getPostgresPool().connect();
+    await client.query("BEGIN");
+    const admin = await lockActiveAdminSession(client);
+    if (!admin) throw new TokenProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    if (!adminHasPermission(admin, "tokens.manage")) throw new TokenProblem(PERMISSION_DENIED_MESSAGE);
+    await client.query("SELECT pg_advisory_xact_lock($1)", [EXAM_TOKEN_ADVISORY_LOCK]);
+    if (key) await lockTokenKeyBinding(client, key);
+    await client.query(
+      `INSERT INTO global_token_auto_rotate (id, enabled, duration_minutes, updated_by_admin_id, updated_at)
+       VALUES (1, $1, $2, $3::bigint, clock_timestamp())
+       ON CONFLICT (id) DO UPDATE
+       SET enabled = EXCLUDED.enabled,
+           duration_minutes = EXCLUDED.duration_minutes,
+           updated_by_admin_id = EXCLUDED.updated_by_admin_id,
+           updated_at = EXCLUDED.updated_at`,
+      [enabled, durationMinutes, admin.id],
+    );
+    if (enabled) {
+      rotated = await rotateGlobalTokenWithClient(client, { key });
+    }
+    state = await readGlobalAutoRotateWithClient(client);
+    const active = await lockActiveAdminSession(client);
+    if (!active || active.id !== admin.id) throw new TokenProblem("Sesi admin sudah berakhir. Masuk kembali sebelum melanjutkan.");
+    await client.query("COMMIT");
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    if (error instanceof TokenProblem) return { ok: false, error: error.message, reload: error.reload };
+    if (error instanceof ExamTokenKeyProblem) return { ok: false, error: error.message, reload: true };
+    return { ok: false, error: "Pengaturan auto-generate token global belum dapat disimpan. Muat ulang dan coba lagi.", reload: true };
+  } finally {
+    key?.fill(0);
+    client?.release();
+  }
+  revalidatePath("/data-tes/token");
+  revalidatePath("/");
+  const durationLabel = durationMinutes >= 60 ? `${durationMinutes / 60} jam` : `${durationMinutes} menit`;
+  const message = !enabled
+    ? "Auto-generate token global dimatikan."
+    : rotated
+      ? `Auto-generate aktif (${durationLabel}) dan token global baru langsung dibuat.`
+      : `Auto-generate aktif: token baru akan dibuat otomatis setiap ${durationLabel} setelah token saat ini berakhir.`;
+  return { ok: true, state, rotated, message };
 }

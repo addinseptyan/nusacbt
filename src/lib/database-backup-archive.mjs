@@ -53,6 +53,7 @@ export const BACKUP_DOMAIN_TABLES = Object.freeze([
   "exam_session_groups",
   "exam_start_token_attempts",
   "exam_test_questions",
+  "global_token_auto_rotate",
   "participant_password_audit",
   "participant_passwords",
   "participant_sessions",

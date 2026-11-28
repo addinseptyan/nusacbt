@@ -20,6 +20,7 @@ import {
 import Link from "next/link";
 
 import { DashboardLiveTokens } from "@/components/dashboard-live-tokens";
+import { PreviewSessionSync } from "@/components/preview-session-sync";
 import { ProjectDialog } from "@/components/project-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { adminHasAnyPermission, adminHasPermission } from "@/lib/admin-permissions.mjs";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 import { loadDashboardLiveTokens, loadDashboardSummary, type DashboardLiveTokenData, type DashboardSummary } from "@/lib/dashboard-data";
+import { getPreviewAdminTokenForClient, isPreviewIframeAuthEnabled } from "@/lib/preview-session";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +41,7 @@ export default async function DashboardPage() {
   const canManageAppSettings = adminHasPermission(admin, "app_settings.manage");
   const canManageTokens = adminHasPermission(admin, "tokens.manage");
   const canViewMonitoring = adminHasAnyPermission(admin, ["monitoring.view", "grading_overrides.manage"]);
-  const [branding, summaryResult, liveTokenResult] = await Promise.all([
+  const [branding, summaryResult, liveTokenResult, previewAdminToken] = await Promise.all([
     getPublicAppSettingsSafe(),
     loadDashboardSummary({ canViewMonitoring }).then(
       (data) => ({ ok: true as const, data }),
@@ -51,6 +53,7 @@ export default async function DashboardPage() {
           () => ({ ok: false as const }),
         )
       : Promise.resolve(null),
+    isPreviewIframeAuthEnabled() ? getPreviewAdminTokenForClient() : Promise.resolve(null),
   ]);
 
   const data: DashboardSummary | null = summaryResult.ok ? summaryResult.data : null;
@@ -142,6 +145,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1500px] px-4 pb-12 pt-7 sm:px-7 lg:px-9 lg:pt-9">
+      {previewAdminToken && <PreviewSessionSync adminAction={{ type: "set", token: previewAdminToken }} />}
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="mb-2.5 flex items-center gap-2 text-[10px] font-bold tracking-[0.15em] text-primary uppercase">
@@ -227,6 +231,7 @@ export default async function DashboardPage() {
           tokens={liveTokenData.tokens}
           serverNow={liveTokenData.serverNow}
           keyStatus={liveTokenData.keyStatus}
+          autoRotate={liveTokenData.autoRotate}
           defaultTimeZone={data?.defaultTimeZone ?? branding.defaultTimeZone ?? "WIB"}
         />
       )}
@@ -281,6 +286,11 @@ export default async function DashboardPage() {
                           <Badge variant={row.live ? "default" : "outline"} className="text-[10px]">
                             {row.live ? "Berlangsung" : row.published ? "Dirilis" : "Draf"}
                           </Badge>
+                          {row.testTags.map((tag) => (
+                            <Badge key={tag} variant="secondary" className="rounded-full text-[10px] font-medium">
+                              {tag}
+                            </Badge>
+                          ))}
                         </div>
                         <p className="mt-0.5 text-[11px] text-muted-foreground">
                           {row.kind === "regular" ? "Reguler" : row.kind === "makeup" ? "Susulan" : "Remidi"} · {row.runLabel} · {row.periodName}
@@ -412,6 +422,11 @@ export default async function DashboardPage() {
                     <Badge variant="secondary" className="text-[10px]">
                       {item.kind === "regular" ? "Reguler" : item.kind === "makeup" ? "Susulan" : "Remidi"}
                     </Badge>
+                    {item.testTags.map((tag) => (
+                      <Badge key={tag} variant="outline" className="rounded-full text-[10px] font-medium">
+                        {tag}
+                      </Badge>
+                    ))}
                   </div>
                   <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{item.runLabel}</span>

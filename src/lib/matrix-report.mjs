@@ -10,7 +10,9 @@ export function buildResultMatrix(attempts, merge) {
     // menjadi label; deteksi bentrok tetap lintas snapshot kelas yang cocok.
     prior.name = a.student; prior.nisn = a.nisn; prior.year = a.year; prior.className = a.className;
     const cell = prior.cells.get(a.testId) ?? []; cell.push(a); prior.cells.set(a.testId,cell); students.set(studentKey,prior);
-    tests.set(a.testId,{ id:a.testId, name:a.testName, period:a.period, year:a.year });
+    const existingTest = tests.get(a.testId);
+    const tags = Array.isArray(a.testTags) ? a.testTags : [];
+    tests.set(a.testId,{ id:a.testId, name:a.testName, period:a.period, year:a.year, tags:existingTest?.tags?.length ? existingTest.tags : tags });
   }
   const columns = [...tests.values()].sort((a,b) => a.name.localeCompare(b.name,'id') || a.period.localeCompare(b.period,'id') || a.id.localeCompare(b.id));
   const rows = [...students.values()].map((s) => {

@@ -3,11 +3,13 @@ import "@fontsource-variable/inter";
 import "./globals.css";
 
 import { AppShell } from "@/components/app-shell";
+import { PreviewSessionSync } from "@/components/preview-session-sync";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getAdminSessionSafe } from "@/lib/admin-auth";
 import { getAdminAppModeSafe, getPublicAppSettingsSafe } from "@/lib/app-settings-service";
+import { getPreviewAdminTokenForClient, isPreviewIframeAuthEnabled } from "@/lib/preview-session";
 
 export const dynamic = "force-dynamic";
 
@@ -43,15 +45,24 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const previewAuth = isPreviewIframeAuthEnabled();
   const [branding, adminUser] = await Promise.all([
     getPublicAppSettingsSafe(),
     getAdminSessionSafe(),
   ]);
-  const appMode = adminUser ? await getAdminAppModeSafe() : "production";
+  const [appMode, previewAdminToken] = await Promise.all([
+    adminUser ? getAdminAppModeSafe() : Promise.resolve("production" as const),
+    previewAuth && adminUser ? getPreviewAdminTokenForClient() : Promise.resolve(null),
+  ]);
 
   return (
     <html lang="id" data-palette={branding.colorPalette} suppressHydrationWarning>
       <body>
+        {previewAuth && (
+          <PreviewSessionSync
+            adminAction={previewAdminToken ? { type: "set", token: previewAdminToken } : undefined}
+          />
+        )}
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           <TooltipProvider>
             <AppShell branding={branding} adminUser={adminUser} appMode={appMode}>

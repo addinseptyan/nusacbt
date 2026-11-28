@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Text;
 using System.Text.Json;
 
@@ -14,38 +16,64 @@ internal sealed class MainForm : Form
 {
     private enum ServerRunState { Stopped, Starting, Running }
 
+    private sealed class CrispQrPictureBox : PictureBox
+    {
+        protected override void OnPaint(PaintEventArgs pe)
+        {
+            pe.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+            pe.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
+            base.OnPaint(pe);
+        }
+    }
+
     private readonly JobObject _job = new();
     private readonly NotifyIcon _trayIcon = new();
-    private readonly Label _versionBadge = new() { AutoSize = true, BackColor = Color.FromArgb(226, 232, 240), Padding = new Padding(8, 4, 8, 4), Margin = new Padding(8, 6, 4, 4) };
-    private readonly Label _stateBadge = new() { AutoSize = true, Padding = new Padding(10, 4, 10, 4), ForeColor = Color.White, Margin = new Padding(4, 6, 4, 4) };
+    private readonly ToolTip _toolTip = new();
+    private readonly Label _versionBadge = new() { AutoSize = true, BackColor = Color.FromArgb(226, 232, 240), Padding = new Padding(8, 3, 8, 3), Margin = new Padding(8, 5, 4, 3) };
+    private readonly Label _stateBadge = new() { AutoSize = true, Padding = new Padding(10, 3, 10, 3), ForeColor = Color.White, Margin = new Padding(4, 5, 4, 3) };
 
-    private readonly Label _depRuntimeLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Memeriksa runtime..." };
-    private readonly Label _depPostgresLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Memeriksa service PostgreSQL..." };
-    private readonly Label _depDbLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Menunggu pemeriksaan..." };
-    private readonly Label _depConfigLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Menunggu pemeriksaan..." };
-    private readonly Label _depSchemaLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Menunggu pemeriksaan..." };
-    private readonly Label _depPortLbl = new() { AutoSize = true, MaximumSize = new Size(460, 0), Text = "Memeriksa port..." };
+    private readonly Label _depRuntimeLbl = new() { AutoSize = true, MaximumSize = new Size(520, 0), Text = "Memeriksa runtime..." };
+    private readonly Label _depPostgresLbl = new() { AutoSize = true, MaximumSize = new Size(520, 0), Text = "Memeriksa service PostgreSQL..." };
+    private readonly Label _depDbLbl = new() { AutoSize = true, MaximumSize = new Size(520, 0), Text = "Menunggu pemeriksaan..." };
+    private readonly Label _depConfigLbl = new() { AutoSize = true, MaximumSize = new Size(520, 0), Text = "Menunggu pemeriksaan..." };
+    private readonly Label _depSchemaLbl = new() { AutoSize = true, MaximumSize = new Size(520, 0), Text = "Menunggu pemeriksaan..." };
+    private readonly Label _depPortLbl = new() { AutoSize = true, MaximumSize = new Size(520, 0), Text = "Memeriksa port..." };
 
     private readonly Button _startPgBtn = new() { Text = "Nyalakan PostgreSQL", AutoSize = true, Enabled = false };
     private readonly Button _downloadPgBtn = new() { Text = "Unduh PostgreSQL", AutoSize = true, Visible = false };
     private readonly Button _setupBtn = new() { Text = "Setup Awal / DB", AutoSize = true };
     private readonly Button _migrateBtn = new() { Text = "Jalankan Migrasi", AutoSize = true, Enabled = false };
-    private readonly NumericUpDown _portInput = new() { Minimum = 80, Maximum = 65535, Value = 3000, Width = 80 };
+    private readonly NumericUpDown _portInput = new() { Minimum = 80, Maximum = 65535, Value = 3000, Width = 78 };
     private readonly Button _firewallBtn = new() { Text = "Izinkan Port Firewall", AutoSize = true };
 
-    private readonly Panel _guidancePanel = new() { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.FromArgb(239, 246, 255), Padding = new Padding(12, 8, 12, 8), Margin = new Padding(0, 6, 0, 4) };
-    private readonly Label _guidanceLabel = new() { AutoSize = true, MaximumSize = new Size(920, 0), ForeColor = Color.FromArgb(30, 58, 138), Font = new Font(Control.DefaultFont, FontStyle.Bold), Text = "Memeriksa kesiapan dependensi server..." };
+    private readonly Panel _guidancePanel = new() { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.FromArgb(239, 246, 255), Padding = new Padding(10, 6, 10, 6), Margin = new Padding(0, 4, 0, 3) };
+    private readonly Label _guidanceLabel = new() { AutoSize = true, MaximumSize = new Size(980, 0), ForeColor = Color.FromArgb(30, 58, 138), Font = new Font(Control.DefaultFont, FontStyle.Bold), Text = "Memeriksa kesiapan dependensi server..." };
 
-    private readonly Button _startBtn = new() { Text = "Mulai Server", AutoSize = true, Padding = new Padding(14, 7, 14, 7) };
-    private readonly Button _stopBtn = new() { Text = "Hentikan Server", AutoSize = true, Enabled = false, Padding = new Padding(14, 7, 14, 7) };
-    private readonly Button _openDashBtn = new() { Text = "Buka Dashboard Admin", AutoSize = true, Enabled = false, Padding = new Padding(10, 7, 10, 7) };
-    private readonly Button _copyStudentUrlBtn = new() { Text = "Salin Link Peserta", AutoSize = true, Enabled = false, Padding = new Padding(10, 7, 10, 7) };
-    private readonly Button _refreshBtn = new() { Text = "Refresh Status", AutoSize = true, Padding = new Padding(10, 7, 10, 7) };
-    private readonly Button _checkUpdateBtn = new() { Text = "Cek Update", AutoSize = true, Padding = new Padding(10, 6, 10, 6) };
-    private readonly Button _offlineZipBtn = new() { Text = "Update dari ZIP", AutoSize = true, Padding = new Padding(10, 6, 10, 6) };
-    private readonly CheckBox _autoOpenCheck = new() { Text = "Buka browser otomatis saat server siap", Checked = true, AutoSize = true, Margin = new Padding(8, 8, 4, 4) };
+    private readonly Button _startBtn = new() { Text = "Mulai Server", AutoSize = true, Padding = new Padding(12, 6, 12, 6) };
+    private readonly Button _stopBtn = new() { Text = "Hentikan Server", AutoSize = true, Enabled = false, Padding = new Padding(12, 6, 12, 6) };
+    private readonly Button _openDashBtn = new() { Text = "Buka Dashboard Admin", AutoSize = true, Enabled = false, Padding = new Padding(10, 6, 10, 6) };
+    private readonly Button _copyStudentUrlBtn = new() { Text = "Salin Link Peserta", AutoSize = true, Padding = new Padding(10, 6, 10, 6) };
+    private readonly Button _refreshBtn = new() { Text = "Refresh Status", AutoSize = true, Padding = new Padding(10, 6, 10, 6) };
+    private readonly Button _checkUpdateBtn = new() { Text = "Cek Update", AutoSize = true, Padding = new Padding(10, 5, 10, 5) };
+    private readonly Button _offlineZipBtn = new() { Text = "Update dari ZIP", AutoSize = true, Padding = new Padding(10, 5, 10, 5) };
+    private readonly CheckBox _autoOpenCheck = new() { Text = "Buka browser otomatis saat server siap", Checked = true, AutoSize = true, Margin = new Padding(8, 7, 4, 4) };
 
-    private readonly Label _urlInfoLabel = new() { AutoSize = true, MaximumSize = new Size(920, 0), ForeColor = Color.FromArgb(30, 64, 175) };
+    private readonly Label _urlInfoLabel = new() { AutoSize = true, MaximumSize = new Size(800, 0), ForeColor = Color.FromArgb(51, 65, 85) };
+    private readonly ComboBox _lanIpCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 175, Margin = new Padding(4, 2, 8, 2) };
+    private readonly Label _studentUrlLabel = new() { AutoSize = true, Font = new Font(Control.DefaultFont, FontStyle.Bold), ForeColor = Color.FromArgb(30, 64, 175), Margin = new Padding(0, 5, 0, 2) };
+    private readonly Label _qrCaptionLabel = new() { AutoSize = true, MaximumSize = new Size(800, 0), ForeColor = Color.FromArgb(71, 85, 105), Margin = new Padding(0, 3, 0, 4) };
+    private readonly Button _zoomQrBtn = new() { Text = "Perbesar QR", AutoSize = true, Padding = new Padding(8, 3, 8, 3) };
+    private readonly Button _saveQrBtn = new() { Text = "Simpan QR (.png)", AutoSize = true, Padding = new Padding(8, 3, 8, 3) };
+    private readonly CrispQrPictureBox _qrPictureBox = new()
+    {
+        Size = new Size(116, 116),
+        SizeMode = PictureBoxSizeMode.Zoom,
+        BackColor = Color.White,
+        BorderStyle = BorderStyle.FixedSingle,
+        Cursor = Cursors.Hand,
+        Margin = new Padding(10, 0, 0, 0),
+    };
+
     private readonly TextBox _logBox = new()
     {
         Multiline = true,
@@ -64,6 +92,8 @@ internal sealed class MainForm : Form
     private ServerRunState _runState = ServerRunState.Stopped;
     private StreamWriter? _logWriter;
     private bool _forceExit;
+    private bool _updatingIpCombo;
+    private string _currentStudentUrl = "http://localhost:3000/peserta/login";
 
     public MainForm()
     {
@@ -72,27 +102,46 @@ internal sealed class MainForm : Form
         Text = $"NusaCBT Server Launcher ({VersionUtils.CurrentTag})";
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(980, 760);
-        MinimumSize = new Size(880, 680);
+        ClientSize = new Size(1060, 660);
+        MinimumSize = new Size(880, 560);
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
         BuildUi();
         ConfigureTray();
         UpdateRunStateUi(ServerRunState.Stopped);
+        UpdateNetworkUrlInfo();
 
+        Load += (_, _) => ClampToWorkingArea();
         Shown += async (_, _) => await RefreshPreflightAsync();
         FormClosing += OnMainFormClosing;
         FormClosed += (_, _) =>
         {
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
+            _toolTip.Dispose();
+            _qrPictureBox.Image?.Dispose();
             _job.Dispose();
         };
     }
 
+    private void ClampToWorkingArea()
+    {
+        var area = Screen.FromControl(this).WorkingArea;
+        var targetW = Math.Min(Width, Math.Max(640, area.Width - 16));
+        var targetH = Math.Min(Height, Math.Max(480, area.Height - 16));
+        if (MinimumSize.Width > targetW || MinimumSize.Height > targetH)
+        {
+            MinimumSize = new Size(Math.Min(MinimumSize.Width, targetW), Math.Min(MinimumSize.Height, targetH));
+        }
+        Size = new Size(targetW, targetH);
+        Location = new Point(
+            area.Left + Math.Max(0, (area.Width - Width) / 2),
+            area.Top + Math.Max(0, (area.Height - Height) / 2));
+    }
+
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(14), ColumnCount = 1, RowCount = 6, AutoScroll = true };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12, 10, 12, 10), ColumnCount = 1, RowCount = 6, AutoScroll = true };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -101,12 +150,12 @@ internal sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         // 1. Header (FlowLayout DPI-safe tanpa koordinat piksel statis)
-        var header = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Margin = new Padding(0, 0, 0, 6) };
+        var header = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Margin = new Padding(0, 0, 0, 4) };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         var headerLeft = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
-        var titleLbl = new Label { Text = "NusaCBT Server PC", Font = new Font(Font.FontFamily, 14F, FontStyle.Bold), AutoSize = true, Margin = new Padding(0, 3, 4, 3) };
+        var titleLbl = new Label { Text = "NusaCBT Server PC", Font = new Font(Font.FontFamily, 13.5F, FontStyle.Bold), AutoSize = true, Margin = new Padding(0, 2, 4, 2) };
         _versionBadge.Text = VersionUtils.CurrentTag;
         headerLeft.Controls.Add(titleLbl);
         headerLeft.Controls.Add(_versionBadge);
@@ -122,14 +171,14 @@ internal sealed class MainForm : Form
         header.Controls.Add(headerRight, 1, 0);
         root.Controls.Add(header, 0, 0);
 
-        // 2. Checklist Dependensi (AutoSize=true agar semua 6 baris tampil penuh tanpa terpotong)
+        // 2. Checklist Dependensi (AutoSize=true & WrapContents=false pada aksi agar Izinkan Port Firewall selalu tampil penuh)
         var depBox = new GroupBox
         {
             Text = "Pemeriksaan Dependensi & Kesiapan Server",
             Dock = DockStyle.Fill,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new Padding(12, 8, 12, 10),
+            Padding = new Padding(10, 6, 10, 8),
         };
         var depTable = new TableLayoutPanel
         {
@@ -138,13 +187,13 @@ internal sealed class MainForm : Form
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
-        depTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
+        depTable.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         depTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         depTable.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         AddDepRow(depTable, "1. Runtime Node & App", _depRuntimeLbl, new Label { AutoSize = true });
 
-        var pgActionPanel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
+        var pgActionPanel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
         _startPgBtn.Click += async (_, _) => await StartPostgresClickedAsync();
         _downloadPgBtn.Click += (_, _) => Process.Start(new ProcessStartInfo("https://www.enterprisedb.com/downloads/postgres-postgresql-downloads") { UseShellExecute = true });
         pgActionPanel.Controls.Add(_startPgBtn);
@@ -159,7 +208,7 @@ internal sealed class MainForm : Form
         _migrateBtn.Click += async (_, _) => await RunMigrateClickedAsync();
         AddDepRow(depTable, "5. Skema DB & Admin", _depSchemaLbl, _migrateBtn);
 
-        var portPanel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
+        var portPanel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
         _portInput.Value = _settings.Port;
         _portInput.ValueChanged += (_, _) =>
         {
@@ -173,7 +222,7 @@ internal sealed class MainForm : Form
             AppendLog(msg);
             MessageBox.Show(this, msg, "Windows Firewall", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         };
-        portPanel.Controls.Add(new Label { Text = "Port:", AutoSize = true, Padding = new Padding(0, 6, 4, 0) });
+        portPanel.Controls.Add(new Label { Text = "Port:", AutoSize = true, Padding = new Padding(0, 5, 4, 0) });
         portPanel.Controls.Add(_portInput);
         portPanel.Controls.Add(_firewallBtn);
         AddDepRow(depTable, "6. Port & Firewall LAN", _depPortLbl, portPanel);
@@ -187,7 +236,7 @@ internal sealed class MainForm : Form
         root.Controls.Add(_guidancePanel, 0, 2);
 
         // 4. Kontrol Server
-        var ctrlPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(0, 4, 0, 4) };
+        var ctrlPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(0, 2, 0, 2) };
         _startBtn.Click += async (_, _) => await StartServerAsync();
         _stopBtn.Click += async (_, _) => await StopServerWithGuardAsync();
         _openDashBtn.Click += (_, _) => OpenUrl($"http://localhost:{(int)_portInput.Value}/");
@@ -204,22 +253,71 @@ internal sealed class MainForm : Form
         ctrlPanel.Controls.Add(_autoOpenCheck);
         root.Controls.Add(ctrlPanel, 0, 3);
 
-        // 5. Info URL LAN
+        // 5. Info URL LAN & QR Code Akses Peserta
         var urlBox = new GroupBox
         {
-            Text = "Alamat Akses Server (Lokal & Jaringan Sekolah)",
+            Text = "Alamat Akses Server & QR Code Link Peserta",
             Dock = DockStyle.Fill,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new Padding(12, 8, 12, 10),
+            Padding = new Padding(10, 6, 10, 8),
         };
-        _urlInfoLabel.Dock = DockStyle.Top;
-        urlBox.Controls.Add(_urlInfoLabel);
+        var urlGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        };
+        urlGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        urlGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        var urlLeft = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = Padding.Empty,
+        };
+        urlLeft.Controls.Add(_urlInfoLabel, 0, 0);
+
+        var studentRow = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 4, 0, 0) };
+        _lanIpCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (!_updatingIpCombo) UpdateStudentUrlAndQr();
+        };
+        studentRow.Controls.Add(new Label { Text = "IP LAN / Wi-Fi:", AutoSize = true, Padding = new Padding(0, 5, 4, 0) });
+        studentRow.Controls.Add(_lanIpCombo);
+        studentRow.Controls.Add(_studentUrlLabel);
+        urlLeft.Controls.Add(studentRow, 0, 1);
+
+        urlLeft.Controls.Add(_qrCaptionLabel, 0, 2);
+
+        var qrActions = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
+        _zoomQrBtn.Click += (_, _) => ShowLargeQrDialog();
+        _saveQrBtn.Click += (_, _) => SaveQrPng();
+        qrActions.Controls.Add(_zoomQrBtn);
+        qrActions.Controls.Add(_saveQrBtn);
+        urlLeft.Controls.Add(qrActions, 0, 3);
+
+        _qrPictureBox.Click += (_, _) => ShowLargeQrDialog();
+        _toolTip.SetToolTip(_qrPictureBox, "Klik untuk memperbesar QR Code link login peserta");
+
+        urlGrid.Controls.Add(urlLeft, 0, 0);
+        urlGrid.Controls.Add(_qrPictureBox, 1, 0);
+        urlBox.Controls.Add(urlGrid);
         root.Controls.Add(urlBox, 0, 4);
 
         // 6. Log Server
-        var logBox = new GroupBox { Text = "Log Aktivitas Server", Dock = DockStyle.Fill, Padding = new Padding(10) };
-        var logToolbar = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true };
+        var logBox = new GroupBox
+        {
+            Text = "Log Aktivitas Server",
+            Dock = DockStyle.Fill,
+            MinimumSize = new Size(0, 115),
+            Padding = new Padding(8, 6, 8, 8),
+        };
+        var logToolbar = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, WrapContents = false };
         var openDataBtn = new Button { Text = "Buka Folder Data", AutoSize = true };
         openDataBtn.Click += (_, _) => { Directory.CreateDirectory(AppPaths.DataDir); Process.Start(new ProcessStartInfo("explorer.exe", AppPaths.DataDir) { UseShellExecute = true }); };
         var openLogsBtn = new Button { Text = "Buka Folder Log", AutoSize = true };
@@ -241,8 +339,8 @@ internal sealed class MainForm : Form
     {
         var row = table.RowCount++;
         table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        table.Controls.Add(new Label { Text = title, AutoSize = true, Font = new Font(Control.DefaultFont, FontStyle.Bold), Padding = new Padding(0, 6, 8, 6) }, 0, row);
-        statusLabel.Padding = new Padding(0, 6, 8, 6);
+        table.Controls.Add(new Label { Text = title, AutoSize = true, Font = new Font(Control.DefaultFont, FontStyle.Bold), Padding = new Padding(0, 4, 10, 4) }, 0, row);
+        statusLabel.Padding = new Padding(0, 4, 8, 4);
         table.Controls.Add(statusLabel, 1, row);
         table.Controls.Add(actionControl, 2, row);
     }
@@ -477,20 +575,56 @@ internal sealed class MainForm : Form
     {
         var port = (int)_portInput.Value;
         var lanIps = WindowsSystemHelper.GetLanIPv4Addresses();
-        var sb = new StringBuilder();
-        sb.Append($"Dashboard Admin (PC ini): http://localhost:{port}/   |   Data: {AppPaths.DataDir}");
-        if (lanIps.Count > 0)
+        _urlInfoLabel.Text = $"Dashboard Admin (PC ini): http://localhost:{port}/   |   Data: {AppPaths.DataDir}";
+
+        var prevSelected = _lanIpCombo.SelectedItem as string;
+        List<string> items = lanIps.Count > 0 ? lanIps : ["localhost"];
+
+        _updatingIpCombo = true;
+        try
         {
-            sb.AppendLine();
-            sb.Append("Akses Peserta LAN: ");
-            sb.Append(string.Join("   |   ", lanIps.Select(ip => $"http://{ip}:{port}/peserta/login")));
+            _lanIpCombo.BeginUpdate();
+            _lanIpCombo.Items.Clear();
+            foreach (var ip in items) _lanIpCombo.Items.Add(ip);
+            var idx = prevSelected is not null ? _lanIpCombo.Items.IndexOf(prevSelected) : -1;
+            _lanIpCombo.SelectedIndex = idx >= 0 ? idx : 0;
         }
-        else
+        finally
         {
-            sb.AppendLine();
-            sb.Append("Akses Peserta LAN: Belum terdeteksi adaptor jaringan LAN/Wi-Fi aktif.");
+            _lanIpCombo.EndUpdate();
+            _updatingIpCombo = false;
         }
-        _urlInfoLabel.Text = sb.ToString();
+
+        UpdateStudentUrlAndQr(hasLanAdapter: lanIps.Count > 0);
+    }
+
+    private void UpdateStudentUrlAndQr(bool? hasLanAdapter = null)
+    {
+        var port = (int)_portInput.Value;
+        var selectedHost = _lanIpCombo.SelectedItem as string;
+        if (string.IsNullOrWhiteSpace(selectedHost))
+        {
+            selectedHost = WindowsSystemHelper.GetLanIPv4Addresses().FirstOrDefault() ?? "localhost";
+        }
+
+        var hasLan = hasLanAdapter ?? !string.Equals(selectedHost, "localhost", StringComparison.OrdinalIgnoreCase);
+        _currentStudentUrl = $"http://{selectedHost}:{port}/peserta/login";
+        _studentUrlLabel.Text = _currentStudentUrl;
+        _qrCaptionLabel.Text = hasLan
+            ? "Scan QR Code di samping dengan kamera HP/tablet peserta untuk langsung membuka halaman login ujian."
+            : "Belum terdeteksi adaptor LAN/Wi-Fi aktif (sementara memakai localhost). Hubungkan ke jaringan agar dapat di-scan peserta.";
+
+        try
+        {
+            var nextBmp = QrCodeGenerator.RenderBitmap(_currentStudentUrl, 240);
+            var prevImg = _qrPictureBox.Image;
+            _qrPictureBox.Image = nextBmp;
+            prevImg?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Gagal membuat QR Code link peserta: {ex.Message}");
+        }
     }
 
     private async Task StartPostgresClickedAsync()
@@ -702,7 +836,7 @@ internal sealed class MainForm : Form
         _setupBtn.Enabled = state == ServerRunState.Stopped;
         _stopBtn.Enabled = state != ServerRunState.Stopped;
         _openDashBtn.Enabled = state == ServerRunState.Running;
-        _copyStudentUrlBtn.Enabled = state != ServerRunState.Stopped;
+        _copyStudentUrlBtn.Enabled = true;
 
         switch (state)
         {
@@ -725,12 +859,108 @@ internal sealed class MainForm : Form
 
     private void CopyStudentUrl()
     {
-        var port = (int)_portInput.Value;
-        var ip = WindowsSystemHelper.GetLanIPv4Addresses().FirstOrDefault() ?? "localhost";
-        var url = $"http://{ip}:{port}/peserta/login";
+        var url = _currentStudentUrl;
         Clipboard.SetText(url);
         AppendLog($"Link ujian peserta disalin: {url}");
         MessageBox.Show(this, $"Link login peserta disalin ke clipboard:\n{url}", "Link Disalin", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void ShowLargeQrDialog()
+    {
+        using var bmp = QrCodeGenerator.RenderBitmap(_currentStudentUrl, 340);
+        using var dlg = new Form
+        {
+            Text = "QR Code Link Peserta — NusaCBT",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            AutoScaleMode = AutoScaleMode.Dpi,
+            ClientSize = new Size(410, 480),
+            Icon = Icon,
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            ColumnCount = 1,
+            RowCount = 4,
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var heading = new Label
+        {
+            Text = "Scan QR Code untuk membuka halaman login peserta",
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font(Font.FontFamily, 10F, FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 8),
+        };
+        var qrBox = new CrispQrPictureBox
+        {
+            Image = bmp,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+        };
+        var urlText = new TextBox
+        {
+            Text = _currentStudentUrl,
+            ReadOnly = true,
+            BorderStyle = BorderStyle.None,
+            BackColor = dlg.BackColor,
+            TextAlign = HorizontalAlignment.Center,
+            Dock = DockStyle.Top,
+            Font = new Font(Font.FontFamily, 10F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(30, 64, 175),
+            Margin = new Padding(0, 10, 0, 10),
+        };
+        var btnBar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            WrapContents = false,
+        };
+        var closeBtn = new Button { Text = "Tutup", AutoSize = true, DialogResult = DialogResult.OK, Padding = new Padding(12, 5, 12, 5) };
+        var saveBtn = new Button { Text = "Simpan PNG...", AutoSize = true, Padding = new Padding(10, 5, 10, 5) };
+        saveBtn.Click += (_, _) => SaveQrPng();
+        var copyBtn = new Button { Text = "Salin Link", AutoSize = true, Padding = new Padding(10, 5, 10, 5) };
+        copyBtn.Click += (_, _) => CopyStudentUrl();
+        btnBar.Controls.Add(closeBtn);
+        btnBar.Controls.Add(saveBtn);
+        btnBar.Controls.Add(copyBtn);
+
+        layout.Controls.Add(heading, 0, 0);
+        layout.Controls.Add(qrBox, 0, 1);
+        layout.Controls.Add(urlText, 0, 2);
+        layout.Controls.Add(btnBar, 0, 3);
+        dlg.Controls.Add(layout);
+        dlg.AcceptButton = closeBtn;
+        dlg.ShowDialog(this);
+    }
+
+    private void SaveQrPng()
+    {
+        var port = (int)_portInput.Value;
+        using var sfd = new SaveFileDialog
+        {
+            Title = "Simpan QR Code Link Peserta",
+            Filter = "PNG Image (*.png)|*.png",
+            FileName = $"qr-peserta-nusacbt-{port}.png",
+        };
+        if (sfd.ShowDialog(this) != DialogResult.OK) return;
+
+        using var bmp = QrCodeGenerator.RenderBitmap(_currentStudentUrl, 520);
+        bmp.Save(sfd.FileName, ImageFormat.Png);
+        AppendLog($"QR Code link peserta disimpan ke {sfd.FileName}");
+        MessageBox.Show(this, $"QR Code berhasil disimpan:\n{sfd.FileName}", "QR Code Disimpan", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void OpenUpdateDialog(bool checkOnlineImmediately)

@@ -52,7 +52,7 @@ async function finishWithCorrectAnswers(client: pg.Client, page: Page, attempt: 
     await expect(page.getByText("Tersimpan di server", { exact: true })).toBeVisible();
   }
   await client.query("UPDATE exam_attempts SET deadline=clock_timestamp()+interval '4 minutes' WHERE id=$1", [attempt]);
-  await page.reload(); await page.getByRole("button", { name: "Selesaikan tes" }).click();
+  await page.reload(); await page.getByRole("button", { name: "Kumpulkan tes" }).click();
   await page.getByRole("dialog", { name: "Kumpulkan tes sekarang?" }).getByRole("button", { name: "Ya, kumpulkan" }).click();
   await expect(page.getByText("PENGERJAAN SELESAI")).toBeVisible();
 }

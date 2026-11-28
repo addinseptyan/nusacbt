@@ -310,22 +310,19 @@
 /* Saat tab/keyboard menavigasi form panjang, sisakan ruang untuk footer modal. */
 [data-slot="dialog-content"] { scroll-padding-bottom: 6rem; }
 
-/* Aktif hanya sebentar saat pengguna mengganti tema, agar transisi tidak
-   mengganggu interaksi lain; pengguna dengan reduced motion tidak dianimasi. */
-@keyframes theme-icon-spin {
-  0% { transform: rotate(0deg) scale(0.9); }
-  50% { transform: rotate(180deg) scale(1.08); }
-  100% { transform: rotate(360deg) scale(1); }
-}
+/* Aktif hanya sebentar saat pengguna mengganti tema, agar transisi cepat dan
+   tidak mengganggu interaksi lain; pengguna dengan reduced motion tidak dianimasi. */
 @media (prefers-reduced-motion: no-preference) {
+  .theme-toggle-icon {
+    transition-property: transform, opacity;
+    transition-duration: 200ms;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
   html.theme-changing, html.theme-changing body,
-  html.theme-changing *:not(.theme-toggle-icon):not(.theme-toggle-spin),
+  html.theme-changing *:not(.theme-toggle-icon),
   html.theme-changing *::before, html.theme-changing *::after {
     transition-property: background-color, color, border-color, box-shadow, fill, stroke;
-    transition-duration: 300ms;
-    transition-timing-function: ease-in-out;
-  }
-  html.theme-changing .theme-toggle-spin {
-    animation: theme-icon-spin 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transition-duration: 140ms;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
 }

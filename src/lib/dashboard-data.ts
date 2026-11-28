@@ -4,19 +4,22 @@ import { displayToken, TOKEN_COLUMNS, TOKEN_JOINS, type TokenRow } from "@/app/d
 import { APP_TIME_ZONE_IANA, loadDefaultTimeZoneWithClient } from "@/lib/app-settings-service";
 import type { ExamTimeZone } from "@/lib/exam-test-types";
 import { ExamTokenKeyProblem, readConfiguredTokenKey, tokenKeyStatus } from "@/lib/exam-token-key";
-import type { AccessTokenRecord, TokenKeyStatus } from "@/lib/exam-token-types";
+import type { AccessTokenRecord, GlobalTokenAutoRotateState, TokenKeyStatus } from "@/lib/exam-token-types";
+import { ensureGlobalTokenAutoRotated, readGlobalAutoRotateWithClient } from "@/lib/global-token-scheduler";
 import { getPostgresPool } from "@/lib/postgres";
 
 export type DashboardLiveTokenData = {
   tokens: AccessTokenRecord[];
   serverNow: string;
   keyStatus: TokenKeyStatus;
+  autoRotate: GlobalTokenAutoRotateState;
 };
 
 export type DashboardScheduleItem = {
   runId: string;
   examTestId: string;
   testName: string;
+  testTags: string[];
   runLabel: string;
   kind: "regular" | "makeup" | "remedial";
   timeZone: ExamTimeZone;
@@ -31,6 +34,7 @@ export type DashboardExamMonitoringRow = {
   runId: string;
   examTestId: string;
   testName: string;
+  testTags: string[];
   runLabel: string;
   kind: "regular" | "makeup" | "remedial";
   published: boolean;
@@ -166,6 +170,7 @@ export async function loadDashboardSummary(options?: { canViewMonitoring?: boole
           r.id::text AS "runId",
           r.exam_test_id::text AS "examTestId",
           t.name AS "testName",
+          COALESCE(t.tags, ARRAY[]::text[]) AS "testTags",
           r.label AS "runLabel",
           r.kind,
           $2::text AS "timeZone",
@@ -193,6 +198,7 @@ export async function loadDashboardSummary(options?: { canViewMonitoring?: boole
               r.id::text AS "runId",
               r.exam_test_id::text AS "examTestId",
               t.name AS "testName",
+              COALESCE(t.tags, ARRAY[]::text[]) AS "testTags",
               r.label AS "runLabel",
               r.kind,
               (r.published_at IS NOT NULL) AS published,
@@ -245,12 +251,14 @@ export async function loadDashboardLiveTokens(): Promise<DashboardLiveTokenData>
     keyStatus = error instanceof ExamTokenKeyProblem ? error.status : "invalid";
   }
 
+  await ensureGlobalTokenAutoRotated().catch(() => false);
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ");
     if (key) {
       keyStatus = await tokenKeyStatus(client, key);
     }
+    const autoRotate = await readGlobalAutoRotateWithClient(client);
     const nowRow = await client.query<{ now: Date }>("SELECT clock_timestamp() AS now");
     const now = nowRow.rows[0].now;
     const rows = (
@@ -267,6 +275,7 @@ export async function loadDashboardLiveTokens(): Promise<DashboardLiveTokenData>
       tokens: rows.map((row) => displayToken(row, key, keyStatus)),
       serverNow: now.toISOString(),
       keyStatus,
+      autoRotate,
     };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});

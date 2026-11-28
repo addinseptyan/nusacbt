@@ -1,9 +1,9 @@
 import "server-only";
 
-import { cookies } from "next/headers";
 import type { PoolClient } from "pg";
 
 import { participantSessionDigest } from "@/lib/participant-login-validation.mjs";
+import { readParticipantSessionToken } from "@/lib/preview-session";
 
 export type ParticipantCandidate = { identityId: string; studentId: string; periodId: string; placementId: string };
 export type LockedParticipant = ParticipantCandidate & {
@@ -12,7 +12,7 @@ export type LockedParticipant = ParticipantCandidate & {
 
 /** Cookie peserta dibatasi pada /peserta; jangan mengembalikan token mentah. */
 export async function participantSessionHash() {
-  return participantSessionDigest((await cookies()).get("nusacbt_participant_session")?.value);
+  return participantSessionDigest(await readParticipantSessionToken());
 }
 
 /**

@@ -9,8 +9,12 @@ test("tampilan ponsel 320px menjaga timer sticky, dialog dan navigasi tetap terb
   test.setTimeout(90_000); await page.setViewportSize({ width: 320, height: 568 });
   const client = loginTestDatabase(); await client.connect(); await resetLoginGlobal(client); const f = await seedAttemptFixture(client, 19);
   try {
+    await client.query("UPDATE exam_tests SET tags=$1::text[], tags_signature=$2 WHERE id=$3", [["Biologi", "XI"], "biologi\x1fxi", f.login.activeTest]);
     await seedAttemptToken(client, f, "global", "000456"); await loginParticipant(page, f.login.username, f.login.passwordA);
-    await page.goto(`/peserta/jadwal/${f.runId}`); const token = page.getByRole("dialog", { name: "Masukkan token ujian" });
+    await expect(page.getByRole("list", { name: "Jadwal tes" })).toContainText("Biologi");
+    await page.goto(`/peserta/jadwal/${f.runId}`);
+    await expect(page.locator("main")).toContainText("Biologi");
+    const token = page.getByRole("dialog", { name: "Masukkan token ujian" });
     await token.getByLabel("Token tes").fill("000456"); await expect(token.getByTestId("token-slots").locator("span")).toHaveCount(6);
     await page.screenshot({ path: testInfo.outputPath("mobile-token.png") });
     await token.getByRole("button", { name: "Mulai pengerjaan" }).click(); await expect(page.getByRole("heading", { name: /^Soal 1/ })).toBeVisible();
@@ -22,8 +26,16 @@ test("tampilan ponsel 320px menjaga timer sticky, dialog dan navigasi tetap terb
     expect(await bottom.evaluate((node) => getComputedStyle(node).position)).toBe("fixed");
     await expect.poll(async () => Math.abs((await bottom.boundingBox())!.y + (await bottom.boundingBox())!.height - 568)).toBeLessThanOrEqual(1);
     await expect(header).toContainText(f.login.periodAName); await expect(header).toContainText("NISN");
-    await expect(page.getByRole("navigation", { name: "Navigasi soal" })).toBeVisible();
-    await page.getByRole("button", { name: "Selesaikan tes" }).click();
+    await expect(page.locator("main")).not.toContainText("Biologi");
+    await expect(page.getByTestId("exam-number-panel")).toBeHidden();
+    await expect(page.getByRole("navigation", { name: "Navigasi soal" })).toBeHidden();
+    await expect(page.getByRole("navigation", { name: "Navigasi nomor soal ringkas" })).toBeVisible();
+    const clearBtn = page.getByRole("button", { name: "Kosongkan jawaban" });
+    await expect(clearBtn).toBeVisible();
+    expect(Number.parseFloat(await clearBtn.evaluate((el) => getComputedStyle(el).borderTopWidth))).toBeGreaterThanOrEqual(1);
+    const mobileSubmitBtn = header.getByRole("button", { name: "Kumpulkan atau akhiri tes" });
+    await expect(mobileSubmitBtn).toContainText("Kumpulkan");
+    await mobileSubmitBtn.click();
     const dialog = page.getByRole("dialog", { name: "Belum dapat dikumpulkan" }); await expect(dialog).toContainText("5 menit terakhir");
     await expect(dialog.getByRole("button", { name: "Tutup" })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("mobile-dialog.png") }); await dialog.getByRole("button", { name: "Tutup" }).click();
@@ -38,7 +50,7 @@ test("soal pendek muat pada 1366×768 dan navigasi bawah tetap saat konten panja
     await seedAttemptToken(client, f, "global", "123098"); await loginParticipant(page, f.login.username, f.login.passwordA);
     await startWithToken(page, f.runId, "123098");
     await expect(page.getByRole("heading", { name: /^Soal 1/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Selesaikan tes" })).toBeInViewport();
+    await expect(page.getByRole("button", { name: "Kumpulkan tes" })).toBeInViewport();
     await expect(page.getByTestId("exam-bottom-nav").getByRole("button", { name: "Berikutnya" })).toBeInViewport();
     const measurements = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight, clientHeight: document.documentElement.clientHeight }));
     expect(measurements.width).toBeLessThanOrEqual(1366);

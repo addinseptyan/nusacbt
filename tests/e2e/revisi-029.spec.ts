@@ -50,10 +50,10 @@ test("9 revisi UI & fitur: sticky ringkasan, theme spin, pagination riwayat, tim
     for (const [idx, title] of ["Fisika", "Kimia", "Biologi"].entries()) {
       const testId = (
         await client.query<{ id: string }>(
-          `INSERT INTO exam_tests(period_id, name, starts_at, time_zone, duration_minutes)
-           VALUES($1, $2, clock_timestamp() - interval '10 minutes', 'WIB', 120)
+          `INSERT INTO exam_tests(period_id, name, tags, tags_signature, starts_at, time_zone, duration_minutes)
+           VALUES($1, $2, $3::text[], $4, clock_timestamp() - interval '10 minutes', 'WIB', 120)
            RETURNING id::text AS id`,
-          [f.login.periodA, `${title} ${f.login.suffix}`],
+          [f.login.periodA, `${title} ${f.login.suffix}`, [`Tag-${title}`, "Kelas-XI"], `kelas-xi\x1ftag-${title.toLowerCase()}`],
         )
       ).rows[0].id;
       extraTestIds.push(testId);
@@ -119,11 +119,12 @@ test("9 revisi UI & fitur: sticky ringkasan, theme spin, pagination riwayat, tim
       monitoringTable.locator("tr").filter({ hasText: `Fisika ${f.login.suffix}` }).getByRole("link", { name: "Detail" }),
     ).toHaveAttribute("href", `/data-tes/monitoring?tes=${extraTestIds[0]}`);
 
-    // 2. UI ADMIN: Theme toggle spin animation
+    // 2. UI ADMIN: Theme toggle animasi cepat (140ms) dan rotasi berlawanan ikon matahari/bulan
     const themeButton = page.getByRole("button", { name: "Ganti tema" });
     await themeButton.click();
     await expect(page.locator("html")).toHaveClass(/\bdark\b/);
-    await expect(page.locator(".theme-toggle-spin")).toHaveCSS("animation-name", "theme-icon-spin");
+    await expect(themeButton.locator(".theme-toggle-icon")).toHaveCount(2);
+    await expect(themeButton.locator(".theme-toggle-icon").first()).toHaveCSS("transition-duration", "0.2s");
     await expect(page.locator("html")).not.toHaveClass(/\btheme-changing\b/, { timeout: 3000 });
     await themeButton.click();
     await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
@@ -201,6 +202,7 @@ test("9 revisi UI & fitur: sticky ringkasan, theme spin, pagination riwayat, tim
     await expect(testCombobox).toContainText(`Fisika ${f.login.suffix}`);
     await page.getByRole("button", { name: "Terapkan", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`tes=${extraTestIds[0]}`));
+    await expect(page.getByTestId("monitor-row").first()).toContainText("Tag-Fisika");
 
     // Kembali ke Daftar Tes -> Timeline tetap 1 hari
     await page.goto("/data-tes/daftar");
@@ -248,6 +250,7 @@ test("9 revisi UI & fitur: sticky ringkasan, theme spin, pagination riwayat, tim
     await expect(drawer).toBeVisible();
     await expect(drawer.getByTestId("drawer-test-item")).toHaveCount(4);
     await expect(drawer).toContainText(`Fisika ${f.login.suffix}`);
+    await expect(drawer).toContainText("Tag-Fisika");
     await expect(drawer).toContainText(`Kimia ${f.login.suffix}`);
     await expect(drawer).toContainText(`Biologi ${f.login.suffix}`);
     await drawer.getByRole("button", { name: "Tutup", exact: true }).click();
@@ -261,11 +264,23 @@ test("9 revisi UI & fitur: sticky ringkasan, theme spin, pagination riwayat, tim
     await drawer.getByRole("button", { name: "Tutup detail hasil" }).click();
     await expect(drawer).toBeHidden();
 
-    // Excel export tetap memuat seluruh 4 tes
+    // Excel export tetap memuat seluruh 4 tes beserta kolom Tag tes
     const excelResp = await page.request.get(`/laporan/rekap/unduh?tahun=${f.login.yearId}&periode=${f.login.periodA}&gabung=1`);
     expect(excelResp.status()).toBe(200);
-    const excelSummary = strFromU8(unzipSync(await excelResp.body())["xl/worksheets/sheet1.xml"]);
+    const excelFiles = unzipSync(await excelResp.body());
+    const excelSummary = strFromU8(excelFiles["xl/worksheets/sheet1.xml"]);
+    const excelAttempts = strFromU8(excelFiles["xl/worksheets/sheet2.xml"]);
     expect(excelSummary).toContain(`Biologi ${f.login.suffix}`);
+    expect(excelSummary).toContain("Tag-Biologi, Kelas-XI");
+    expect(excelAttempts).toContain("Tag tes");
+    expect(excelAttempts).toContain("Tag-Fisika, Kelas-XI");
+
+    // Ekspor Monitoring juga menyertakan kolom Tag tes
+    const monExcelResp = await page.request.get(`/data-tes/monitoring/unduh?semua=1&tes=${extraTestIds[0]}`);
+    expect(monExcelResp.status()).toBe(200);
+    const monSheet = strFromU8(unzipSync(await monExcelResp.body())["xl/worksheets/sheet1.xml"]);
+    expect(monSheet).toContain("Tag tes");
+    expect(monSheet).toContain("Tag-Fisika, Kelas-XI");
   } finally {
     await cleanupAttemptFixture(client, f);
     await client.end();

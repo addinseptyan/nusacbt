@@ -47,7 +47,7 @@ async function readAppVersion() {
   } catch {
     // Abaikan dan kembalikan fallback default.
   }
-  return "1.0.1";
+  return "1.1.0";
 }
 
 async function getMigrationFiles() {

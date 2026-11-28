@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { checkExamDateAgainstPeriod, EXAM_TEST_MAX_QUESTIONS, validateExamStart, validateExamTestDraft, validateExamTestTags } from "../../src/lib/exam-test-validation.mjs";
+import { EXAM_TEST_SORT_OPTIONS, normalizeExamTestSortMode, sortExamTests } from "../../src/lib/exam-test-sort.mjs";
 
 const valid = (change = {}) => ({ name: "  Tes Matematika  ", periodId: "1", startLocal: "2026-11-17T08:30", timeZone: "WIB", durationMinutes: "90", shuffleQuestions: null, shuffleOptions: null, questionIds: [], questionRevisions: [], ...change });
 
@@ -62,5 +63,25 @@ test("tag tes diurutkan alfabetis dan pemeriksaan rentang tanggal periode bersif
   assert.equal(checkExamDateAgainstPeriod("2025-12-31T08:00", "2025-12-31T09:00", "2026-01-01", "2026-01-31")?.includes("lebih awal"), true);
   assert.equal(checkExamDateAgainstPeriod("2026-01-31T23:00", "2026-02-01T01:00", "2026-01-01", "2026-01-31")?.includes("melewati"), true);
   assert.equal(checkExamDateAgainstPeriod("2026-02-15T08:00", "2026-02-15T09:00", "2026-01-01", null), null);
+});
+
+test("pengurutan rancangan tes mendukung 7 mode dengan default abjad A-Z", () => {
+  assert.equal(EXAM_TEST_SORT_OPTIONS.length, 7);
+  assert.equal(normalizeExamTestSortMode(null), "name_asc");
+  assert.equal(normalizeExamTestSortMode("invalid"), "name_asc");
+  assert.equal(normalizeExamTestSortMode("questions_desc"), "questions_desc");
+
+  const items = [
+    { id: "10", name: "Matematika", startLocal: "2026-11-20T08:00", durationMinutes: 90, questionIds: ["1", "2"] },
+    { id: "5", name: "Bahasa Indonesia", startLocal: "2026-11-18T08:00", durationMinutes: 60, questionIds: ["1", "2", "3"] },
+    { id: "12", name: "Fisika", startLocal: "2026-11-19T08:00", durationMinutes: 120, questionIds: ["1"] },
+  ];
+  assert.deepEqual(sortExamTests(items, "name_asc").map((i) => i.name), ["Bahasa Indonesia", "Fisika", "Matematika"]);
+  assert.deepEqual(sortExamTests(items, "name_desc").map((i) => i.name), ["Matematika", "Fisika", "Bahasa Indonesia"]);
+  assert.deepEqual(sortExamTests(items, "start_asc").map((i) => i.name), ["Bahasa Indonesia", "Fisika", "Matematika"]);
+  assert.deepEqual(sortExamTests(items, "start_desc").map((i) => i.name), ["Matematika", "Fisika", "Bahasa Indonesia"]);
+  assert.deepEqual(sortExamTests(items, "questions_desc").map((i) => i.name), ["Bahasa Indonesia", "Matematika", "Fisika"]);
+  assert.deepEqual(sortExamTests(items, "questions_asc").map((i) => i.name), ["Fisika", "Matematika", "Bahasa Indonesia"]);
+  assert.deepEqual(sortExamTests(items, "duration_desc").map((i) => i.name), ["Fisika", "Matematika", "Bahasa Indonesia"]);
 });
 

@@ -15,7 +15,7 @@ import type { ExamTimeZone } from "@/lib/exam-test-types";
 const TIMELINE_MAX_DAYS_STORAGE_KEY = "nusacbt.timeline.maxDays.v1";
 
 export type TimelineItem = {
-  testId: string; runId: string | null; testName: string; periodName: string;
+  testId: string; runId: string | null; testName: string; tags?: string[]; periodName: string;
   kind: ExamRunKind | null; label: string | null; published: boolean;
   startUtc: string; timeZone: ExamTimeZone; durationMinutes: number;
 };
@@ -236,7 +236,8 @@ export function ExamTimeline({ items, clock, defaultTimeZone = "WIB", onEditBase
               {day.events.map(({ item, segment, labelLeft, labelWidth, lane }) => {
                 const kind = item.kind ?? "base"; const dimmed = selected !== "all" && item.kind !== selected;
                 const times = itemTimes(item, zone);
-                const description = `${itemName(item)}${item.runId ? ` · ${item.testName}` : ""} · ${item.periodName} · ${itemType(item)} · ${times.detail}`;
+                const tagsLabel = item.tags?.length ? ` · [${item.tags.join(", ")}]` : "";
+                const description = `${itemName(item)}${item.runId ? ` · ${item.testName}` : ""}${tagsLabel} · ${item.periodName} · ${itemType(item)} · ${times.detail}`;
                 return <div key={`${item.testId}-${item.runId ?? "base"}`} data-testid="timeline-event" data-kind={kind} data-dimmed={dimmed ? "true" : "false"} data-lane={lane} data-clipped-start={String(segment.clippedStart)} data-clipped-end={String(segment.clippedEnd)}
                   className={`pointer-events-none absolute inset-x-0 ${dimmed ? "opacity-65 grayscale" : ""}`} style={{ top: 9 + lane * LANE_HEIGHT, height: LANE_HEIGHT }}>
                   <ItemTarget item={item} onEditBase={onEditBase} ready={ready} label={description} tooltip style={{ left: percent(labelLeft), width: percent(labelWidth) }}
@@ -256,7 +257,8 @@ export function ExamTimeline({ items, clock, defaultTimeZone = "WIB", onEditBase
       <div className="mt-3 space-y-4" aria-label="Daftar lengkap jadwal per hari">{days.filter((day) => day.events.length > 0).map((day) => {
         const date = dateParts(day.date);
         return <div key={day.date}><h3 className="mb-1.5 text-xs font-bold">{date.weekday}, {date.number} {date.month} {date.year}</h3><ul className="space-y-1.5">{day.events.map(({ item }) => {
-          const description = `${itemName(item)}${item.runId ? ` · ${item.testName}` : ""} · ${item.periodName} · ${itemType(item)} · ${itemTimes(item, zone).detail}`;
+          const tagsLabel = item.tags?.length ? ` · [${item.tags.join(", ")}]` : "";
+          const description = `${itemName(item)}${item.runId ? ` · ${item.testName}` : ""}${tagsLabel} · ${item.periodName} · ${itemType(item)} · ${itemTimes(item, zone).detail}`;
           return <li key={`${item.testId}-${item.runId ?? "base"}`}><ItemTarget item={item} onEditBase={onEditBase} ready={ready} label={description} className="block max-w-full break-words rounded-md text-left text-xs leading-5 text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{description}</ItemTarget></li>;
         })}</ul></div>;
       })}</div>

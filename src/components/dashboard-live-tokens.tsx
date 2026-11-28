@@ -1,28 +1,44 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { ArrowRight, Globe2, KeyRound, Radio } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Globe2, KeyRound, Radio, Repeat } from "lucide-react";
 
 import { formatTime, remaining, TokenCode, tokenName, tokenStatus, useServerNow } from "@/app/data-tes/token/token-display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { ExamTimeZone } from "@/lib/exam-test-types";
-import type { AccessTokenRecord, TokenKeyStatus } from "@/lib/exam-token-types";
+import type { AccessTokenRecord, GlobalTokenAutoRotateState, TokenKeyStatus } from "@/lib/exam-token-types";
 
 export function DashboardLiveTokens({
   tokens,
   serverNow,
   keyStatus,
+  autoRotate,
   defaultTimeZone = "WIB",
 }: {
   tokens: AccessTokenRecord[];
   serverNow: string;
   keyStatus: TokenKeyStatus;
+  autoRotate?: GlobalTokenAutoRotateState;
   defaultTimeZone?: ExamTimeZone;
 }) {
+  const router = useRouter();
   const now = useServerNow(serverNow);
   const liveTokens = tokens.filter((token) => tokenStatus(token, now) === "Aktif");
+  const globalToken = tokens.find((token) => token.scope === "global" && !token.revokedAt) ?? null;
+  const expiredWhileAuto = Boolean(autoRotate?.enabled && globalToken && Date.parse(globalToken.expiresAt) <= now);
+  const refreshedFor = useRef("");
+  useEffect(() => {
+    if (!expiredWhileAuto) return;
+    const reason = `${serverNow}:${globalToken?.id ?? "none"}`;
+    if (refreshedFor.current !== reason) {
+      refreshedFor.current = reason;
+      router.refresh();
+    }
+  }, [expiredWhileAuto, globalToken?.id, router, serverNow]);
 
   return (
     <Card className="mt-4 gap-0 rounded-[18px] bg-card p-5 ring-1 ring-border shadow-[0_8px_30px_rgba(29,58,46,0.035)] sm:p-6">
@@ -85,13 +101,23 @@ export function DashboardLiveTokens({
                     </span>
                   </td>
                   <td className="px-3 py-3">
-                    <div className="flex items-center gap-2 font-semibold text-foreground">
+                    <div className="flex flex-wrap items-center gap-2 font-semibold text-foreground">
                       {token.scope === "global" ? (
                         <Globe2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                       ) : (
                         <Radio className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
                       )}
                       <span className="break-words">{tokenName(token)}</span>
+                      {token.scope === "global" && autoRotate?.enabled && (
+                        <Badge variant="outline" className="gap-1 rounded-full text-[10px]">
+                          <Repeat className="size-2.5" /> Auto {autoRotate.durationMinutes >= 60 ? `${autoRotate.durationMinutes / 60} jam` : `${autoRotate.durationMinutes} mnt`}
+                        </Badge>
+                      )}
+                      {token.testTags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="rounded-full text-[10px] font-medium">
+                          {tag}
+                        </Badge>
+                      ))}
                     </div>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       Token #{token.id} · {token.scope === "global" ? "Berlaku untuk tes tanpa token khusus" : "Token khusus tes"}

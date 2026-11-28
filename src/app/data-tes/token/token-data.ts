@@ -8,7 +8,7 @@ export type TokenRow = Omit<AccessTokenRecord, "issuedAt" | "expiresAt" | "revok
   issuedAt: Date; expiresAt: Date; revokedAt: Date | null; testEndsAt: Date | null; codeVersion: number; hash: Buffer; nonce: Buffer | null; ciphertext: Buffer | null; tag: Buffer | null;
 };
 export const TOKEN_COLUMNS = `k.id::text AS id, k.xmin::text AS revision, k.scope, k.exam_test_id::text AS "testId",
-  k.test_name_snapshot AS "testNameSnapshot", t.name AS "currentTestName", p.name AS "periodName",
+  k.test_name_snapshot AS "testNameSnapshot", t.name AS "currentTestName", COALESCE(t.tags, ARRAY[]::text[]) AS "testTags", p.name AS "periodName",
   COALESCE((SELECT max(r.starts_at + r.duration_minutes * interval '1 minute') FROM exam_schedule_runs r WHERE r.exam_test_id=t.id),
     t.starts_at + t.duration_minutes * interval '1 minute') AS "testEndsAt",
   k.duration_minutes AS "durationMinutes", k.issued_at AS "issuedAt", k.expires_at AS "expiresAt",
@@ -30,7 +30,7 @@ export function displayToken(row: TokenRow, key: Buffer | undefined, keyStatus: 
     } catch { codeStatus = "corrupt"; }
   }
   return { id: row.id, revision: row.revision, scope: row.scope, testId: row.testId, testNameSnapshot: row.testNameSnapshot,
-    currentTestName: row.currentTestName, periodName: row.periodName, testEndsAt: row.testEndsAt?.toISOString() ?? null, durationMinutes: row.durationMinutes,
+    currentTestName: row.currentTestName, testTags: row.testTags ?? [], periodName: row.periodName, testEndsAt: row.testEndsAt?.toISOString() ?? null, durationMinutes: row.durationMinutes,
     issuedAt: row.issuedAt.toISOString(), expiresAt: row.expiresAt.toISOString(), revokedAt: row.revokedAt?.toISOString() ?? null,
     revokedReason: row.revokedReason, createdBy: row.createdBy, revokedBy: row.revokedBy, code, codeStatus };
 }

@@ -49,7 +49,7 @@ internal static partial class VersionUtils
                 }
             }
             var ver = typeof(VersionUtils).Assembly.GetName().Version;
-            return ver is null ? "1.0.1" : $"{ver.Major}.{ver.Minor}.{ver.Build}";
+            return ver is null ? "1.1.0" : $"{ver.Major}.{ver.Minor}.{ver.Build}";
         }
     }
 

@@ -10,6 +10,8 @@ import { participantAttemptBucket, participantSessionDigest } from "@/lib/partic
 import { PARTICIPANT_SCHEDULE_DAY_FILTER, PARTICIPANT_SCHEDULE_DAY_JOIN } from "@/lib/participant-schedule-day.mjs";
 import { verifyPassword } from "@/lib/password.mjs";
 import { getPostgresPool } from "@/lib/postgres";
+import { readParticipantSessionToken } from "@/lib/preview-session";
+import { buildSessionCookieOptions } from "@/lib/session-cookie.mjs";
 
 const COOKIE_NAME = "nusacbt_participant_session";
 const COOKIE_PATH = "/peserta";
@@ -28,7 +30,7 @@ type AttemptRow = { failedAttempts: number; locked: boolean; lockExpired: boolea
 
 export type ActiveLoginPeriod = { id: string; name: string };
 export type ParticipantSchedule = {
-  id: string; name: string; label: string; kind: "regular" | "makeup" | "remedial"; sessionNumber: number | null;
+  id: string; name: string; tags: string[]; label: string; kind: "regular" | "makeup" | "remedial"; sessionNumber: number | null;
   startLocal: string; endLocal: string; zone: "WIB" | "WITA" | "WIT";
   durationMinutes: number; status: "Belum dimulai" | "Berlangsung" | "Berakhir";
   attemptId: string | null; attemptCompleted: boolean; retakePermissionId: string | null; finalized: boolean; finalRevision: string;
@@ -39,11 +41,7 @@ export type ParticipantView = {
 };
 
 export function participantCookieSecure() {
-  const setting = process.env.NUSACBT_COOKIE_SECURE;
-  if (!setting) return process.env.NODE_ENV === "production";
-  if (setting === "true") return true;
-  if (setting === "false") return false;
-  throw new Error("NUSACBT_COOKIE_SECURE harus true atau false.");
+  return buildSessionCookieOptions(COOKIE_PATH, SESSION_SECONDS).secure;
 }
 
 async function globalAttemptSlot() {
@@ -221,16 +219,13 @@ export async function authenticateParticipant(credentials: Credentials): Promise
 
 export async function setParticipantSessionCookie(token: string, secure: boolean) {
   if (!participantSessionDigest(token)) throw new Error("Token sesi tidak valid.");
-  (await cookies()).set(COOKIE_NAME, token, {
-    httpOnly: true, secure, sameSite: "strict", path: COOKIE_PATH, maxAge: SESSION_SECONDS,
-  });
+  (await cookies()).set(COOKIE_NAME, token, buildSessionCookieOptions(COOKIE_PATH, SESSION_SECONDS, process.env, secure));
 }
 
 export async function endParticipantSession() {
-  const store = await cookies();
-  const hash = participantSessionDigest(store.get(COOKIE_NAME)?.value);
+  const hash = participantSessionDigest(await readParticipantSessionToken());
   if (hash) await getPostgresPool().query("DELETE FROM participant_sessions WHERE token_hash = $1", [hash]);
-  store.set(COOKIE_NAME, "", { httpOnly: true, secure: participantCookieSecure(), sameSite: "strict", path: COOKIE_PATH, maxAge: 0 });
+  (await cookies()).set(COOKIE_NAME, "", buildSessionCookieOptions(COOKIE_PATH, 0));
 }
 
 export async function activeParticipantLoginPeriods(): Promise<ActiveLoginPeriod[]> {
@@ -251,7 +246,7 @@ export async function participantLoginEnabled(): Promise<boolean> {
 }
 
 export async function participantView(requestedPage: number): Promise<ParticipantView | null> {
-  const hash = participantSessionDigest((await cookies()).get(COOKIE_NAME)?.value);
+  const hash = participantSessionDigest(await readParticipantSessionToken());
   if (!hash) return null;
   const result = await getPostgresPool().query<ParticipantView>(
     `WITH auth AS (
@@ -299,7 +294,7 @@ export async function participantView(requestedPage: number): Promise<Participan
      SELECT a."studentName", a.username, a."participantNumber", a."className", a."periodName",
        pi.total, pi.page, pi.pages,
        COALESCE((SELECT json_agg(d) FROM (
-         SELECT v.id::text AS id, e.name, v.label, v.kind, v.session_number AS "sessionNumber",
+         SELECT v.id::text AS id, e.name, COALESCE(e.tags, ARRAY[]::text[]) AS tags, v.label, v.kind, v.session_number AS "sessionNumber",
            v.attempt_id::text AS "attemptId", v.attempt_completed AS "attemptCompleted", v.retake_id::text AS "retakePermissionId", v.finalized,v.final_revision AS "finalRevision",
            to_char(v.starts_at AT TIME ZONE (CASE v.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "startLocal",
            to_char((v.starts_at + v.duration_minutes * interval '1 minute') AT TIME ZONE (CASE v.time_zone WHEN 'WIB' THEN 'Asia/Jakarta' WHEN 'WITA' THEN 'Asia/Makassar' ELSE 'Asia/Jayapura' END), 'DD/MM/YYYY HH24:MI') AS "endLocal",
@@ -322,16 +317,16 @@ export async function participantView(requestedPage: number): Promise<Participan
 
 export type ParticipantSharedScores = {
   total: number; page: number; pages: number;
-  scores: ({ id: string; testName: string; score: string } & (
+  scores: ({ id: string; testName: string; testTags: string[]; score: string } & (
     | { type: "attempt"; runLabel: string; kind: "regular" | "makeup" | "remedial"; attemptNumber: number }
     | { type: "final"; method: FinalGradeMethod }
   ))[];
 };
 
 export async function participantSharedScores(requestedPage: number): Promise<ParticipantSharedScores | null> {
-  const hash = participantSessionDigest((await cookies()).get(COOKIE_NAME)?.value);
+  const hash = participantSessionDigest(await readParticipantSessionToken());
   if (!hash) return null;
-  type RawItem = { id: string; type: "attempt" | "final"; testName: string; runLabel: string | null;
+  type RawItem = { id: string; type: "attempt" | "final"; testName: string; testTags: string[]; runLabel: string | null;
     kind: "regular" | "makeup" | "remedial" | null; attemptNumber: number | null;
     correct: number | null; questionCount: number | null; method: FinalGradeMethod | null;
     evidence: { correctCount: number; questionCount: number }[] | null };
@@ -352,15 +347,16 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
          AND pw.updated_at=sess.password_revision AND sha256(convert_to(pw.password_hash,'UTF8'))=sess.password_hash_digest
      ), visible AS (
        SELECT 'attempt:' || a.id::text AS id,'attempt'::text AS type,a.test_name_snapshot AS test_name,
-         a.run_label_snapshot AS run_label,a.kind,
+         COALESCE(t.tags,ARRAY[]::text[]) AS test_tags,a.run_label_snapshot AS run_label,a.kind,
          (SELECT count(*)::int FROM exam_attempts h WHERE h.run_id=a.run_id
            AND h.participant_identity_id=a.participant_identity_id AND h.id<=a.id) AS attempt_number,
          a.correct_count AS correct,a.question_count,NULL::text AS method,NULL::json AS evidence,a.completed_at AS event_at
        FROM exam_attempts a JOIN auth ON auth.identity_id=a.participant_identity_id AND auth.period_id=a.period_id
+       LEFT JOIN exam_tests t ON t.id=a.exam_test_id
        JOIN exam_score_category_visibility v ON v.kind=a.kind AND v.visible_to_participants
        WHERE a.completed_at IS NOT NULL
        UNION ALL
-       SELECT 'final:' || f.exam_test_id::text,'final'::text,t.name,NULL::text,NULL::text,NULL::integer,
+       SELECT 'final:' || f.exam_test_id::text,'final'::text,t.name,COALESCE(t.tags,ARRAY[]::text[]) AS test_tags,NULL::text,NULL::text,NULL::integer,
          NULL::integer,NULL::integer,COALESCE(s.method,'highest'),
          json_agg(json_build_object('correctCount',a.correct_count,'questionCount',a.question_count) ORDER BY a.id),f.finalized_at
        FROM exam_final_grade_state f JOIN auth ON auth.identity_id=f.participant_identity_id AND auth.period_id=f.period_id
@@ -372,7 +368,7 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
          SELECT 1 FROM exam_attempts active WHERE active.exam_test_id=f.exam_test_id
            AND active.participant_identity_id=f.participant_identity_id AND active.completed_at IS NULL
        )
-       GROUP BY f.exam_test_id,f.participant_identity_id,f.finalized_at,t.name,s.method
+       GROUP BY f.exam_test_id,f.participant_identity_id,f.finalized_at,t.name,t.tags,s.method
        HAVING bool_and(COALESCE(v.visible_to_participants,false))
      ), counts AS (SELECT count(*)::int AS total FROM visible),
      page_info AS (
@@ -380,7 +376,7 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
          LEAST($2::integer,GREATEST(1,CEIL(total::numeric/$3::integer)::int)) AS page FROM counts
      )
      SELECT pi.total,pi.page,pi.pages,COALESCE((SELECT json_agg(d) FROM (
-       SELECT v.id,v.type,v.test_name AS "testName",v.run_label AS "runLabel",v.kind,
+       SELECT v.id,v.type,v.test_name AS "testName",v.test_tags AS "testTags",v.run_label AS "runLabel",v.kind,
          v.correct,v.question_count AS "questionCount",v.attempt_number AS "attemptNumber",v.method,v.evidence
        FROM visible v ORDER BY v.event_at DESC,v.id DESC LIMIT $3::integer OFFSET ((pi.page-1)*$3::integer)
      ) d),'[]'::json) AS scores
@@ -391,12 +387,12 @@ export async function participantSharedScores(requestedPage: number): Promise<Pa
     if (item.type === "attempt") {
       const grade = gradeExamCounts(item.correct, item.questionCount);
       if (!grade.ok || !item.kind || item.attemptNumber === null || item.runLabel === null) throw new Error("Data nilai pengerjaan tidak konsisten.");
-      return { id: item.id, type: "attempt", testName: item.testName, runLabel: item.runLabel, kind: item.kind, attemptNumber: item.attemptNumber, score: grade.display };
+      return { id: item.id, type: "attempt", testName: item.testName, testTags: item.testTags ?? [], runLabel: item.runLabel, kind: item.kind, attemptNumber: item.attemptNumber, score: grade.display };
     }
     if (!item.method || !item.evidence) throw new Error("Data nilai akhir tidak konsisten.");
     const score = calculateFinalGrade(item.method, item.evidence);
     if (score === null) throw new Error("Data nilai akhir tidak konsisten.");
-    return { id: item.id, type: "final", testName: item.testName, method: item.method, score: formatFinalGrade(score) };
+    return { id: item.id, type: "final", testName: item.testName, testTags: item.testTags ?? [], method: item.method, score: formatFinalGrade(score) };
   });
   return { total: row.total, page: row.page, pages: row.pages, scores };
 }

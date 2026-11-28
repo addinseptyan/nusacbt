@@ -64,10 +64,11 @@ async function read(client:PoolClient,f:MatrixFilters,requestedPage:number,expor
   }
   const matches = (await client.query<MatrixAttempt>(
     `SELECT a.id::text AS id,a.student_id::text AS "studentId",a.student_name_snapshot AS student,s.nisn,a.class_name_snapshot AS "className",
-      p.academic_year_id::text AS "yearId",y.name AS year,a.exam_test_id::text AS "testId",a.test_name_snapshot AS "testName",p.name AS period,
+      p.academic_year_id::text AS "yearId",y.name AS year,a.exam_test_id::text AS "testId",a.test_name_snapshot AS "testName",COALESCE(t.tags,ARRAY[]::text[]) AS "testTags",p.name AS period,
       a.kind,COALESCE(gs.method,'highest') AS method,a.correct_count AS correct,a.question_count AS questions,
       to_char(a.completed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS completed
      FROM exam_attempts a JOIN school_students s ON s.id=a.student_id JOIN exam_periods p ON p.id=a.period_id
+     LEFT JOIN exam_tests t ON t.id=a.exam_test_id
      LEFT JOIN academic_years y ON y.id=p.academic_year_id LEFT JOIN exam_final_grade_settings gs ON gs.exam_test_id=a.exam_test_id
      WHERE a.completed_at IS NOT NULL
       AND ($1::bigint IS NULL OR p.academic_year_id=$1::bigint) AND ($2::bigint IS NULL OR a.period_id=$2::bigint)

@@ -160,3 +160,8 @@ jobs:
           PGDATABASE: nusacbt_test
           NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_test
         run: npm run test:upgrade-029
+      - name: Uji upgrade 029 ke auto-generate token global 030
+        env:
+          PGDATABASE: nusacbt_test
+          NUSACBT_CONFIRM_TEST_DATABASE: nusacbt_test
+        run: npm run test:upgrade-030

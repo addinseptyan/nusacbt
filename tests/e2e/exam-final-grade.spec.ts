@@ -32,7 +32,7 @@ async function finish(page: Page, correct: boolean) {
     await page.locator('input[type="radio"][value="D"]').check();
     await expect(page.getByText("Tersimpan di server", { exact: true })).toBeVisible();
   }
-  await page.getByRole("button", { name: "Selesaikan tes" }).click();
+  await page.getByRole("button", { name: "Kumpulkan tes" }).click();
   await page.getByRole("button", { name: "Ya, kumpulkan" }).click();
   await expect(page.getByText("PENGERJAAN SELESAI")).toBeVisible();
 }

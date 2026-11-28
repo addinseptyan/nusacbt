@@ -40,12 +40,13 @@ test('filter monitoring dan matriks: tanggal inklusif zona, duplikasi, jenis dan
 });
 
 test('nilai matriks hanya dari kategori terpilih; susulan berwarna dan bentrok tidak menjadi nol',()=>{
-  const row=(a)=>({id:a.id,studentId:a.studentId,student:a.student,nisn:a.studentId.padStart(10,'0'),className:a.className??'X AK',yearId:'1',year:'2026/2027',testId:a.testId,testName:a.testId==='1'?'Matematika':'Bahasa',period:'STS',kind:a.kind,method:a.method??'average',correct:a.correct,questions:10,completed:a.id});
+  const row=(a)=>({id:a.id,studentId:a.studentId,student:a.student,nisn:a.studentId.padStart(10,'0'),className:a.className??'X AK',yearId:'1',year:'2026/2027',testId:a.testId,testName:a.testId==='1'?'Matematika':'Bahasa',testTags:a.testId==='1'?['UTS','XI']:['IPA'],period:'STS',kind:a.kind,method:a.method??'average',correct:a.correct,questions:10,completed:a.id});
   const items=[row({id:'1',studentId:'1',student:'Nanda',testId:'1',kind:'regular',correct:8}),row({id:'2',studentId:'1',student:'Nanda',testId:'1',kind:'regular',correct:6}),row({id:'3',studentId:'2',student:'Roni',testId:'1',kind:'makeup',correct:7}),row({id:'4',studentId:'1',student:'Nanda',testId:'2',kind:'regular',correct:9}),row({id:'5',studentId:'1',student:'Nanda',testId:'2',kind:'makeup',correct:5,className:'XI AK'})];
   const result=buildResultMatrix(items,true); const nanda=result.rows.find((r)=>r.name==='Nanda'),roni=result.rows.find((r)=>r.name==='Roni');
   assert.equal(nanda.cells['1'].score,70);assert.equal(nanda.cells['2'].kind,'conflict');assert.equal(nanda.cells['2'].score,null);assert.equal(nanda.average,70);assert.equal(nanda.conflicts,1);
   assert.equal(roni.cells['1'].kind,'makeup');assert.equal(roni.cells['1'].score,70);assert.equal(roni.average,70);assert.equal(roni.cells['2'],undefined);
   assert.equal(nanda.className,'XI AK'); // snapshot cocok terbaru, bentrok lintas snapshot tetap terdeteksi.
+  assert.deepEqual(result.columns.find((c)=>c.id==='1')?.tags,['UTS','XI']);
 });
 
 test('Excel metadata, sel Susulan numerik dan bentrok berwarna tanpa formula',()=>{

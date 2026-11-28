@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { digestExamToken, effectiveExamTokenScope, generateExamToken, matchesExamToken, normalizeExamToken } from "../../src/lib/exam-token.mjs";
-import { validTokenOperationId, validateExamTokenCreation } from "../../src/lib/exam-token-validation.mjs";
+import { validTokenOperationId, validateExamTokenCreation, validateGlobalAutoRotate } from "../../src/lib/exam-token-validation.mjs";
 
 const operationId = "12ab3456-cdef-4abc-8abc-123456789012";
 const valid = (changes = {}) => ({ operationId, scope: "global", testId: null, testRevision: null, durationMinutes: "15", expectedTokenId: "none", replaceConfirmed: null, ...changes });
@@ -58,4 +58,12 @@ test("validasi cakupan, tes, versi, konfirmasi, dan masa aktif", () => {
 test("identitas permintaan adalah UUID v4 dan dinormalisasi", () => {
   assert.equal(validTokenOperationId(operationId.toUpperCase()), operationId);
   for (const value of [null, undefined, 42, "", `${operationId} `, "12ab3456-cdef-1abc-8abc-123456789012", "12ab3456-cdef-4abc-7abc-123456789012"]) assert.equal(validTokenOperationId(value), null);
+});
+
+test("validasi pengaturan auto-generate token global menerima interval standar dan boolean", () => {
+  assert.deepEqual(validateGlobalAutoRotate({ enabled: "1", durationMinutes: "30" }), { ok: true, value: { enabled: true, durationMinutes: 30 } });
+  assert.deepEqual(validateGlobalAutoRotate({ enabled: "0", durationMinutes: "1440" }), { ok: true, value: { enabled: false, durationMinutes: 1440 } });
+  assert.equal(validateGlobalAutoRotate({ enabled: "maybe", durationMinutes: "30" }).ok, false);
+  assert.equal(validateGlobalAutoRotate({ enabled: "1", durationMinutes: "7" }).ok, false);
+  assert.equal(validateGlobalAutoRotate({ enabled: "1", durationMinutes: null }).ok, false);
 });

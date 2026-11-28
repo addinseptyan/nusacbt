@@ -38,3 +38,21 @@ export function validateExamTokenCreation(input) {
   if (input.replaceConfirmed !== null && input.replaceConfirmed !== "1") return { ok: false, error: "Konfirmasi penggantian token tidak valid." };
   return { ok: true, value: { operationId, scope, testId, testRevision, durationMinutes, expectedTokenId, replaceConfirmed: input.replaceConfirmed === "1" } };
 }
+
+/**
+ * @param {{ enabled: unknown, durationMinutes: unknown }} input
+ * @returns {{ ok: true, value: { enabled: boolean, durationMinutes: number } } | { ok: false, error: string }}
+ */
+export function validateGlobalAutoRotate(input) {
+  if (input.enabled !== "1" && input.enabled !== "0") {
+    return { ok: false, error: "Status auto-generate tidak valid." };
+  }
+  if (typeof input.durationMinutes !== "string" || !/^[1-9]\d{0,3}$/.test(input.durationMinutes)) {
+    return { ok: false, error: "Pilih durasi token global yang tersedia." };
+  }
+  const durationMinutes = Number(input.durationMinutes);
+  if (!EXAM_TOKEN_DURATIONS.includes(durationMinutes)) {
+    return { ok: false, error: "Pilih durasi token global yang tersedia." };
+  }
+  return { ok: true, value: { enabled: input.enabled === "1", durationMinutes } };
+}
