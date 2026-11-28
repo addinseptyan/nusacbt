@@ -75,17 +75,17 @@ export default async function ExamTestsPage() {
          FROM exam_schedule_runs
          GROUP BY exam_test_id
        ) rs ON rs.exam_test_id = e.id
-       ORDER BY e.starts_at DESC, e.id DESC`,
+       ORDER BY lower(e.name) ASC, e.name ASC, e.starts_at DESC, e.id DESC`,
       [ianaZone, defaultTimeZone],
     );
     const timelineResult = await client.query<TimelineItem>(
-      `SELECT t.id::text AS "testId",r.id::text AS "runId",t.name AS "testName",p.name AS "periodName",
+      `SELECT t.id::text AS "testId",r.id::text AS "runId",t.name AS "testName",COALESCE(t.tags, ARRAY[]::text[]) AS tags,p.name AS "periodName",
          r.kind,r.label,(r.published_at IS NOT NULL) AS published,
          to_char(r.starts_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startUtc",
          r.time_zone AS "timeZone",r.duration_minutes AS "durationMinutes"
        FROM exam_schedule_runs r JOIN exam_tests t ON t.id=r.exam_test_id JOIN exam_periods p ON p.id=t.period_id
        UNION ALL
-       SELECT t.id::text,NULL::text,t.name,p.name,NULL::text,NULL::text,false,
+       SELECT t.id::text,NULL::text,t.name,COALESCE(t.tags, ARRAY[]::text[]),p.name,NULL::text,NULL::text,false,
          to_char(t.starts_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),t.time_zone,t.duration_minutes
        FROM exam_tests t JOIN exam_periods p ON p.id=t.period_id
        WHERE NOT EXISTS (SELECT 1 FROM exam_schedule_runs r WHERE r.exam_test_id=t.id)`,
@@ -97,7 +97,12 @@ export default async function ExamTestsPage() {
          to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`,
     );
     const topicResult = await client.query<QuestionTopicOption>(
-      "SELECT id::text AS id, name, COALESCE(tags, ARRAY[]::text[]) AS tags FROM question_topics ORDER BY lower(name), tags_signature, name, id",
+      `SELECT t.id::text AS id, t.name, COALESCE(t.tags, ARRAY[]::text[]) AS tags,
+         count(q.id)::int AS "questionCount"
+       FROM question_topics t
+       LEFT JOIN question_bank q ON q.topic_id = t.id
+       GROUP BY t.id
+       ORDER BY lower(t.name), t.tags_signature, t.name, t.id`,
     );
     const questionResult = await client.query<QuestionRow>(
       `SELECT q.id::text AS id, q.xmin::text AS revision, q.topic_id::text AS "topicId", t.name AS "topicName",

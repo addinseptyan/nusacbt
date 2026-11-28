@@ -134,3 +134,84 @@ test("seluruh riwayat termasuk lebih dari 100 catatan tersedia melalui halaman b
     await page.goto("/data-tes/token/riwayat?halaman=7"); await expect(page.getByText("Halaman 7 dari 7")).toBeVisible(); await expect(tokenRow(page, rows[rows.length - 1].id)).toBeVisible();
   } finally { await cleanupTokens(client, before, []); await client.end(); }
 });
+
+test("auto-generate token global aktifkan rotasi otomatis saat kedaluwarsa dan nonaktif saat dicabut", async ({ page }) => {
+  test.setTimeout(90_000);
+  const client = testDatabase(); await client.connect(); const before = await tokenBaseline(client); const periods: string[] = []; const tag = suffix();
+  try {
+    const testWithTags = await makeTest(client, `${tag}-tags`, "active");
+    periods.push(testWithTags.periodId);
+    await client.query("UPDATE exam_tests SET tags=$1::text[], tags_signature=$2 WHERE id=$3", [["IPA", "Kelas-XI"], "ipa\x1fkelas-xi", testWithTags.testId]);
+    const admin = (await client.query<{ id: string }>("SELECT id::text AS id FROM admin_users WHERE username=$1", [process.env.TEST_ADMIN_USERNAME])).rows[0].id;
+    await client.query("INSERT INTO exam_session_plans(period_id,updated_by) VALUES($1,$2)", [testWithTags.periodId, admin]);
+    await client.query("INSERT INTO exam_session_groups(period_id,session_number,capacity) VALUES($1,1,30)", [testWithTags.periodId]);
+    await client.query(
+      `INSERT INTO exam_schedule_runs(exam_test_id,period_id,kind,session_number,label,starts_at,time_zone,duration_minutes,created_by,published_at,published_by)
+       VALUES($1,$2,'regular',1,'Sesi 1',clock_timestamp()-interval '10 minutes','WIB',60,$3,clock_timestamp(),$3)`,
+      [testWithTags.testId, testWithTags.periodId, admin],
+    );
+
+    await loginAsAdmin(page); await page.goto("/data-tes/token"); await showAllTokenDates(page);
+    await expect(testPanel(page, testWithTags.testId)).toContainText("IPA");
+    await expect(testPanel(page, testWithTags.testId)).toContainText("Kelas-XI");
+
+    await page.getByLabel("Durasi token global").selectOption("15");
+    const autoSwitch = page.getByRole("switch", { name: /Auto-generate token global/i });
+    await expect(autoSwitch).toHaveAttribute("aria-checked", "false");
+    await autoSwitch.click();
+    await expect(autoSwitch).toHaveAttribute("aria-checked", "true");
+    await expect(globalPanel(page)).toContainText("Auto tiap 15 menit");
+
+    const firstCode = await visibleCode(page);
+    const firstRow = (await client.query<{ id: string }>("SELECT id::text AS id FROM exam_access_tokens WHERE scope='global' AND revoked_at IS NULL")).rows[0];
+    expect((await client.query("SELECT enabled, duration_minutes FROM global_token_auto_rotate WHERE id=1")).rows[0]).toEqual({ enabled: true, duration_minutes: 15 });
+
+    // Ubah durasi saat auto-generate aktif -> sinkron interval di DB
+    await page.getByLabel("Durasi token global").selectOption("30");
+    await expect.poll(async () => (await client.query<{ duration_minutes: number }>("SELECT duration_minutes FROM global_token_auto_rotate WHERE id=1")).rows[0].duration_minutes).toBe(30);
+
+    // Persingkat sisa waktu menjadi 4 detik agar hitungan mundur alami memicu auto-rotate + auto-refresh UI
+    await client.query(
+      `WITH moment AS (SELECT clock_timestamp() AS now)
+       UPDATE exam_access_tokens
+       SET issued_at = moment.now - (duration_minutes * interval '1 minute') + interval '4 seconds',
+           expires_at = moment.now + interval '4 seconds'
+       FROM moment
+       WHERE id = $1`,
+      [firstRow.id],
+    );
+    await page.reload();
+    await expect.poll(async () => (await client.query<{ id: string }>("SELECT id::text AS id FROM exam_access_tokens WHERE scope='global' AND revoked_at IS NULL")).rows[0]?.id, { timeout: 15_000 }).not.toBe(firstRow.id);
+    await expect(page.getByLabel("Kode token global", { exact: true })).not.toHaveText(firstCode, { timeout: 15_000 });
+    const rotatedCode = await visibleCode(page);
+    expect(rotatedCode).toMatch(/^[0-9]{6}$/);
+
+    // Dashboard ikut menampilkan indikator auto-generate & tags
+    await page.goto("/");
+    const dashTokens = page.getByRole("table", { name: "Tabel token live" });
+    await expect(dashTokens).toContainText(rotatedCode);
+    await expect(dashTokens).toContainText("Auto 30 mnt");
+    const dashMonitor = page.getByRole("table", { name: "Monitoring pelaksanaan tes" });
+    await expect(dashMonitor).toContainText("IPA");
+
+    // Cabut token global -> menonaktifkan auto-generate
+    await page.goto("/data-tes/token");
+    const activeGlobal = (await client.query<{ id: string }>("SELECT id::text AS id FROM exam_access_tokens WHERE scope='global' AND revoked_at IS NULL")).rows[0];
+    await globalPanel(page).getByRole("button", { name: `Cabut token ${activeGlobal.id}` }).click();
+    const revoke = page.getByRole("dialog", { name: "Cabut token?" });
+    await expect(revoke).toContainText("Auto-generate token global akan ikut dinonaktifkan");
+    await revoke.getByRole("button", { name: "Ya, cabut token" }).click();
+    await expect(revoke).toBeHidden();
+    await expect(page.getByRole("switch", { name: /Auto-generate token global/i })).toHaveAttribute("aria-checked", "false");
+    expect((await client.query("SELECT enabled FROM global_token_auto_rotate WHERE id=1")).rows[0].enabled).toBe(false);
+  } finally {
+    await client.query("UPDATE global_token_auto_rotate SET enabled=false, updated_by_admin_id=NULL, updated_at=clock_timestamp() WHERE id=1").catch(() => {});
+    if (periods.length) {
+      await client.query("DELETE FROM exam_schedule_runs WHERE period_id=ANY($1::bigint[])", [periods]).catch(() => {});
+      await client.query("DELETE FROM exam_session_groups WHERE period_id=ANY($1::bigint[])", [periods]).catch(() => {});
+      await client.query("DELETE FROM exam_session_plans WHERE period_id=ANY($1::bigint[])", [periods]).catch(() => {});
+    }
+    await cleanupTokens(client, before, periods);
+    await client.end();
+  }
+});

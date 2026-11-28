@@ -26,13 +26,13 @@ export function ThemeToggle() {
     if (timer.current) clearTimeout(timer.current);
     document.documentElement.classList.add("theme-changing");
     setTheme(dark ? "light" : "dark");
-    timer.current = setTimeout(() => document.documentElement.classList.remove("theme-changing"), 340);
+    timer.current = setTimeout(() => document.documentElement.classList.remove("theme-changing"), 150);
   }
-  const icon = "theme-toggle-icon size-[18px] transition-[transform,opacity] duration-300 ease-in-out motion-reduce:transition-none";
+  const icon = "theme-toggle-icon size-[18px] motion-reduce:transition-none";
   return <Button type="button" variant="outline" size="icon-lg" className="relative size-10 rounded-xl bg-card" aria-label="Ganti tema" aria-pressed={dark} title={dark ? "Beralih ke tema terang" : "Beralih ke tema gelap"} disabled={!ready} onClick={toggle}>
-    <span aria-hidden="true" className="theme-toggle-spin relative flex size-[18px] items-center justify-center">
-      <Sun aria-hidden="true" className={`${icon} rotate-0 scale-100 opacity-100 dark:-rotate-180 dark:scale-0 dark:opacity-0`} />
-      <Moon aria-hidden="true" className={`${icon} absolute rotate-180 scale-0 opacity-0 dark:rotate-0 dark:scale-100 dark:opacity-100`} />
+    <span aria-hidden="true" className="relative flex size-[18px] items-center justify-center">
+      <Sun aria-hidden="true" className={`${icon} [transform:rotate(0deg)_scale(1)] opacity-100 dark:[transform:rotate(360deg)_scale(0)] dark:opacity-0`} />
+      <Moon aria-hidden="true" className={`${icon} absolute [transform:rotate(360deg)_scale(0)] opacity-0 dark:[transform:rotate(0deg)_scale(1)] dark:opacity-100`} />
     </span>
   </Button>;
 }

@@ -140,16 +140,16 @@ test("batas global terbaru ditegakkan server dan tab admin usang ditolak", async
     const attempt = await startWithToken(page, f.runId, "112244");
     await page.locator('input[type="radio"][value="D"]').check(); await expect(page.getByText("Tersimpan di server", { exact: true })).toBeVisible();
     await page.getByRole("checkbox", { name: "Ragu-ragu" }).check(); await expect.poll(async () => (await client.query<{ b: boolean }>("SELECT is_doubtful AS b FROM exam_attempt_questions WHERE attempt_id=$1", [attempt])).rows[0].b).toBe(true);
-    await page.getByRole("button", { name: "Selesaikan tes" }).click();
+    await page.getByRole("button", { name: "Kumpulkan tes" }).click();
     let dialog = page.getByRole("dialog", { name: "Belum dapat dikumpulkan" }); await expect(dialog).toContainText("5 menit terakhir");
     await dialog.getByRole("button", { name: "Tutup" }).click();
     await client.query("UPDATE exam_attempts SET deadline=clock_timestamp()+interval '4 minutes 50 seconds' WHERE id=$1", [attempt]);
-    await page.getByRole("button", { name: "Selesaikan tes" }).click();
+    await page.getByRole("button", { name: "Kumpulkan tes" }).click();
     dialog = page.getByRole("dialog", { name: "Kumpulkan tes sekarang?" }); await expect(dialog).toContainText("1 ditandai ragu-ragu");
     await dialog.getByRole("button", { name: "Batal" }).click();
     await client.query("UPDATE exam_attempts SET deadline=clock_timestamp()+interval '20 minutes' WHERE id=$1", [attempt]);
     await changeSetting(60); // Halaman peserta tidak dimuat ulang.
-    await page.getByRole("button", { name: "Selesaikan tes" }).click();
+    await page.getByRole("button", { name: "Kumpulkan tes" }).click();
     dialog = page.getByRole("dialog", { name: "Kumpulkan tes sekarang?" }); await expect(dialog).toContainText("60 menit terakhir");
     await changeSetting(5); // Berubah ketika dialog konfirmasi masih terbuka.
     const sent = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === `/peserta/pengerjaan/${attempt}`);
@@ -166,7 +166,7 @@ test("batas global terbaru ditegakkan server dan tab admin usang ditolak", async
     expect(alien.status()).toBeGreaterThanOrEqual(400);
     expect((await client.query<{ completed: Date | null }>("SELECT completed_at AS completed FROM exam_attempts WHERE id=$1", [attempt])).rows[0].completed).toBeNull();
     await changeSetting(60); await dialog.getByRole("button", { name: "Tutup" }).click();
-    await page.getByRole("button", { name: "Selesaikan tes" }).click();
+    await page.getByRole("button", { name: "Kumpulkan tes" }).click();
     dialog = page.getByRole("dialog", { name: "Kumpulkan tes sekarang?" }); await expect(dialog).toContainText("1 ditandai ragu-ragu");
     await dialog.getByRole("button", { name: "Ya, kumpulkan" }).click(); await expect(page.getByText("PENGERJAAN SELESAI")).toBeVisible();
     const result = (await client.query<{ reason: string; correct: number; answered: number; doubtful: boolean }>(

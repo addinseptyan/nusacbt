@@ -3,12 +3,14 @@ import Link from "next/link";
 
 import { participantLogoutAction } from "@/app/peserta/login/actions";
 import { ParticipantLoginForm } from "@/app/peserta/login/login-form";
+import { PreviewSessionSync } from "@/components/preview-session-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
 import { activeParticipantLoginPeriods, type ActiveLoginPeriod } from "@/lib/participant-auth";
+import { isPreviewIframeAuthEnabled } from "@/lib/preview-session";
 
 export const metadata = { title: "Masuk Peserta", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -16,6 +18,7 @@ export const dynamic = "force-dynamic";
 type Props = { searchParams: Promise<{ error?: string; sesi?: string }> };
 
 export default async function ParticipantLoginPage({ searchParams }: Props) {
+  const previewAuth = isPreviewIframeAuthEnabled();
   const [params, branding] = await Promise.all([searchParams, getPublicAppSettingsSafe()]);
   let activePeriods: ActiveLoginPeriod[] = [];
   let available = true;
@@ -26,6 +29,7 @@ export default async function ParticipantLoginPage({ searchParams }: Props) {
   }
   return (
     <main className="relative min-h-svh overflow-hidden bg-background px-4 py-7 sm:py-10">
+      {previewAuth && <PreviewSessionSync participantAction={{ type: "clear" }} />}
       <div aria-hidden="true" className="pointer-events-none absolute -right-32 -top-44 size-96 rounded-full bg-primary/15 blur-3xl" />
       <div className="relative mx-auto flex max-w-6xl items-center justify-between gap-4">
         <Link href="/peserta/login" className="flex min-w-0 items-center gap-2.5" aria-label={`${branding.appName} peserta`}>

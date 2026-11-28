@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ClipboardList, KeyRound, X } from "lucide-react";
 
 import { beginExamAction } from "@/app/peserta/jadwal/[runId]/actions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,8 +14,8 @@ const subscribe = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
 
-type Props = { runId: string; testName?: string; runLabel?: string; initialOpen?: boolean; retakePermissionId?: string | null; finalRevision: string };
-export function StartForm({ runId, testName, runLabel, initialOpen = true, retakePermissionId = null, finalRevision }: Props) {
+type Props = { runId: string; testName?: string; testTags?: string[]; runLabel?: string; initialOpen?: boolean; retakePermissionId?: string | null; finalRevision: string };
+export function StartForm({ runId, testName, testTags, runLabel, initialOpen = true, retakePermissionId = null, finalRevision }: Props) {
   const [state, action, pending] = useActionState(beginExamAction, { error: "" });
   const [open, setOpen] = useState(initialOpen);
   const [token, setToken] = useState(""); const [caret, setCaret] = useState(0); const [focused, setFocused] = useState(false);
@@ -50,7 +51,7 @@ export function StartForm({ runId, testName, runLabel, initialOpen = true, retak
         </DialogHeader>
         {testName && <div className="flex min-w-0 items-start gap-2.5 rounded-2xl border bg-muted/35 p-2.5">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-background text-emerald-700 dark:text-emerald-300"><ClipboardList className="size-4" aria-hidden="true" /></span>
-          <div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Tes yang akan dimulai</p><p className="mt-0.5 break-words text-sm leading-5 font-semibold">{testName}</p>{runLabel && <p className="break-words text-xs leading-4 text-muted-foreground">{runLabel}</p>}</div>
+          <div className="min-w-0"><p className="text-[10px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Tes yang akan dimulai</p><p className="mt-0.5 break-words text-sm leading-5 font-semibold">{testName}</p>{testTags && testTags.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{testTags.map((tag) => <Badge key={tag} variant="secondary" className="rounded-full px-1.5 py-0 text-[10px]">{tag}</Badge>)}</div>}{runLabel && <p className="mt-0.5 break-words text-xs leading-4 text-muted-foreground">{runLabel}</p>}</div>
         </div>}
         <form action={action} noValidate className="space-y-2.5" onSubmit={(event) => {
           if (!/^[0-9]{6}$/.test(token)) { event.preventDefault(); setWarning("Token salah. Masukkan tepat enam angka."); focusAt(token.length); }

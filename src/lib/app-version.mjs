@@ -1,5 +1,5 @@
 export const APP_GITHUB_REPO = "addinseptyan/nusacbt";
-export const APP_DEFAULT_VERSION = "1.0.1";
+export const APP_DEFAULT_VERSION = "1.1.0";
 
 /** @typedef {{ major: number; minor: number; patch: number; prerelease: string }} ParsedSemver */
 

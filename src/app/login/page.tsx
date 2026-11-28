@@ -2,10 +2,12 @@ import { GraduationCap, LockKeyhole, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { LoginForm } from "@/app/login/login-form";
+import { PreviewSessionSync } from "@/components/preview-session-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
 import { getPublicAppSettingsSafe } from "@/lib/app-settings-service";
+import { isPreviewIframeAuthEnabled } from "@/lib/preview-session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Masuk Admin" };
@@ -13,9 +15,11 @@ export const metadata = { title: "Masuk Admin" };
 type LoginPageProps = { searchParams: Promise<{ error?: string; sesi?: string }> };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const previewAuth = isPreviewIframeAuthEnabled();
   const [params, branding] = await Promise.all([searchParams, getPublicAppSettingsSafe()]);
   return (
     <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background px-4 py-12">
+      {previewAuth && <PreviewSessionSync adminAction={{ type: "clear" }} />}
       <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-linear-to-b from-accent/80 to-transparent dark:from-accent/30" />
       <div className="absolute right-4 top-4 sm:right-8 sm:top-8"><ThemeToggle /></div>
       <div className="relative w-full max-w-[440px]">

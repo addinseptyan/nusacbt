@@ -90,7 +90,7 @@ test("token khusus, snapshot gambar/kunci, resume, penilaian dan perlindungan ri
     // Fixture khusus: pindahkan deadline attempt ke dalam lima menit terakhir.
     await client.query("UPDATE exam_attempts SET deadline=clock_timestamp()+interval '4 minutes' WHERE id=$1", [attempt]);
     await page.reload();
-    await page.getByRole("button", { name: "Selesaikan tes" }).click(); await page.getByRole("button", { name: "Ya, kumpulkan" }).click();
+    await page.getByRole("button", { name: "Kumpulkan tes" }).click(); await page.getByRole("button", { name: "Ya, kumpulkan" }).click();
     await expect(page.getByText("PENGERJAAN SELESAI")).toBeVisible();
     const result = (await client.query<{ reason: string; correct: number; answered: number; total: number }>(
       'SELECT completion_reason AS reason,correct_count AS correct,answered_count AS answered,question_count AS total FROM exam_attempts WHERE id=$1', [attempt],

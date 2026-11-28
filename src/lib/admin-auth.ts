@@ -13,6 +13,8 @@ import {
 import { normalizeAdminUsername } from "@/lib/admin-username.mjs";
 import { verifyPassword } from "@/lib/password.mjs";
 import { getPostgresPool } from "@/lib/postgres";
+import { readAdminSessionToken } from "@/lib/preview-session";
+import { buildSessionCookieOptions } from "@/lib/session-cookie.mjs";
 
 const COOKIE_NAME = "nusacbt_admin_session";
 const SESSION_SECONDS = 8 * 60 * 60;
@@ -34,14 +36,6 @@ export type AdminSessionUser = {
 
 function digestToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
-}
-
-function secureCookie() {
-  const setting = process.env.NUSACBT_COOKIE_SECURE;
-  if (!setting) return process.env.NODE_ENV === "production";
-  if (setting === "true") return true;
-  if (setting === "false") return false;
-  throw new Error("NUSACBT_COOKIE_SECURE harus true atau false.");
 }
 
 type LoginRow = {
@@ -108,13 +102,7 @@ export async function authenticateAdmin(rawUsername: unknown, password: unknown)
 
 export async function setAdminSessionCookie(token: string) {
   const store = await cookies();
-  store.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: secureCookie(),
-    sameSite: "strict",
-    path: "/",
-    maxAge: SESSION_SECONDS,
-  });
+  store.set(COOKIE_NAME, token, buildSessionCookieOptions("/", SESSION_SECONDS));
 }
 
 type SessionQueryRow = {
@@ -140,7 +128,7 @@ function mapSessionUser(row: SessionQueryRow): AdminSessionUser {
 }
 
 export const getAdminSession = cache(async (): Promise<AdminSessionUser | null> => {
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  const token = await readAdminSessionToken();
   if (!token || !TOKEN_FORMAT.test(token)) return null;
   const result = await getPostgresPool().query<SessionQueryRow>(
     `SELECT a.id::text AS id,
@@ -173,7 +161,7 @@ export async function getAdminSessionSafe(): Promise<AdminSessionUser | null> {
 // Untuk tindakan sensitif: periksa sesi dan status aktif/izin di dalam transaksi
 // sambil menahan penghapusan/mutasi sesi, user, dan peran hingga commit.
 export async function lockActiveAdminSession(client: PoolClient): Promise<AdminSessionUser | null> {
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  const token = await readAdminSessionToken();
   if (!token || !TOKEN_FORMAT.test(token)) return null;
   const result = await client.query<{
     id: string;
@@ -240,20 +228,19 @@ export async function requireAdminAccess(...required: AdminPermission[]): Promis
 }
 
 export async function getCurrentAdminSessionTokenHash(): Promise<string | null> {
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  const token = await readAdminSessionToken();
   if (!token || !TOKEN_FORMAT.test(token)) return null;
   return digestToken(token);
 }
 
 export async function clearAdminSessionCookie() {
-  (await cookies()).delete(COOKIE_NAME);
+  (await cookies()).set(COOKIE_NAME, "", buildSessionCookieOptions("/", 0));
 }
 
 export async function endAdminSession() {
-  const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
+  const token = await readAdminSessionToken();
   if (token && TOKEN_FORMAT.test(token)) {
     await getPostgresPool().query("DELETE FROM admin_sessions WHERE token_hash = $1", [digestToken(token)]);
   }
-  store.delete(COOKIE_NAME);
+  (await cookies()).set(COOKIE_NAME, "", buildSessionCookieOptions("/", 0));
 }

@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Globe2, History, Info, KeyRound, RefreshCw, ShieldOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Globe2, History, Info, KeyRound, RefreshCw, Repeat, ShieldOff } from "lucide-react";
 import { toast } from "sonner";
 
-import { issueExamToken, resolveUncertainTokenIssue, revokeExamToken } from "@/app/data-tes/token/actions";
+import { issueExamToken, resolveUncertainTokenIssue, revokeExamToken, updateGlobalTokenAutoRotate } from "@/app/data-tes/token/actions";
 import { formatTime, remaining, TokenCode, tokenName, tokenStatus, useServerNow, type Zone } from "@/app/data-tes/token/token-display";
 import { tokenHistoryUrl, tokenUrl, type DateFilter } from "@/app/data-tes/token/token-links";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -15,8 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { tokenCalendarDate } from "@/lib/exam-token-date.mjs";
-import type { AccessTokenRecord, AccessTokenScope, AccessTokenTestOption, TokenKeyStatus } from "@/lib/exam-token-types";
+import type { AccessTokenRecord, AccessTokenScope, AccessTokenTestOption, GlobalTokenAutoRotateState, TokenKeyStatus } from "@/lib/exam-token-types";
 import { EXAM_TOKEN_FORM_VERSION, validTokenOperationId } from "@/lib/exam-token-validation.mjs";
 
 const PENDING_ISSUE_KEY = "nusacbt.token.pending-issue.v1";
@@ -99,7 +100,7 @@ function UncertainIssueDialog({ operationId, onFinish }: { operationId: string; 
   </DialogContent></Dialog>;
 }
 
-function RevokeDialog({ token, onClose }: { token: AccessTokenRecord; onClose: () => void }) {
+function RevokeDialog({ token, autoRotateEnabled, onClose }: { token: AccessTokenRecord; autoRotateEnabled?: boolean; onClose: () => void }) {
   const router = useRouter(); const [pending, startTransition] = useTransition(); const [error, setError] = useState<Notice>(null);
   function close() { if (!pending) onClose(); } function reload() { close(); router.refresh(); }
   function revoke() {
@@ -109,38 +110,98 @@ function RevokeDialog({ token, onClose }: { token: AccessTokenRecord; onClose: (
       catch { setError({ message: "Hasil pencabutan belum dapat dipastikan. Muat ulang status sebelum mencoba lagi.", reload: true }); }
     });
   }
-  return <Dialog open onOpenChange={(next) => { if (!next) close(); }}><DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-md" showCloseButton={!pending} onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}><DialogHeader><DialogTitle>Cabut token?</DialogTitle><DialogDescription>Token #{token.id} untuk <strong className="break-words text-foreground">{tokenName(token)}</strong> akan segera tidak berlaku. {token.scope === "test" ? "Saat fungsi peserta tersedia, token global yang masih aktif dapat digunakan kembali untuk tes ini." : "Token khusus tes tidak ikut dicabut."}</DialogDescription></DialogHeader>{error && <ErrorNotice error={error} onReload={reload} />}<DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="button" variant="destructive" disabled={pending || Boolean(error?.reload)} onClick={revoke}>{pending ? <><Spinner aria-hidden="true" /> Mencabut...</> : "Ya, cabut token"}</Button></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={(next) => { if (!next) close(); }}><DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-md" showCloseButton={!pending} onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }} onInteractOutside={(event) => { if (pending) event.preventDefault(); }}><DialogHeader><DialogTitle>Cabut token?</DialogTitle><DialogDescription>Token #{token.id} untuk <strong className="break-words text-foreground">{tokenName(token)}</strong> akan segera tidak berlaku. {token.scope === "test" ? "Saat fungsi peserta tersedia, token global yang masih aktif dapat digunakan kembali untuk tes ini." : "Token khusus tes tidak ikut dicabut."}</DialogDescription></DialogHeader>{token.scope === "global" && autoRotateEnabled && <p className="rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">Auto-generate token global akan ikut dinonaktifkan agar token tetap nonaktif setelah dicabut.</p>}{error && <ErrorNotice error={error} onReload={reload} />}<DialogFooter><Button type="button" variant="outline" disabled={pending} onClick={close}>Batal</Button><Button type="button" variant="destructive" disabled={pending || Boolean(error?.reload)} onClick={revoke}>{pending ? <><Spinner aria-hidden="true" /> Mencabut...</> : "Ya, cabut token"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
-function TokenControls({ id, scope, test, slot, now, available, onIssue, onRevoke }: { id: string; scope: AccessTokenScope; test: AccessTokenTestOption | null; slot: AccessTokenRecord | null; now: number; available: boolean; onIssue: (target: IssueTarget) => void; onRevoke: (token: AccessTokenRecord) => void }) {
-  const [duration, setDuration] = useState("15"); const active = Boolean(slot && tokenStatus(slot, now) === "Aktif");
-  return <div className="flex w-full flex-wrap items-end gap-2 lg:w-auto"><div className="w-32 space-y-1"><span className="text-[11px] font-semibold text-muted-foreground">Durasi token baru</span><DurationSelect id={id} value={duration} onChange={setDuration} /></div><Button type="button" disabled={!available} aria-label={`${active ? "Ganti" : "Aktifkan"} token ${id}`} onClick={() => onIssue({ scope, test, slot, duration })} className="h-10 rounded-xl">{active ? "Ganti token" : "Aktifkan token"}</Button>{active && slot && <Button type="button" variant="outline" className="h-10 rounded-xl text-destructive hover:text-destructive" aria-label={`Cabut token ${slot.id}`} onClick={() => onRevoke(slot)}><ShieldOff className="size-4" /> Cabut</Button>}</div>;
+function TokenControls({
+  id,
+  scope,
+  test,
+  slot,
+  now,
+  available,
+  duration,
+  onDurationChange,
+  onIssue,
+  onRevoke,
+}: {
+  id: string;
+  scope: AccessTokenScope;
+  test: AccessTokenTestOption | null;
+  slot: AccessTokenRecord | null;
+  now: number;
+  available: boolean;
+  duration?: string;
+  onDurationChange?: (value: string) => void;
+  onIssue: (target: IssueTarget) => void;
+  onRevoke: (token: AccessTokenRecord) => void;
+}) {
+  const [localDuration, setLocalDuration] = useState("15");
+  const effectiveDuration = duration ?? localDuration;
+  const setEffectiveDuration = onDurationChange ?? setLocalDuration;
+  const active = Boolean(slot && tokenStatus(slot, now) === "Aktif");
+  return <div className="flex w-full flex-wrap items-end gap-2 lg:w-auto"><div className="w-32 space-y-1"><span className="text-[11px] font-semibold text-muted-foreground">Durasi token baru</span><DurationSelect id={id} value={effectiveDuration} onChange={setEffectiveDuration} /></div><Button type="button" disabled={!available} aria-label={`${active ? "Ganti" : "Aktifkan"} token ${id}`} onClick={() => onIssue({ scope, test, slot, duration: effectiveDuration })} className="h-10 rounded-xl">{active ? "Ganti token" : "Aktifkan token"}</Button>{active && slot && <Button type="button" variant="outline" className="h-10 rounded-xl text-destructive hover:text-destructive" aria-label={`Cabut token ${slot.id}`} onClick={() => onRevoke(slot)}><ShieldOff className="size-4" /> Cabut</Button>}</div>;
 }
 
-export function TokenManager({ tests, current, filter, zone, defaultTimeZone = "WIB", page, pages, total, keyStatus, keyMessage, serverNow }: { tests: AccessTokenTestOption[]; current: AccessTokenRecord[]; filter: DateFilter; zone: Zone; defaultTimeZone?: Zone; page: number; pages: number; total: number; keyStatus: TokenKeyStatus; keyMessage: string; serverNow: string }) {
+export function TokenManager({ tests, current, autoRotate, filter, zone, defaultTimeZone = "WIB", page, pages, total, keyStatus, keyMessage, serverNow }: { tests: AccessTokenTestOption[]; current: AccessTokenRecord[]; autoRotate: GlobalTokenAutoRotateState; filter: DateFilter; zone: Zone; defaultTimeZone?: Zone; page: number; pages: number; total: number; keyStatus: TokenKeyStatus; keyMessage: string; serverNow: string }) {
   const router = useRouter(); const [issue, setIssue] = useState<IssueTarget | null>(null); const [revoking, setRevoking] = useState<AccessTokenRecord | null>(null);
   const [storageState, setStorageState] = useState<"checking" | "available" | "unavailable" | "invalid">("checking"); const [unresolved, setUnresolved] = useState<string | null>(null);
+  const [draftDuration, setDraftDuration] = useState<{ base: number; value: string } | null>(null);
+  const [autoPending, startAutoTransition] = useTransition();
   const now = useServerNow(serverNow); const lastRefresh = useRef("");
+  const globalDuration = draftDuration && draftDuration.base === autoRotate.durationMinutes
+    ? draftDuration.value
+    : String(autoRotate.durationMinutes);
   useEffect(() => {
     const timer = window.setTimeout(() => { try { const previous = sessionStorage.getItem(PENDING_ISSUE_KEY); const id = previous ? validTokenOperationId(previous) : null; if (previous && !id) { setStorageState("invalid"); return; } if (id) setUnresolved(id); setStorageState("available"); } catch { setStorageState("unavailable"); } }, 0);
     return () => window.clearTimeout(timer);
   }, []);
-  const localDay = tokenCalendarDate(new Date(now).toISOString(), zone);
-  const endedIds = tests.filter((test) => Date.parse(test.endsAt) <= now).map((test) => test.id).join(",");
-  useEffect(() => {
-    // Ketika hari berganti atau sebuah jadwal berakhir, perbarui daftar/paginasi
-    // sekali untuk snapshot ini. Jam browser bukan acuan tanggal tes.
-    if ((filter.mode === "today" && filter.date !== localDay) || endedIds) {
-      const reason = `${serverNow}:${localDay}:${endedIds}`;
-      if (lastRefresh.current !== reason) { lastRefresh.current = reason; router.refresh(); }
-    }
-  }, [filter.mode, filter.date, localDay, endedIds, router, serverNow]);
   const available = keyStatus === "ready" && storageState === "available" && !unresolved;
   const globalSlot = current.find((token) => token.scope === "global" && !token.revokedAt) ?? null;
   const globalShown = globalSlot ?? current.find((token) => token.scope === "global") ?? null;
   const globalActive = Boolean(globalSlot && tokenStatus(globalSlot, now) === "Aktif");
+  const globalExpiredWhileAuto = Boolean(autoRotate.enabled && globalSlot && Date.parse(globalSlot.expiresAt) <= now);
+  const localDay = tokenCalendarDate(new Date(now).toISOString(), zone);
+  const endedIds = tests.filter((test) => Date.parse(test.endsAt) <= now).map((test) => test.id).join(",");
+  useEffect(() => {
+    // Ketika hari berganti, sebuah jadwal berakhir, atau token global auto-rotate
+    // baru saja kedaluwarsa, muat ulang snapshot server agar token terbaru tampil.
+    if ((filter.mode === "today" && filter.date !== localDay) || endedIds || globalExpiredWhileAuto) {
+      const reason = `${serverNow}:${localDay}:${endedIds}:${globalExpiredWhileAuto ? (globalSlot?.id ?? "none") : ""}`;
+      if (lastRefresh.current !== reason) { lastRefresh.current = reason; router.refresh(); }
+    }
+  }, [filter.mode, filter.date, localDay, endedIds, globalExpiredWhileAuto, globalSlot?.id, router, serverNow]);
   const visibleTests = tests.filter((test) => Date.parse(test.endsAt) > now);
   const dateLabel = filter.date?.split("-").reverse().join("/");
+  const autoDurationLabel = durations.find((d) => d.value === globalDuration)?.label ?? `${globalDuration} menit`;
+
+  function saveAutoRotate(nextEnabled: boolean, nextDuration: string) {
+    const data = new FormData();
+    data.set("enabled", nextEnabled ? "1" : "0");
+    data.set("durationMinutes", nextDuration);
+    startAutoTransition(async () => {
+      try {
+        const result = await updateGlobalTokenAutoRotate(data);
+        if (!result.ok) {
+          toast.error(result.error);
+          if (result.reload) router.refresh();
+          return;
+        }
+        toast.success(result.message);
+        router.refresh();
+      } catch {
+        toast.error("Pengaturan auto-generate gagal diperbarui. Muat ulang dan coba lagi.");
+      }
+    });
+  }
+
+  function handleGlobalDurationChange(nextDuration: string) {
+    setDraftDuration({ base: autoRotate.durationMinutes, value: nextDuration });
+    if (autoRotate.enabled) {
+      saveAutoRotate(true, nextDuration);
+    }
+  }
+
   function chooseDate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const value = new FormData(event.currentTarget).get("tanggal");
     if (typeof value === "string" && value) router.push(tokenUrl(zone, { mode: "date", date: value }, 1, defaultTimeZone));
@@ -150,7 +211,35 @@ export function TokenManager({ tests, current, filter, zone, defaultTimeZone = "
     {keyStatus !== "ready" && <Alert variant="destructive" role="alert" className="mb-5 max-w-4xl"><Info className="size-4" /><AlertTitle>Kunci token perlu diperiksa</AlertTitle><AlertDescription>{keyMessage} Token lama tetap tercatat; pencabutan token aktif masih tersedia. Lihat panduan kunci sebelum membuat token baru.</AlertDescription></Alert>}
     {(storageState === "unavailable" || storageState === "invalid") && <Alert variant="destructive" role="alert" className="mb-5 max-w-4xl"><Info className="size-4" /><AlertTitle>Penyimpanan sesi browser tidak tersedia</AlertTitle><AlertDescription>Aktifkan penyimpanan sesi dan muat ulang; pembuatan token dinonaktifkan untuk mencegah hasil yang tidak pasti.</AlertDescription></Alert>}
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><p className="max-w-2xl text-xs leading-5 text-muted-foreground">Durasi dimulai segera saat diaktifkan. Hitung mundur adalah perkiraan berdasarkan jam server; muat ulang setelah perubahan oleh admin lain.</p><div className="flex flex-wrap items-end gap-2"><div className="flex h-10 items-center rounded-xl border border-input bg-muted/40 px-3 text-xs font-semibold text-muted-foreground">Zona {zone} · Pengaturan Aplikasi</div><Button type="button" variant="outline" onClick={() => router.refresh()} className="h-10 rounded-xl"><RefreshCw className="size-4" /> Muat ulang</Button><Button asChild variant="outline" className="h-10 rounded-xl"><Link href={tokenHistoryUrl(zone, filter, page, 1, defaultTimeZone)} prefetch={false}><History className="size-4" /> Lihat riwayat</Link></Button></div></div>
-    <Card role="region" aria-label="Token global" className={`mb-6 gap-0 rounded-[18px] p-5 shadow-sm sm:p-6 ${globalActive ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20" : globalShown ? "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20" : "border-border bg-muted/20"}`}><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex items-center gap-2"><Globe2 className={`size-5 ${globalActive ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`} /><h2 className="text-base font-bold">Token Global</h2>{globalShown && <Badge variant={globalActive ? "default" : "secondary"}>{tokenStatus(globalShown, now)}</Badge>}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Untuk tes tanpa token khusus yang aktif.</p></div>{globalShown && <p className="text-xs text-muted-foreground">Token #{globalShown.id}</p>}</div><div className="mt-5 flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div className="grid gap-4 sm:grid-cols-2 sm:gap-8"><div><p className="mb-1 text-[11px] font-semibold text-muted-foreground">Kode global</p><TokenCode token={globalShown} label="Kode token global" now={now} /></div><div><p className="mb-1 text-[11px] font-semibold text-muted-foreground">Sisa waktu</p><p aria-label="Sisa waktu token global" className="font-mono text-lg font-bold tabular-nums">{remaining(globalSlot, now)}</p>{globalShown && <p className="mt-1 text-[11px] text-muted-foreground">Berakhir {formatTime(globalShown.expiresAt, zone)}</p>}</div></div><TokenControls id="global" scope="global" test={null} slot={globalSlot} now={now} available={available} onIssue={setIssue} onRevoke={setRevoking} /></div></Card>
+    <Card role="region" aria-label="Token global" className={`mb-6 gap-0 rounded-[18px] p-5 shadow-sm sm:p-6 ${globalActive ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20" : globalShown ? "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20" : "border-border bg-muted/20"}`}><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex items-center gap-2"><Globe2 className={`size-5 ${globalActive ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`} /><h2 className="text-base font-bold">Token Global</h2>{globalShown && <Badge variant={globalActive ? "default" : "secondary"}>{tokenStatus(globalShown, now)}</Badge>}{autoRotate.enabled && <Badge variant="outline" className="gap-1 border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"><Repeat className="size-3" /> Auto tiap {autoDurationLabel}</Badge>}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Untuk tes tanpa token khusus yang aktif.</p></div>{globalShown && <p className="text-xs text-muted-foreground">Token #{globalShown.id}</p>}</div><div className="mt-5 flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div className="grid gap-4 sm:grid-cols-2 sm:gap-8"><div><p className="mb-1 text-[11px] font-semibold text-muted-foreground">Kode global</p><TokenCode token={globalShown} label="Kode token global" now={now} /></div><div><p className="mb-1 text-[11px] font-semibold text-muted-foreground">Sisa waktu</p><p aria-label="Sisa waktu token global" className="font-mono text-lg font-bold tabular-nums">{remaining(globalSlot, now)}</p>{globalShown && <p className="mt-1 text-[11px] text-muted-foreground">Berakhir {formatTime(globalShown.expiresAt, zone)}</p>}</div></div><TokenControls id="global" scope="global" test={null} slot={globalSlot} now={now} available={available} duration={globalDuration} onDurationChange={handleGlobalDurationChange} onIssue={setIssue} onRevoke={setRevoking} /></div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/80 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor="global-token-auto-rotate" className="cursor-pointer text-xs font-bold">
+              Auto-generate token otomatis
+            </label>
+            <Badge variant={autoRotate.enabled ? "default" : "secondary"} className="text-[10px]">
+              {autoRotate.enabled ? `Aktif · tiap ${autoDurationLabel}` : "Nonaktif"}
+            </Badge>
+          </div>
+          <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+            {autoRotate.enabled
+              ? `Server akan otomatis membuat token global baru setiap ${autoDurationLabel} saat token saat ini kedaluwarsa.`
+              : `Jika diaktifkan, server otomatis membuat token global baru sesuai durasi terpilih (${autoDurationLabel}).`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {autoPending && <Spinner aria-hidden="true" className="size-4" />}
+          <Switch
+            id="global-token-auto-rotate"
+            aria-label="Auto-generate token global"
+            checked={autoRotate.enabled}
+            disabled={(!available && !autoRotate.enabled) || autoPending}
+            onCheckedChange={(checked) => saveAutoRotate(checked, globalDuration)}
+          />
+        </div>
+      </div>
+    </Card>
     <Card className="mb-6 gap-0 overflow-hidden rounded-[18px] py-0 shadow-sm"><div className="border-b border-border p-5 sm:px-6"><div className="flex flex-wrap items-center gap-2"><KeyRound className="size-5 text-amber-700 dark:text-amber-300" /><h2 className="text-base font-bold">Token Khusus Tes</h2><Badge variant="secondary">{total} tes</Badge></div><p className="mt-1 text-xs leading-5 text-muted-foreground">Satu baris per tes, menampilkan pelaksanaan yang cocok dengan tanggal (termasuk draf). Jika belum ada pelaksanaan, digunakan jadwal dasar rancangan. Jadwal yang berakhir tidak ditampilkan.</p>
       <div className="mt-4 flex flex-wrap items-end gap-2"><Button asChild variant={filter.mode === "today" ? "default" : "outline"} className="h-10 rounded-xl"><Link href={tokenUrl(zone, { mode: "today", date: null }, 1, defaultTimeZone)} prefetch={false} aria-current={filter.mode === "today" ? "page" : undefined}>Hari ini</Link></Button><Button asChild variant={filter.mode === "all" ? "default" : "outline"} className="h-10 rounded-xl"><Link href={tokenUrl(zone, { mode: "all", date: null }, 1, defaultTimeZone)} prefetch={false} aria-current={filter.mode === "all" ? "page" : undefined}>Semua tanggal</Link></Button><form onSubmit={chooseDate} className="flex flex-wrap items-end gap-2"><div className="w-40 space-y-1"><label htmlFor="token-date" className="text-[11px] font-semibold text-muted-foreground">Pilih tanggal</label><input key={`${filter.mode}:${filter.date ?? ""}:${zone}`} id="token-date" name="tanggal" type="date" min="2000-01-01" max="2101-12-31" required defaultValue={filter.date ?? ""} className={selectClass} /></div><Button type="submit" variant="outline" className="h-10 rounded-xl">Tampilkan</Button></form></div>
       <p className="mt-3 text-xs font-medium text-muted-foreground" aria-live="polite">{filter.mode === "all" ? "Semua tanggal" : `${filter.mode === "today" ? "Hari ini" : "Tanggal dipilih"} · ${dateLabel} ${zone}`} · Tes yang melintasi tanggal tetap disertakan.</p>
@@ -158,12 +247,12 @@ export function TokenManager({ tests, current, filter, zone, defaultTimeZone = "
       {!visibleTests.length ? <p className="px-6 py-10 text-center text-sm text-muted-foreground">{filter.mode === "all" ? "Tidak ada tes berlangsung atau mendatang." : "Tidak ada tes berlangsung atau mendatang pada tanggal ini. Pilih tanggal lain atau Semua tanggal."}</p> : <ul aria-label="Tes berlangsung dan mendatang" className="divide-y divide-border">{visibleTests.map((test) => {
         const matching = current.filter((token) => token.scope === "test" && token.testId === test.id); const slot = matching.find((token) => !token.revokedAt) ?? null; const shown = slot ?? matching[0] ?? null;
         const active = Boolean(slot && tokenStatus(slot, now) === "Aktif"); const scheduledStatus = Date.parse(test.startsAt) <= now ? "Berlangsung (jadwal)" : "Mendatang";
-        return <li key={test.id} aria-label={`Tes ${test.id}`} className="p-5 sm:px-6"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-sm font-bold">{test.name}</h3><Badge variant="outline">{scheduledStatus}</Badge>{shown && <Badge variant={active ? "default" : "secondary"}>{tokenStatus(shown, now)}</Badge>}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">#{test.id} · {test.periodName} · {formatTime(test.startsAt, zone)}–{formatTime(test.endsAt, zone)}</p><p className="mt-1 break-words text-xs text-muted-foreground">{test.scheduleKind ? `${test.scheduleKind === "regular" ? "Reguler" : test.scheduleKind === "makeup" ? "Susulan" : "Remidi"} · ${test.scheduleLabel} · ${test.schedulePublished ? "dirilis" : "draf"}` : "Jadwal dasar rancangan (belum ada pelaksanaan)"}</p><div className="mt-3 flex flex-wrap items-end gap-x-8 gap-y-3"><div><p className="mb-1 text-[11px] font-semibold text-muted-foreground">Kode khusus {shown ? `· token #${shown.id}` : ""}</p><TokenCode token={shown} label={`Kode token tes ${test.id}`} now={now} /></div><div><p className="mb-1 text-[11px] font-semibold text-muted-foreground">Sisa waktu khusus</p><p aria-label={`Sisa waktu token tes ${test.id}`} className="font-mono text-base font-bold tabular-nums">{remaining(slot, now)}</p></div></div>{!active && <p className="mt-2 text-xs font-medium text-muted-foreground">{globalActive ? "Menggunakan token global saat fungsi peserta tersedia." : "Tidak ada token aktif untuk tes ini."}</p>}</div><TokenControls id={`tes ${test.id}`} scope="test" test={test} slot={slot} now={now} available={available} onIssue={setIssue} onRevoke={setRevoking} /></div></li>;
+        return <li key={test.id} aria-label={`Tes ${test.id}`} className="p-5 sm:px-6"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-sm font-bold">{test.name}</h3><Badge variant="outline">{scheduledStatus}</Badge>{shown && <Badge variant={active ? "default" : "secondary"}>{tokenStatus(shown, now)}</Badge>}{(test.tags ?? []).map((tag) => <Badge key={tag} variant="secondary" className="rounded-full text-[10px] font-medium">{tag}</Badge>)}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">{test.periodName} · {formatTime(test.startsAt, zone)}–{formatTime(test.endsAt, zone)}</p><p className="mt-1 break-words text-xs text-muted-foreground">{test.scheduleKind ? `${test.scheduleKind === "regular" ? "Reguler" : test.scheduleKind === "makeup" ? "Susulan" : "Remidi"} · ${test.scheduleLabel} · ${test.schedulePublished ? "dirilis" : "draf"}` : "Jadwal dasar rancangan (belum ada pelaksanaan)"}</p><div className="mt-3 flex flex-wrap items-end gap-x-8 gap-y-3"><div><p className="mb-1 text-[11px] font-semibold text-muted-foreground">Kode khusus {shown ? `· token #${shown.id}` : ""}</p><TokenCode token={shown} label={`Kode token tes ${test.id}`} now={now} /></div><div><p className="mb-1 text-[11px] font-semibold text-muted-foreground">Sisa waktu khusus</p><p aria-label={`Sisa waktu token tes ${test.id}`} className="font-mono text-base font-bold tabular-nums">{remaining(slot, now)}</p></div></div>{!active && <p className="mt-2 text-xs font-medium text-muted-foreground">{globalActive ? "Menggunakan token global saat fungsi peserta tersedia." : "Tidak ada token aktif untuk tes ini."}</p>}</div><TokenControls id={`tes ${test.id}`} scope="test" test={test} slot={slot} now={now} available={available} onIssue={setIssue} onRevoke={setRevoking} /></div></li>;
       })}</ul>}
       {pages > 1 && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-5 text-xs sm:px-6"><span>Halaman {page} dari {pages}</span><div className="flex gap-2">{page > 1 && <Button asChild variant="outline" size="sm"><Link href={tokenUrl(zone, filter, page - 1, defaultTimeZone)} prefetch={false}><ChevronLeft className="size-4" /> Sebelumnya</Link></Button>}{page < pages && <Button asChild variant="outline" size="sm"><Link href={tokenUrl(zone, filter, page + 1, defaultTimeZone)} prefetch={false}>Berikutnya <ChevronRight className="size-4" /></Link></Button>}</div></div>}
     </Card>
     {issue && <IssueDialog target={issue} now={now} onClose={() => setIssue(null)} onSuccess={() => { setIssue(null); router.refresh(); }} onUncertain={(id) => { setIssue(null); setUnresolved(id); }} />}
     {unresolved && <UncertainIssueDialog operationId={unresolved} onFinish={() => { setUnresolved(null); router.refresh(); }} />}
-    {revoking && <RevokeDialog token={revoking} onClose={() => setRevoking(null)} />}
+    {revoking && <RevokeDialog token={revoking} autoRotateEnabled={autoRotate.enabled} onClose={() => setRevoking(null)} />}
   </>;
 }

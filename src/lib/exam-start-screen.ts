@@ -4,7 +4,7 @@ import { PARTICIPANT_SCHEDULE_DAY_FILTER, PARTICIPANT_SCHEDULE_DAY_JOIN } from "
 import { participantSessionHash } from "@/lib/participant-session-lock";
 import { getPostgresPool } from "@/lib/postgres";
 
-type Screen = { runId: string | null; name: string | null; label: string | null; status: "active" | "future" | "past" | null;
+type Screen = { runId: string | null; name: string | null; tags: string[] | null; label: string | null; status: "active" | "future" | "past" | null;
   startLocal: string | null; endLocal: string | null; zone: string | null; duration: number | null; attemptId: string | null; retakePermissionId: string | null; finalized: boolean; finalRevision: string };
 
 /** Satu query: parameter URL tidak boleh memilih identitas atau periode lain. */
@@ -23,10 +23,10 @@ export async function loadExamStartScreen(runId: string): Promise<Screen | null>
          AND i.username=sess.username_snapshot AND i.updated_at=sess.identity_revision
          AND pw.updated_at=sess.password_revision AND sha256(convert_to(pw.password_hash,'UTF8'))=sess.password_hash_digest
      )
-     SELECT schedule.id::text AS "runId",schedule.name,schedule.label,schedule.status,schedule."startLocal",schedule."endLocal",
+     SELECT schedule.id::text AS "runId",schedule.name,schedule.tags,schedule.label,schedule.status,schedule."startLocal",schedule."endLocal",
        schedule.zone,schedule.duration,schedule.attempt_id::text AS "attemptId",schedule.retake_id::text AS "retakePermissionId",schedule.finalized,schedule.final_revision AS "finalRevision"
      FROM auth a LEFT JOIN LATERAL (
-       SELECT r.id,t.name,r.label,r.time_zone AS zone,r.duration_minutes AS duration,att.id AS attempt_id,
+       SELECT r.id,t.name,COALESCE(t.tags,ARRAY[]::text[]) AS tags,r.label,r.time_zone AS zone,r.duration_minutes AS duration,att.id AS attempt_id,
          (fg.finalized_at IS NOT NULL) AS finalized,COALESCE(fg.revision,0)::text AS final_revision,
          CASE WHEN fg.finalized_at IS NULL AND att.completed_at IS NOT NULL AND att.deadline>clock_timestamp()
            AND r.starts_at<=clock_timestamp() AND r.starts_at+r.duration_minutes*interval '1 minute'>clock_timestamp()

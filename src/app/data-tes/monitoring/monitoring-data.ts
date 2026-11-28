@@ -14,7 +14,7 @@ export class MonitoringPermissionDenied extends Error {}
 export class MonitoringSizeExceeded extends Error {}
 export type MonitoringRow = {
   id: string | null; studentId: string; runId: string; student: string; number: string | null; nisn: string; className: string;
-  period: string; year: string | null; testName: string; label: string; kind: MonitoringKind; published: boolean;
+  period: string; year: string | null; testName: string; testTags: string[]; label: string; kind: MonitoringKind; published: boolean;
   questionCount: number | null; correct: number | null; status: MonitoringStatus; started: string | null; scheduled: string;
   deadline: string | null; zone: string; elapsedSeconds: number | null; attemptNumber: number | null; latest: boolean;
   completed: boolean; withinWindow: boolean; permissionId: string | null; permissionStatus: "pending" | "consumed" | "revoked" | "expired" | null;
@@ -39,7 +39,7 @@ const base = `WITH base AS (
   SELECT a.id::text AS id,rp.student_id::text AS "studentId",r.id::text AS "runId",
     COALESCE(a.student_name_snapshot,s.name) AS student,COALESCE(a.participant_number_snapshot,i.participant_number) AS number,s.nisn,
     COALESCE(a.class_name_snapshot,pl.class_name_snapshot) AS "className",p.name AS period,y.name AS year,
-    COALESCE(a.test_name_snapshot,t.name) AS "testName",r.label,r.kind,(r.published_at IS NOT NULL) AS published,
+    COALESCE(a.test_name_snapshot,t.name) AS "testName",COALESCE(t.tags,ARRAY[]::text[]) AS "testTags",r.label,r.kind,(r.published_at IS NOT NULL) AS published,
     a.question_count AS "questionCount",a.correct_count AS correct,
     CASE WHEN a.id IS NULL THEN 'not_started' WHEN a.completed_at IS NOT NULL THEN a.completion_reason
       WHEN a.deadline<=now() THEN 'waiting' ELSE 'working' END AS status,

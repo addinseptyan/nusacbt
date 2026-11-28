@@ -11,7 +11,7 @@ function rowFor(page: Page, f: AttemptFixture, number: number) {
   return page.getByRole("row").filter({ hasText: f.login.studentAName }).filter({ hasText: `Pengerjaan ke-${number}` });
 }
 async function finish(page: Page) {
-  await page.getByRole("button", { name: "Selesaikan tes" }).click();
+  await page.getByRole("button", { name: "Kumpulkan tes" }).click();
   await page.getByRole("button", { name: "Ya, kumpulkan" }).click();
   await expect(page.getByText("PENGERJAAN SELESAI")).toBeVisible();
 }
@@ -495,7 +495,7 @@ test("batas pengumpulan global tetap berlaku sebelum dan setelah pengulangan", a
     await client.query("UPDATE exam_work_settings SET submission_window_minutes=5 WHERE id=1"); await seedAttemptToken(client, f, "global", "331199");
     await loginParticipant(page, f.login.username, f.login.passwordA); await openStart(page, f.runId); await page.getByLabel("Token tes").fill("331199");
     await page.getByRole("button", { name: "Mulai pengerjaan" }).click(); await expect(page).toHaveURL(/\/pengerjaan\/[1-9]\d*/);
-    await page.getByRole("button", { name: "Selesaikan tes" }).click();
+    await page.getByRole("button", { name: "Kumpulkan tes" }).click();
     let dialog = page.getByRole("dialog", { name: "Belum dapat dikumpulkan" }); await expect(dialog).toContainText("5 menit terakhir");
     await dialog.getByRole("button", { name: "Tutup" }).click();
     await loginAsAdmin(admin); await admin.goto(`/data-tes/monitoring?tes=${f.login.activeTest}`);
@@ -506,7 +506,7 @@ test("batas pengumpulan global tetap berlaku sebelum dan setelah pengulangan", a
     await page.goto("/peserta"); await page.getByRole("listitem").filter({ hasText: f.login.activeName }).getByRole("button", { name: "Mulai ulang tes" }).click();
     await page.getByLabel("Token tes").fill("331199"); await page.getByRole("button", { name: "Mulai pengulangan" }).click(); await expect(page).toHaveURL(/\/pengerjaan\/[1-9]\d*/);
     const secondId = page.url().match(/\/pengerjaan\/([1-9]\d*)/)![1];
-    await page.getByRole("button", { name: "Selesaikan tes" }).click();
+    await page.getByRole("button", { name: "Kumpulkan tes" }).click();
     dialog = page.getByRole("dialog", { name: "Belum dapat dikumpulkan" }); await expect(dialog).toContainText("5 menit terakhir");
     expect((await client.query<{ completed: boolean }>("SELECT completed_at IS NOT NULL AS completed FROM exam_attempts WHERE id=$1", [secondId])).rows[0].completed).toBe(false);
     await admin.reload(); await expect(rowFor(admin, f, 2).getByRole("button", { name: /Berikan izin ulang/ })).toHaveCount(0);

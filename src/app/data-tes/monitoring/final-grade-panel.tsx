@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatFinalGrade } from "@/lib/exam-final-grade.mjs";
 
-type Props = { test: { id: string; name: string; period: string }; data: FinalGradeData; attemptPage: number; filterQuery?: string; canOverrideGrades: boolean };
+type Props = { test: { id: string; name: string; period: string; tags?: string[] }; data: FinalGradeData; attemptPage: number; filterQuery?: string; canOverrideGrades: boolean };
 const kindName = (kind: "regular" | "makeup" | "remedial") => kind === "regular" ? "Reguler" : kind === "makeup" ? "Susulan" : "Remidi";
 const methodName = (method: string) => method === "highest" ? "Tertinggi" : "Rata-rata";
 function pageUrl(test: string, finalPage: number, attemptPage: number, filterQuery = "") {
@@ -24,6 +24,7 @@ export function FinalGradePanel({ test, data, attemptPage, filterQuery, canOverr
     <div className="flex flex-wrap items-start justify-between gap-4 border-b p-5"><div>
       <p className="text-[10px] font-bold uppercase tracking-wider text-primary">Tes dan peserta</p>
       <h2 className="mt-1 text-lg font-bold">Nilai akhir · {test.name}</h2><p className="mt-1 text-xs text-muted-foreground">{test.period} · {data.total} peserta memiliki pengerjaan</p>
+      {test.tags && test.tags.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{test.tags.map((tag) => <Badge key={tag} variant="secondary" className="rounded-full text-[10px]">{tag}</Badge>)}</div>}
       <p className="mt-3 text-sm">Metode tes: <strong>{methodName(data.method)}</strong>{data.methodRevision === "0" && <span className="text-xs text-muted-foreground"> (awal)</span>}</p>
     </div>{canOverrideGrades && <FinalGradeControl mode="method" testId={test.id} testName={test.name} period={test.period} method={data.method} methodRevision={data.methodRevision} />}</div>
     <Alert role="note" className="m-5 mb-0 max-w-5xl rounded-xl"><Info className="size-4" /><AlertTitle>Pilih dengan sengaja sebelum menetapkan</AlertTitle><AlertDescription className="text-xs leading-5">Semua pengerjaan selesai pada Reguler, Susulan, Remidi dan pengulangan dihitung per peserta. Rata-rata berbobot sama per pengerjaan; hasil akhir dibulatkan dua desimal. Penetapan ditolak selama ada pengerjaan belum selesai, termasuk yang menunggu penyelesaian otomatis. Nilai akhir hanya dibagikan jika semua kategori penyumbang dibuka.</AlertDescription></Alert>

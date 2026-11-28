@@ -95,6 +95,15 @@ export function MatrixReportTable({
                 <th scope="col" key={c.id} className="p-3 break-words">
                   <span className="block truncate" title={c.name}>{c.name}</span>
                   <span className="mt-0.5 block truncate font-normal text-muted-foreground" title={c.period}>{c.period}</span>
+                  {c.tags.length > 0 && (
+                    <span className="mt-1 flex flex-wrap gap-1 font-normal">
+                      {c.tags.map((tag) => (
+                        <Badge key={tag} variant="outline" className="rounded-full px-1.5 py-0 text-[9px] font-medium">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </span>
+                  )}
                 </th>
               ))}
               <th scope="col" className="p-3 text-right">Detail</th>
@@ -266,6 +275,15 @@ export function MatrixReportTable({
                               )}
                             </div>
                             <p className="mt-0.5 text-[11px] text-muted-foreground">{c.period}</p>
+                            {c.tags.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {c.tags.map((tag) => (
+                                  <Badge key={tag} variant="secondary" className="rounded-full px-1.5 py-0 text-[10px]">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <div className="shrink-0 text-right font-bold tabular-nums">
                             {!value ? (

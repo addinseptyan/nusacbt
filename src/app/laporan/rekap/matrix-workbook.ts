@@ -10,7 +10,7 @@ export function createMatrixWorkbook(data:MatrixData,f:MatrixFilters) {
   const year = data.options?.years.find((item) => item.id === f.yearId)?.name ?? (f.yearId ? `ID ${f.yearId}` : "Semua tahun");
   const period = data.options?.periods.find((item) => item.id === f.periodId)?.name ?? (f.periodId ? `ID ${f.periodId}` : "Semua periode");
   const type = f.merge ? "Reguler + Susulan" : kindNames[f.kind];
-  const summary:SpreadsheetSheet = {name:"Rekap",columns:columns([["No",8],["Nama",30],["NISN",17],["Grup / kelas",25],["Rata-rata",16],...data.columns.map((c):[string,number] => [`${c.name}\n${c.period}`,24])]),
+  const summary:SpreadsheetSheet = {name:"Rekap",columns:columns([["No",8],["Nama",30],["NISN",17],["Grup / kelas",25],["Rata-rata",16],...data.columns.map((c):[string,number] => [`${c.name}\n${c.period}${c.tags.length ? `\n[${c.tags.join(", ")}]` : ""}`,26])]),
     ...(data.columns.length ? {matrixLayout:{firstTestColumn:5,groupTitle:"DAFTAR NAMA TES"}} : {}),
     preamble:[["REKAPITULASI HASIL TES"],["Grup",f.className ?? "Semua kelas"],["Tahun ajaran",year],["Periode",period],["Rentang waktu selesai",`${f.from ?? "tanpa batas"} — ${f.to ?? "tanpa batas"} (${f.zone})`],["Jenis ujian",type],["Jumlah tes",data.columns.length],["Keterangan","Biru = Susulan; Periksa = nilai Reguler dan Susulan sama-sama ada. Konflik tidak dihitung dalam rata-rata."]],
     rows:data.rows.map((r,index) => {
@@ -21,8 +21,8 @@ export function createMatrixWorkbook(data:MatrixData,f:MatrixFilters) {
       return [index+1,r.name,r.nisn,`${r.year ?? "Tahun belum dipetakan"} · ${r.className}`,r.average === null ? null : {score:r.average},...cells];
     }),
   };
-  const details:SpreadsheetSheet = {name:"Pengerjaan",columns:columns([["Nama",30],["NISN",17],["Kelas snapshot",22],["Tahun ajaran",18],["Periode",24],["Tes snapshot",28],["Kategori",15],["Selesai UTC",28],["Benar",10],["Jumlah soal",14],["Nilai pengerjaan",18],["Metode tes",16],["ID pengerjaan",18]]),
-    rows:data.attemptRows.map((a) => { const score = gradeExamCounts(a.correct,a.questions); return [a.student,a.nisn,a.className,a.year,a.period,a.testName,kindNames[a.kind],a.completed,a.correct,a.questions,score.ok ? {score:score.hundredths/100} : null,a.method === "highest" ? "Tertinggi" : "Rata-rata",a.id]; }) };
+  const details:SpreadsheetSheet = {name:"Pengerjaan",columns:columns([["Nama",30],["NISN",17],["Kelas snapshot",22],["Tahun ajaran",18],["Periode",24],["Tes snapshot",28],["Tag tes",24],["Kategori",15],["Selesai UTC",28],["Benar",10],["Jumlah soal",14],["Nilai pengerjaan",18],["Metode tes",16],["ID pengerjaan",18]]),
+    rows:data.attemptRows.map((a) => { const score = gradeExamCounts(a.correct,a.questions); return [a.student,a.nisn,a.className,a.year,a.period,a.testName,a.testTags?.length ? a.testTags.join(", ") : "—",kindNames[a.kind],a.completed,a.correct,a.questions,score.ok ? {score:score.hundredths/100} : null,a.method === "highest" ? "Tertinggi" : "Rata-rata",a.id]; }) };
   const info:SpreadsheetSheet = {name:"Informasi",columns:columns([["Keterangan",30],["Isi",60]]),rows:[
     ["Dibuat UTC",new Date().toISOString()],["Jumlah siswa",data.total],["Jumlah tes",data.columns.length],["Pengerjaan cocok",data.attempts],
     ["Waktu filter","Tanggal waktu selesai dalam zona yang dipilih; tanggal akhir inklusif."],

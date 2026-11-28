@@ -76,7 +76,10 @@ test("admin menyusun, melihat, mengubah, dan menghapus rancangan dengan soal dan
     await form.getByRole("button", { name: `Naikkan soal ${q3.id}` }).click();
     await form.getByRole("button", { name: `Naikkan soal ${q3.id}` }).click();
     const order = form.getByRole("list", { name: "Urutan soal terpilih" }).getByRole("listitem");
-    await expect(order.nth(0)).toContainText(`#${q3.id}`); await expect(order.nth(1)).toContainText(`#${q1.id}`); await expect(order.nth(2)).toContainText(`#${q2.id}`);
+    await expect(order.nth(0).getByRole("button", { name: `Lepas soal ${q3.id}` })).toBeVisible();
+    await expect(order.nth(1).getByRole("button", { name: `Lepas soal ${q1.id}` })).toBeVisible();
+    await expect(order.nth(2).getByRole("button", { name: `Lepas soal ${q2.id}` })).toBeVisible();
+    await expect(order.nth(0)).not.toContainText(`#${q3.id}`);
     await form.getByLabel("Acak urutan soal").check(); await form.getByLabel("Acak urutan pilihan jawaban").check();
     await form.getByRole("button", { name: "Simpan rancangan" }).click(); await expect(form).toBeHidden();
     let dbRows: { id: string; utc: string; time_zone: string; duration_minutes: number; shuffle_questions: boolean; shuffle_options: boolean }[] = [];
@@ -269,5 +272,53 @@ test("tag tes, filter tag, pencarian multi-kata, dan peringatan tanggal di luar 
     await cleanup(client, periodId, []);
     await client.end();
   }
+});
+
+test("urutan daftar tes default abjad A-Z, pilihan urut persisten, dan jumlah soal combobox terlihat tanpa ID internal", async ({ page }) => {
+  const client = testDatabase(); await client.connect(); const tag = suffix(); let periodId: string | undefined; const topics: string[] = [];
+  try {
+    periodId = await createPeriod(client, tag);
+    topics.push(await createTopic(client, `Biologi Sort ${tag}`), await createTopic(client, `Kimia Sort ${tag}`));
+    const q1 = await createQuestion(client, topics[0], `Bio 1 ${tag}`);
+    const q2 = await createQuestion(client, topics[0], `Bio 2 ${tag}`);
+    await createQuestion(client, topics[1], `Kim 1 ${tag}`);
+
+    const tZebra = await createDraft(client, periodId, `Zebra ${tag}`, [q1.id]);
+    const tAlpha = await createDraft(client, periodId, `Alpha ${tag}`, [q1.id, q2.id]);
+    await client.query("UPDATE exam_tests SET tags=$1::text[], tags_signature=$2 WHERE id=$3", [["Biologi", "XI"], "biologi\x1fxi", tAlpha]);
+    await client.query("UPDATE exam_tests SET tags=$1::text[], tags_signature=$2 WHERE id=$3", [["Zebra", "XII"], "zebra\x1fxii", tZebra]);
+
+    await loginAsAdmin(page);
+    await page.goto("/data-tes/daftar");
+    await page.getByLabel("Filter periode tes").selectOption(periodId);
+
+    const list = page.getByRole("list", { name: "Daftar rancangan tes" }).getByRole("listitem");
+    await expect(list).toHaveCount(2);
+    // Default abjad A-Z dan tanpa badge #id
+    await expect(list.nth(0)).toContainText(`Alpha ${tag}`);
+    await expect(list.nth(1)).toContainText(`Zebra ${tag}`);
+    await expect(list.nth(0)).not.toContainText(`#${tAlpha}`);
+    await expect(list.nth(1)).not.toContainText(`#${tZebra}`);
+
+    // Ubah ke Nama Z-A dan pastikan tersimpan setelah reload
+    const sortSelect = page.getByLabel("Urutkan daftar tes");
+    await expect(sortSelect).toHaveValue("name_asc");
+    await sortSelect.selectOption("name_desc");
+    await expect(list.nth(0)).toContainText(`Zebra ${tag}`);
+    await expect(list.nth(1)).toContainText(`Alpha ${tag}`);
+
+    await page.reload();
+    await page.getByLabel("Filter periode tes").selectOption(periodId);
+    await expect(page.getByLabel("Urutkan daftar tes")).toHaveValue("name_desc");
+    await expect(list.nth(0)).toContainText(`Zebra ${tag}`);
+
+    // Buka form dan periksa jumlah soal per topik di combobox tanpa ID soal internal
+    const form = await openForm(page);
+    const topicTrigger = form.getByLabel("Filter mata pelajaran");
+    await topicTrigger.click();
+    const listbox = page.locator(`#${await topicTrigger.getAttribute("aria-controls")}`);
+    await expect(listbox.getByRole("option", { name: new RegExp(`Biologi Sort ${tag}.*2 soal`) })).toBeVisible();
+    await expect(listbox.getByRole("option", { name: new RegExp(`Kimia Sort ${tag}.*1 soal`) })).toBeVisible();
+  } finally { await cleanup(client, periodId, topics); await client.end(); }
 });
 

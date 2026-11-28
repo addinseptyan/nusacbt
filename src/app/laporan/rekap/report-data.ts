@@ -18,10 +18,10 @@ export class ReportSizeExceeded extends Error {}
 
 const zones: Record<ReportZone, string> = { WIB: "Asia/Jakarta", WITA: "Asia/Makassar", WIT: "Asia/Jayapura" };
 type Kind = "regular" | "makeup" | "remedial";
-type PairDb = { testId: string; identityId: string; student: string; number: string; className: string; testName: string;
+type PairDb = { testId: string; identityId: string; student: string; number: string; className: string; testName: string; testTags: string[];
   period: string; nisn: string; method: FinalGradeMethod; finalized: boolean; finalizedAt: string | null; matchedAt: string };
 type AttemptDb = { id: string; testId: string; identityId: string; student: string; number: string; className: string;
-  testName: string; label: string; kind: Kind; runZone: ReportZone; attemptNumber: number; started: string; completed: string;
+  testName: string; testTags: string[]; label: string; kind: Kind; runZone: ReportZone; attemptNumber: number; started: string; completed: string;
   reason: "submitted" | "time_expired"; correct: number; answered: number; questions: number; matches: boolean };
 export type ReportAttempt = AttemptDb & { score: number };
 export type ReportRow = PairDb & { score: number; unfinished: number; attempts: ReportAttempt[] };
@@ -78,11 +78,12 @@ async function readReport(client: PoolClient, f: ReportFilters, requestedPage: n
   const pairRows = (await client.query<PairDb>(`${matched}
     SELECT m.exam_test_id::text AS "testId",m.participant_identity_id::text AS "identityId",
       m.student_name_snapshot AS student,m.participant_number_snapshot AS number,m.class_name_snapshot AS "className",
-      m.test_name_snapshot AS "testName",p.name AS period,st.nisn,
+      m.test_name_snapshot AS "testName",COALESCE(t.tags,ARRAY[]::text[]) AS "testTags",p.name AS period,st.nisn,
       COALESCE(settings.method,'highest') AS method,(state.finalized_at IS NOT NULL) AS finalized,
       to_char(state.finalized_at AT TIME ZONE $9::text,'YYYY-MM-DD HH24:MI:SS') AS "finalizedAt",
       to_char(m.completed_at AT TIME ZONE $9::text,'YYYY-MM-DD HH24:MI:SS') AS "matchedAt"
     FROM matched m JOIN exam_periods p ON p.id=m.period_id JOIN school_students st ON st.id=m.student_id
+    LEFT JOIN exam_tests t ON t.id=m.exam_test_id
     LEFT JOIN exam_final_grade_settings settings ON settings.exam_test_id=m.exam_test_id
     LEFT JOIN exam_final_grade_state state ON state.exam_test_id=m.exam_test_id AND state.participant_identity_id=m.participant_identity_id
     ORDER BY m.completed_at DESC,m.exam_test_id,m.participant_identity_id
@@ -107,7 +108,7 @@ async function readReport(client: PoolClient, f: ReportFilters, requestedPage: n
      )
      SELECT a.id::text AS id,a.exam_test_id::text AS "testId",a.participant_identity_id::text AS "identityId",
        a.student_name_snapshot AS student,a.participant_number_snapshot AS number,a.class_name_snapshot AS "className",
-       a.test_name_snapshot AS "testName",a.run_label_snapshot AS label,a.kind,a.time_zone_snapshot AS "runZone",
+       a.test_name_snapshot AS "testName",COALESCE(t.tags,ARRAY[]::text[]) AS "testTags",a.run_label_snapshot AS label,a.kind,a.time_zone_snapshot AS "runZone",
        a.attempt_number AS "attemptNumber",to_char(a.started_at AT TIME ZONE $7::text,'YYYY-MM-DD HH24:MI:SS') AS started,
        to_char(a.completed_at AT TIME ZONE $7::text,'YYYY-MM-DD HH24:MI:SS') AS completed,
        a.completion_reason AS reason,a.correct_count AS correct,a.answered_count AS answered,a.question_count AS questions,
@@ -116,7 +117,7 @@ async function readReport(client: PoolClient, f: ReportFilters, requestedPage: n
           OR strpos(lower(a.participant_number_snapshot),lower($4::text))>0 OR strpos(a.nisn,$4::text)>0)
         AND ($5::timestamptz IS NULL OR a.completed_at >= $5::timestamptz)
         AND ($6::timestamptz IS NULL OR a.completed_at < $6::timestamptz)) AS matches
-     FROM ordered a WHERE a.completed_at IS NOT NULL
+     FROM ordered a LEFT JOIN exam_tests t ON t.id=a.exam_test_id WHERE a.completed_at IS NOT NULL
      ORDER BY a.exam_test_id,a.participant_identity_id,a.id
      LIMIT $8::integer`, [tests, identities, f.className, f.student, f.fromUtc, f.toUtcExclusive, zones[f.zone], REPORT_MAX_ATTEMPTS + 1],
   )).rows;

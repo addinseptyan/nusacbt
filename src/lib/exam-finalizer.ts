@@ -1,5 +1,6 @@
 import "server-only";
 
+import { ensureGlobalTokenAutoRotated } from "@/lib/global-token-scheduler";
 import { getPostgresPool } from "@/lib/postgres";
 
 const BATCH_SIZE = 100;
@@ -52,6 +53,7 @@ export function startExamFinalizer() {
     try {
       // Langsung lanjutkan batch berikutnya jika backlog masih penuh.
       if (await finalizeExpiredExamAttempts() === BATCH_SIZE) delay = 50;
+      await ensureGlobalTokenAutoRotated();
     } catch {
       if (Date.now() - state.lastErrorAt >= RETRY_LOG_MS) {
         console.error("Penyelesaian otomatis ujian tertunda. Periksa PostgreSQL dan migrasi; layanan akan mencoba lagi.");
